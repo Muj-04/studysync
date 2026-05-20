@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BookOpen, X, LogOut, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Sun, Moon, Search,
+  ChevronUp, FilePlus, Sun, Moon, Search, CheckCircle,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -451,6 +451,16 @@ export default function WorkspacePage() {
   // ── Shortcuts modal ───────────────────────────────────────────────────────
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(msg);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3500);
+  }, []);
+
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const {
     documents, activeDocument, activeDocumentId,
@@ -765,7 +775,14 @@ export default function WorkspacePage() {
     }
   }, [showSplit, activeSide, rightSideMode, currentVP]);
 
-  const handleFilesAdded = (files: File[]) => files.forEach((f) => addDocument(f));
+  const handleFilesAdded = useCallback(async (files: File[]) => {
+    let anyRestored = false;
+    for (const f of files) {
+      const { isRestored } = await addDocument(f);
+      if (isRestored) anyRestored = true;
+    }
+    if (anyRestored) showToast('Welcome back! Your notes have been restored.');
+  }, [addDocument, showToast]);
 
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';
@@ -1278,6 +1295,29 @@ export default function WorkspacePage() {
             />
           </div>
 
+        </div>
+      )}
+
+      {/* ══ Toast ══ */}
+      {toast && (
+        <div
+          className="animate-scale-in"
+          style={{
+            position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '11px 16px',
+            borderRadius: 10,
+            background: 'var(--bg-panel)',
+            border: '1px solid var(--border)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+            color: 'var(--text-1)',
+            fontSize: 13, fontWeight: 500,
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        >
+          <CheckCircle size={15} style={{ color: 'var(--green)', flexShrink: 0 }} />
+          {toast}
         </div>
       )}
     </div>
