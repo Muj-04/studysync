@@ -1,6 +1,7 @@
 'use client';
 import { useState, useCallback } from 'react';
 import type { PDFDocument } from '@/types';
+import { storageGet, storageSet, KEYS } from '@/lib/storage';
 
 let pdfjsCache: typeof import('pdfjs-dist') | null = null;
 
@@ -10,6 +11,16 @@ async function getPDFJS() {
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
   pdfjsCache = pdfjs;
   return pdfjs;
+}
+
+// Returns a stable persistent ID for a filename, creating one if needed.
+function getOrCreateDocId(filename: string): string {
+  const map = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
+  if (map[filename]) return map[filename];
+  const id = crypto.randomUUID();
+  map[filename] = id;
+  storageSet(KEYS.DOC_MAP, map);
+  return id;
 }
 
 export function usePDF() {
@@ -23,10 +34,11 @@ export function usePDF() {
     setIsLoading(true);
     try {
       const isPPTX = file.name.toLowerCase().endsWith('.pptx');
+      const id = getOrCreateDocId(file.name);
 
       if (isPPTX) {
         const doc: PDFDocument = {
-          id: crypto.randomUUID(),
+          id,
           name: file.name.replace(/\.pptx$/i, ''),
           url: '',
           pageCount: 1,
@@ -43,7 +55,7 @@ export function usePDF() {
         const pageCount = pdf.numPages;
         await pdf.destroy();
         const doc: PDFDocument = {
-          id: crypto.randomUUID(),
+          id,
           name: file.name.replace(/\.pdf$/i, ''),
           url,
           pageCount,
@@ -63,8 +75,7 @@ export function usePDF() {
       setDocuments((prev) => {
         const doc = prev.find((d) => d.id === id);
         if (doc) URL.revokeObjectURL(doc.url);
-        const remaining = prev.filter((d) => d.id !== id);
-        return remaining;
+        return prev.filter((d) => d.id !== id);
       });
       setActiveDocumentId((prev) => {
         if (prev !== id) return prev;
