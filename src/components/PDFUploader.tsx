@@ -15,12 +15,18 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files) return;
-      const pdfs = Array.from(files).filter(
-        (f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
-      );
-      if (pdfs.length > 0) onFilesAdded(pdfs);
+      const accepted = Array.from(files).filter((f) => {
+        const name = f.name.toLowerCase();
+        return (
+          f.type === 'application/pdf' ||
+          name.endsWith('.pdf') ||
+          name.endsWith('.pptx') ||
+          f.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+        );
+      });
+      if (accepted.length > 0) onFilesAdded(accepted);
     },
-    [onFilesAdded]
+    [onFilesAdded],
   );
 
   const onDragEnter = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); dragCounter.current += 1; setIsDragging(true); };
@@ -35,29 +41,38 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
   if (compact) {
     return (
       <label
-        className="flex items-center gap-1.5 text-xs font-semibold rounded-full cursor-pointer"
         style={{
-          padding: '6px 14px',
-          background: 'rgba(255,255,255,0.92)',
-          color: '#0f172a',
-          boxShadow: '0 1px 6px rgba(0,0,0,0.2)',
-          transition: 'background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          padding: '5px 10px',
+          borderRadius: 6,
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-2)',
+          fontSize: 12, fontWeight: 500,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+          userSelect: 'none',
         }}
         onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-          background: '#fff',
-          boxShadow: '0 3px 12px rgba(0,0,0,0.25)',
-          transform: 'translateY(-1px)',
+          background: 'var(--bg-active)',
+          color: 'var(--text-1)',
+          borderColor: 'var(--border-strong)',
         })}
         onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-          background: 'rgba(255,255,255,0.92)',
-          boxShadow: '0 1px 6px rgba(0,0,0,0.2)',
-          transform: 'translateY(0)',
+          background: 'var(--bg-elevated)',
+          color: 'var(--text-2)',
+          borderColor: 'var(--border)',
         })}
       >
         <Upload size={12} />
-        Add PDF
-        <input type="file" accept=".pdf,application/pdf" multiple className="hidden"
-          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+        Add file
+        <input
+          type="file"
+          accept=".pdf,.pptx"
+          multiple style={{ display: 'none' }}
+          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+        />
       </label>
     );
   }
@@ -69,38 +84,48 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onClick={() => inputRef.current?.click()}
-      className="flex flex-col items-center justify-center gap-5 rounded-2xl cursor-pointer select-none"
       style={{
-        padding: '3rem 2.5rem',
-        background: isDragging ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        border: `2px dashed ${isDragging ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.25)'}`,
-        transform: isDragging ? 'scale(1.015)' : 'scale(1)',
-        boxShadow: isDragging ? '0 12px 40px rgba(0,0,0,0.25)' : 'none',
-        transition: 'background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 16,
+        padding: '40px 32px',
+        borderRadius: 10,
+        border: `1.5px dashed ${isDragging ? 'var(--accent)' : 'var(--border-strong)'}`,
+        background: isDragging ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+        cursor: 'pointer',
+        userSelect: 'none',
+        transition: 'border-color 0.15s, background 0.15s',
       }}
     >
-      <div
-        className="p-4 rounded-2xl"
-        style={{
-          background: isDragging ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)',
-          border: '1px solid rgba(255,255,255,0.22)',
-          transition: 'background 0.2s ease',
-        }}
-      >
-        <FileText size={30} className="text-white" />
+      <div style={{
+        width: 44, height: 44,
+        background: isDragging ? 'var(--accent-muted)' : 'var(--bg-active)',
+        border: `1px solid ${isDragging ? 'rgba(89,101,217,.3)' : 'var(--border)'}`,
+        borderRadius: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background 0.15s, border-color 0.15s',
+      }}>
+        <FileText size={20} style={{ color: isDragging ? 'var(--accent-hover)' : 'var(--text-2)' }} />
       </div>
-      <div className="text-center">
-        <p className="text-[15px] font-semibold text-white leading-snug">
-          Drop PDFs here or{' '}
-          <span style={{ textDecoration: 'underline', opacity: 0.75, textUnderlineOffset: 3 }}>browse</span>
+
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}>
+          Drop files here or{' '}
+          <span style={{ color: 'var(--accent-hover)', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            browse
+          </span>
         </p>
-        <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.45)' }}>Supports multiple files</p>
+        <p style={{ fontSize: 12, color: 'var(--text-3)' }}>PDF and PPTX supported</p>
       </div>
-      <input ref={inputRef} type="file" accept=".pdf,application/pdf" multiple className="hidden"
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.pptx"
+        multiple style={{ display: 'none' }}
         onClick={(e) => e.stopPropagation()}
-        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} />
+        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+      />
     </div>
   );
 }

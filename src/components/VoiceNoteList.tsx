@@ -27,7 +27,10 @@ interface NoteItemProps {
   onUpdateTitle: (id: string, title: string) => void;
 }
 
-function NoteItem({ note, isActive, isPlaying, audio, onTogglePlay, onDelete, onUpdateTitle }: NoteItemProps) {
+function NoteItem({
+  note, isActive, isPlaying, audio,
+  onTogglePlay, onDelete, onUpdateTitle,
+}: NoteItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [titleInput, setTitleInput] = useState(note.title ?? '');
   const sliderRef = useRef<HTMLInputElement>(null);
@@ -58,114 +61,152 @@ function NoteItem({ note, isActive, isPlaying, audio, onTogglePlay, onDelete, on
     if (currentTimeRef.current) currentTimeRef.current.textContent = formatDuration(t);
   };
 
-  const openEdit = () => { setTitleInput(note.title ?? ''); setIsEditing(true); };
+  const openEdit  = () => { setTitleInput(note.title ?? ''); setIsEditing(true); };
   const commitEdit = () => { onUpdateTitle(note.id, titleInput.trim()); setIsEditing(false); };
   const cancelEdit = () => { setTitleInput(note.title ?? ''); setIsEditing(false); };
 
   return (
     <div
-      className="rounded-xl transition-all"
       style={{
-        background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
-        border: isActive ? '1px solid rgba(255,255,255,0.18)' : '1px solid transparent',
-        marginBottom: 3,
-        transition: 'background 0.18s ease, border-color 0.18s ease',
+        borderRadius: 7,
+        background: isActive ? 'var(--bg-elevated)' : 'transparent',
+        border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
+        marginBottom: 2,
+        transition: 'background 0.15s, border-color 0.15s',
       }}
     >
       {/* Main row */}
-      <div className="flex items-center gap-2.5 px-2 py-2 group">
-        {/* Play/pause — 32x32 for touch target */}
+      <div
+        className="group"
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px' }}
+      >
+        {/* Play / pause */}
         <button
           onClick={() => onTogglePlay(note)}
           aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="flex-shrink-0 flex items-center justify-center rounded-full cursor-pointer"
           style={{
-            width: 28, height: 28,
-            background: '#fff',
-            color: '#0f172a',
-            border: 'none',
-            boxShadow: '0 1px 6px rgba(0,0,0,0.25)',
-            transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+            flexShrink: 0,
+            width: 26, height: 26,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 5,
+            background: 'var(--bg-active)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-1)',
+            cursor: 'pointer',
+            transition: 'background 0.13s, border-color 0.13s',
           }}
           onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-            transform: 'scale(1.08)',
-            boxShadow: '0 3px 10px rgba(0,0,0,0.3)',
+            background: 'var(--accent-muted)', borderColor: 'rgba(89,101,217,.3)',
           })}
           onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-            transform: 'scale(1)',
-            boxShadow: '0 1px 6px rgba(0,0,0,0.25)',
+            background: 'var(--bg-active)', borderColor: 'var(--border)',
           })}
         >
           {isPlaying
-            ? <Pause size={10} fill="#0f172a" />
-            : <Play size={10} fill="#0f172a" className="ml-0.5" />
+            ? <Pause  size={10} fill="currentColor" />
+            : <Play   size={10} fill="currentColor" style={{ marginLeft: 1 }} />
           }
         </button>
 
         {/* Title / edit */}
-        <div className="flex-1 min-w-0">
+        <div style={{ flex: 1, minWidth: 0 }}>
           {isEditing ? (
             <input
               autoFocus
               value={titleInput}
               onChange={(e) => setTitleInput(e.target.value)}
               onBlur={commitEdit}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') cancelEdit(); }}
-              placeholder="Add a title…"
-              className="w-full text-xs bg-transparent outline-none py-0.5"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitEdit();
+                if (e.key === 'Escape') cancelEdit();
+              }}
+              placeholder="Note title…"
               style={{
-                color: '#fff',
-                borderBottom: '1.5px solid rgba(255,255,255,0.45)',
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '1px solid var(--accent)',
+                outline: 'none',
+                color: 'var(--text-1)',
+                fontSize: 12,
+                padding: '1px 0',
                 fontFamily: 'inherit',
               }}
             />
           ) : (
             <button
               onClick={openEdit}
-              className="text-xs text-left w-full truncate block cursor-pointer"
-              style={{ background: 'none', border: 'none', fontFamily: 'inherit', padding: 0 }}
+              style={{
+                display: 'block', width: '100%',
+                background: 'none', border: 'none',
+                textAlign: 'left', padding: 0,
+                cursor: 'pointer', fontFamily: 'inherit',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
             >
               {note.title
-                ? <span style={{ color: '#fff', fontWeight: 500 }}>{note.title}</span>
-                : <span style={{ color: 'rgba(255,255,255,0.42)', fontSize: 11 }}>{formatTimestamp(note.timestamp)}</span>
+                ? <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>{note.title}</span>
+                : <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{formatTimestamp(note.timestamp)}</span>
               }
             </button>
           )}
         </div>
 
         {/* Hover actions */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0"
-          style={{ transition: 'opacity 0.15s ease' }}>
+        <div
+          className="opacity-0 group-hover:opacity-100"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 1,
+            flexShrink: 0,
+            transition: 'opacity 0.13s',
+          }}
+        >
           <button
             onClick={openEdit}
-            title="Edit title"
-            className="p-1.5 rounded-lg cursor-pointer"
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.38)', transition: 'color 0.15s ease, background 0.15s ease' }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: '#fff', background: 'rgba(255,255,255,0.1)' })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'rgba(255,255,255,0.38)', background: 'transparent' })}
+            title="Rename"
+            style={{
+              width: 22, height: 22,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 4,
+              background: 'none', border: 'none',
+              color: 'var(--text-3)',
+              cursor: 'pointer',
+              transition: 'color 0.12s, background 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-1)', background: 'var(--bg-hover)' })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)', background: 'none' })}
           >
             <Pencil size={10} />
           </button>
           <button
             onClick={() => onDelete(note.id)}
             title="Delete"
-            className="p-1.5 rounded-lg cursor-pointer"
-            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.38)', transition: 'color 0.15s ease, background 0.15s ease' }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: '#fca5a5', background: 'rgba(239,68,68,0.12)' })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'rgba(255,255,255,0.38)', background: 'transparent' })}
+            style={{
+              width: 22, height: 22,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 4,
+              background: 'none', border: 'none',
+              color: 'var(--text-3)',
+              cursor: 'pointer',
+              transition: 'color 0.12s, background 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)', background: 'var(--red-muted)' })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)', background: 'none' })}
           >
             <Trash2 size={10} />
           </button>
         </div>
       </div>
 
-      {/* Seek row */}
+      {/* Seek bar */}
       {isActive && (
-        <div className="flex items-center gap-2 px-2.5 pb-2.5">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 7px' }}>
           <span
             ref={currentTimeRef}
-            className="text-[10px] font-mono tabular-nums flex-shrink-0"
-            style={{ color: 'rgba(255,255,255,0.65)', minWidth: 28 }}
+            style={{
+              fontSize: 10, fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
+              color: 'var(--text-2)', flexShrink: 0, minWidth: 28,
+            }}
           >
             0:00
           </span>
@@ -177,13 +218,12 @@ function NoteItem({ note, isActive, isPlaying, audio, onTogglePlay, onDelete, on
             onMouseUp={(e) => { isScrubbing.current = false; if (audio) audio.currentTime = parseFloat((e.target as HTMLInputElement).value); }}
             onTouchEnd={(e) => { isScrubbing.current = false; if (audio) audio.currentTime = parseFloat((e.target as HTMLInputElement).value); }}
             onChange={handleSeek}
-            className="flex-1 h-1 rounded-full cursor-pointer"
-            style={{ accentColor: '#fff' }}
+            style={{ flex: 1, height: 3, cursor: 'pointer', accentColor: 'var(--accent)' }}
           />
-          <span
-            className="text-[10px] font-mono tabular-nums flex-shrink-0 text-right"
-            style={{ color: 'rgba(255,255,255,0.42)', minWidth: 28 }}
-          >
+          <span style={{
+            fontSize: 10, fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
+            color: 'var(--text-3)', flexShrink: 0, minWidth: 28, textAlign: 'right',
+          }}>
             {formatDuration(note.duration)}
           </span>
         </div>
@@ -191,6 +231,8 @@ function NoteItem({ note, isActive, isPlaying, audio, onTogglePlay, onDelete, on
     </div>
   );
 }
+
+// ─── List ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   notes: VoiceNote[];
@@ -205,11 +247,19 @@ export default function VoiceNoteList({ notes, pageKey, onDelete, onUpdateTitle 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const destroyAudio = useCallback(() => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; audioRef.current.onended = null; audioRef.current.onerror = null; audioRef.current = null; }
-    setPlayingId(null); setPlayState('playing');
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+    setPlayingId(null);
+    setPlayState('playing');
   }, []);
 
-  useEffect(() => { destroyAudio(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pageKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { destroyAudio(); }, [pageKey]);
   useEffect(() => () => destroyAudio(), [destroyAudio]);
 
   const handleTogglePlay = useCallback((note: VoiceNote) => {
@@ -237,7 +287,7 @@ export default function VoiceNoteList({ notes, pageKey, onDelete, onUpdateTitle 
   if (notes.length === 0) return null;
 
   return (
-    <div className="flex flex-col overflow-y-auto" style={{ maxHeight: 200, paddingTop: 2 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 200, overflowY: 'auto', paddingTop: 2 }}>
       {notes.map((note) => (
         <NoteItem
           key={note.id}

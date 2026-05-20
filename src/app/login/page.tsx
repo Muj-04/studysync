@@ -24,13 +24,13 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('isLoggedIn')) router.replace('/');
+    if (localStorage.getItem('isLoggedIn')) router.replace('/workspace');
   }, [router]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('isLoggedIn', 'true');
-    router.push('/');
+    router.push('/workspace');
   };
 
   return (

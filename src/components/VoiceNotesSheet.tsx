@@ -44,57 +44,59 @@ export default function VoiceNotesSheet({
 
   return (
     <div style={{
-      flexShrink: 0,
-      background: 'rgba(255,255,255,0.06)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
-      borderTop: '1.5px solid rgba(255,255,255,0.1)',
+      background: 'var(--bg-panel)',
+      borderTop: '1px solid var(--border)',
       userSelect: 'none',
+      flexShrink: 0,
     }}>
 
-      {/* Drag handle + header — always visible */}
+      {/* ── Header — always visible ── */}
       <div
         onClick={onToggle}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         style={{ cursor: 'pointer' }}
       >
-        {/* Handle pill */}
-        <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, paddingBottom: 4 }}>
+        {/* Handle */}
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '7px 0 3px' }}>
           <div style={{
-            width: 32, height: 3.5, borderRadius: 9999,
-            background: 'rgba(255,255,255,0.18)',
-            transition: 'background 0.15s ease',
+            width: 28, height: 3,
+            background: 'var(--border-strong)',
+            borderRadius: 9999,
           }} />
         </div>
 
-        {/* Header row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 16px 9px' }}>
+        {/* Title row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '2px 14px 8px',
+        }}>
           <Mic
-            size={12}
+            size={11}
             style={{
-              flexShrink: 0, transition: 'color 0.2s ease',
-              color: isRecordingHere ? '#ef4444' : isOpen ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.4)',
+              flexShrink: 0, transition: 'color 0.18s',
+              color: isRecordingHere ? 'var(--red)' : isOpen ? 'var(--text-2)' : 'var(--text-3)',
             }}
           />
           <span style={{
-            fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.1em', color: 'rgba(255,255,255,0.45)', flex: 1,
+            fontSize: 10.5, fontWeight: 600,
+            letterSpacing: '0.07em', textTransform: 'uppercase',
+            color: 'var(--text-2)', flex: 1,
           }}>
             Voice Notes
           </span>
 
-          {/* Collapsed state indicators */}
+          {/* Collapsed indicators */}
           {!isOpen && isRecordingHere && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <span className="rec-dot" style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: '#ef4444',
                 display: 'inline-block',
-                boxShadow: '0 0 5px rgba(239,68,68,0.6)',
+                width: 6, height: 6, borderRadius: '50%',
+                background: 'var(--red)',
               }} />
               <span style={{
-                fontSize: 10, fontWeight: 600, color: '#fca5a5',
+                fontSize: 11, fontWeight: 600,
+                color: 'var(--red)',
                 fontVariantNumeric: 'tabular-nums',
               }}>
                 {Math.floor(recordingDuration / 60)}:{String(Math.floor(recordingDuration % 60)).padStart(2, '0')}
@@ -103,43 +105,47 @@ export default function VoiceNotesSheet({
           )}
           {!isOpen && !isRecordingHere && notes.length > 0 && (
             <span style={{
-              fontSize: 10, fontWeight: 600,
-              padding: '2px 7px', borderRadius: 9999,
-              background: 'rgba(255,255,255,0.14)',
-              border: '1px solid rgba(255,255,255,0.18)',
-              color: 'rgba(255,255,255,0.85)',
+              fontSize: 10.5, fontWeight: 500,
+              padding: '1px 7px', borderRadius: 4,
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-2)',
+              fontVariantNumeric: 'tabular-nums',
             }}>
               {notes.length}
             </span>
           )}
 
-          <ChevronUp size={14} style={{
-            color: 'rgba(255,255,255,0.35)', flexShrink: 0,
-            transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-          }} />
+          <ChevronUp
+            size={13}
+            style={{
+              color: 'var(--text-3)', flexShrink: 0,
+              transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
+            }}
+          />
         </div>
       </div>
 
-      {/* Collapsible content */}
+      {/* ── Collapsible content ── */}
       <div style={{
         overflow: 'hidden',
         maxHeight: isOpen ? 280 : 0,
         transition: isOpen
-          ? 'max-height 0.32s cubic-bezier(0, 0, 0.2, 1)'
-          : 'max-height 0.2s cubic-bezier(0.4, 0, 1, 1)',
+          ? 'max-height 0.3s cubic-bezier(0,0,0.2,1)'
+          : 'max-height 0.18s cubic-bezier(0.4,0,1,1)',
       }}>
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ borderTop: '1px solid var(--border)' }}>
 
           {/* Recorder row */}
           <div
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 16px 8px',
+              padding: '10px 14px 8px',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 400 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 400 }}>
               {notes.length === 0
                 ? 'No notes on this page'
                 : `${notes.length} note${notes.length !== 1 ? 's' : ''}`}
@@ -158,7 +164,10 @@ export default function VoiceNotesSheet({
           {/* Notes list */}
           {notes.length > 0 && (
             <div
-              style={{ borderTop: '1px solid rgba(255,255,255,0.07)', padding: '4px 8px 6px' }}
+              style={{
+                borderTop: '1px solid var(--border-subtle)',
+                padding: '4px 8px 6px',
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <VoiceNoteList

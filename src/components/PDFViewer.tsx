@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
+import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from 'pdfjs-dist';
 import type { PDFDocument } from '@/types';
 
 let pdfjsCache: typeof import('pdfjs-dist') | null = null;
@@ -20,45 +20,72 @@ export function clampZoom(z: number) {
   return Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) * 100) / 100;
 }
 
+export interface HighlightRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 interface Props {
   document: PDFDocument;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
   onCanvasDimensions?: (cssW: number, cssH: number) => void;
   overlay?: React.ReactNode;
+  /** Called after each successful page render with the page object and CSS-scale viewport. */
+  onPageReady?: (page: PDFPageProxy, cssViewport: PageViewport) => void;
+  /** Highlight rectangles to render over the PDF (in CSS pixels, relative to canvas top-left). */
+  searchHighlights?: HighlightRect[];
+  /** Index of the currently active highlight (orange vs yellow). */
+  searchActiveIndex?: number;
 }
 
-export default function PDFViewer({ document, zoom = 1, onZoomChange, onCanvasDimensions, overlay }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const pdfRef = useRef<PDFDocumentProxy | null>(null);
-  const pdfUrlRef = useRef<string>('');
+export default function PDFViewer({
+  document, zoom = 1, onZoomChange, onCanvasDimensions, overlay,
+  onPageReady, searchHighlights, searchActiveIndex,
+}: Props) {
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
+  const scrollRef   = useRef<HTMLDivElement>(null);
+  const pdfRef      = useRef<PDFDocumentProxy | null>(null);
+  const pdfUrlRef   = useRef<string>('');
   const renderTaskRef = useRef<RenderTask | null>(null);
-  const onDimsRef = useRef(onCanvasDimensions);
+  const onDimsRef       = useRef(onCanvasDimensions);
   const onZoomChangeRef = useRef(onZoomChange);
-  // Tracks live zoom ahead of React state for fast gesture sequences
-  const liveZoomRef = useRef(zoom);
+  const onPageReadyRef  = useRef(onPageReady);
+  const liveZoomRef     = useRef(zoom);
   const lastPinchDistRef = useRef<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // CSS canvas dimensions — used to size the wrapper div for highlight positioning
+  const [cssDims, setCssDims] = useState<{ w: number; h: number } | null>(null);
+  // Ref map for scrolling active highlight into view
+  const highlightRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
-  // Keep refs in sync every render
-  useEffect(() => { onDimsRef.current = onCanvasDimensions; });
+  useEffect(() => { onDimsRef.current      = onCanvasDimensions; });
   useEffect(() => { onZoomChangeRef.current = onZoomChange; });
-  useEffect(() => { liveZoomRef.current = zoom; });
+  useEffect(() => { onPageReadyRef.current  = onPageReady; });
+  useEffect(() => { liveZoomRef.current     = zoom; });
   useEffect(() => { return () => { pdfRef.current?.destroy(); }; }, []);
 
-  // PDF render effect — re-runs on page, url, or zoom change
+  // Scroll active highlight into view when it changes
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
+    if (searchActiveIndex == null) return;
+    const el = highlightRefs.current.get(searchActiveIndex);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [searchActiveIndex]);
+
+  // PDF render — re-runs on page, url, or zoom change
+  useEffect(() => {
+    const canvas   = canvasRef.current;
+    const scrollEl = scrollRef.current;
+    if (!canvas || !scrollEl) return;
 
     let cancelled = false;
     setIsLoading(true);
     setError(null);
 
-    async function render(cv: HTMLCanvasElement, ct: HTMLDivElement) {
+    async function render() {
       try {
         const pdfjs = await getPDFJS();
 
@@ -77,23 +104,28 @@ export default function PDFViewer({ document, zoom = 1, onZoomChange, onCanvasDi
 
         renderTaskRef.current?.cancel();
 
-        const dpr = window.devicePixelRatio || 1;
-        const containerWidth = ct.clientWidth - 48;
-        const baseViewport = page.getViewport({ scale: 1 });
-        const scale = (containerWidth / baseViewport.width) * zoom * dpr;
-        const viewport = page.getViewport({ scale });
+        const dpr        = window.devicePixelRatio || 1;
+        const panelWidth = (scrollRef.current?.clientWidth ?? 400) - 48;
+        const baseVp     = page.getViewport({ scale: 1 });
+        // CSS-scale viewport — used for search coordinate mapping
+        const cssScale   = (panelWidth / baseVp.width) * zoom;
+        const cssVp      = page.getViewport({ scale: cssScale });
+        // High-DPR viewport — used for canvas rendering
+        const viewport   = page.getViewport({ scale: cssScale * dpr });
 
-        cv.width = viewport.width;
-        cv.height = viewport.height;
-        cv.style.width = `${viewport.width / dpr}px`;
-        cv.style.height = `${viewport.height / dpr}px`;
+        canvas!.width        = viewport.width;
+        canvas!.height       = viewport.height;
+        canvas!.style.width  = `${cssVp.width}px`;
+        canvas!.style.height = `${cssVp.height}px`;
 
-        renderTaskRef.current = page.render({ canvas: cv, viewport });
+        renderTaskRef.current = page.render({ canvas: canvas!, viewport });
         await renderTaskRef.current.promise;
 
         if (!cancelled) {
           setIsLoading(false);
-          onDimsRef.current?.(viewport.width / dpr, viewport.height / dpr);
+          setCssDims({ w: cssVp.width, h: cssVp.height });
+          onDimsRef.current?.(cssVp.width, cssVp.height);
+          onPageReadyRef.current?.(page, cssVp);
         }
       } catch (err) {
         if (cancelled) return;
@@ -103,109 +135,153 @@ export default function PDFViewer({ document, zoom = 1, onZoomChange, onCanvasDi
       }
     }
 
-    render(canvas, container);
+    render();
     return () => { cancelled = true; renderTaskRef.current?.cancel(); };
   }, [document.url, document.currentPage, zoom]);
 
-  // Ctrl+scroll / Cmd+scroll zoom
+  // Ctrl / Cmd + scroll zoom
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const el = scrollRef.current;
+    if (!el) return;
     const handleWheel = (e: WheelEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
       const delta = e.deltaY < 0 ? 0.1 : -0.1;
-      const next = clampZoom(liveZoomRef.current + delta);
+      const next  = clampZoom(liveZoomRef.current + delta);
       liveZoomRef.current = next;
       onZoomChangeRef.current?.(next);
     };
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Pinch-to-zoom (two-finger trackpad / touchscreen)
+  // Pinch-to-zoom
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const handleTouchStart = (e: TouchEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        lastPinchDistRef.current = Math.hypot(dx, dy);
+        lastPinchDistRef.current = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY,
+        );
       }
     };
-
-    const handleTouchMove = (e: TouchEvent) => {
+    const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 2 || lastPinchDistRef.current === null) return;
       e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
+      const dist  = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      );
       const ratio = dist / lastPinchDistRef.current;
       lastPinchDistRef.current = dist;
-      const next = clampZoom(liveZoomRef.current * ratio);
+      const next  = clampZoom(liveZoomRef.current * ratio);
       liveZoomRef.current = next;
       onZoomChangeRef.current?.(next);
     };
-
-    const handleTouchEnd = () => { lastPinchDistRef.current = null; };
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd);
+    const onTouchEnd = () => { lastPinchDistRef.current = null; };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove',  onTouchMove,  { passive: false });
+    el.addEventListener('touchend',   onTouchEnd);
     return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove',  onTouchMove);
+      el.removeEventListener('touchend',   onTouchEnd);
     };
   }, []);
 
   return (
     <div
-      ref={containerRef}
-      className="relative flex justify-center items-start min-h-full p-6"
-      style={{ minWidth: 'max-content' }}
+      ref={scrollRef}
+      style={{ flex: 1, minHeight: 0, overflow: 'auto', position: 'relative' }}
     >
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="flex flex-col items-center gap-3">
-            <div
-              className="w-9 h-9 rounded-full"
-              style={{
-                border: '2.5px solid rgba(255,255,255,0.15)',
-                borderTopColor: 'rgba(255,255,255,0.7)',
-                animation: 'spin 0.75s linear infinite',
-              }}
-            />
-            <span className="text-xs font-medium tracking-wide" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              Rendering…
-            </span>
-          </div>
-        </div>
-      )}
-      {error && (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div
-            className="flex flex-col items-center gap-2 px-6 py-4 rounded-2xl"
-            style={{
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.25)',
-            }}
-          >
-            <p className="text-sm font-medium" style={{ color: '#fca5a5' }}>{error}</p>
-          </div>
-        </div>
-      )}
-      <canvas
-        ref={canvasRef}
-        className={`rounded-sm ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+      <div
         style={{
-          boxShadow: '0 12px 48px rgba(0,0,0,0.55), 0 4px 12px rgba(0,0,0,0.3)',
-          transition: 'opacity 0.25s ease',
+          display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+          padding: 24,
+          minWidth: '100%', width: 'max-content', boxSizing: 'border-box',
+          position: 'relative',
         }}
-      />
-      {overlay}
+      >
+        {isLoading && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: 160,
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 20, height: 20, borderRadius: '50%',
+                border: '2px solid var(--border-strong)',
+                borderTopColor: 'var(--text-2)',
+                animation: 'spin 0.75s linear infinite',
+              }} />
+              <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 400 }}>
+                Rendering…
+              </span>
+            </div>
+          </div>
+        )}
+        {error && (
+          <div style={{
+            position: 'absolute', inset: 0, zIndex: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 16px', borderRadius: 8,
+              background: 'var(--red-muted)',
+              border: '1px solid rgba(229,72,77,.25)',
+            }}>
+              <p style={{ fontSize: 12.5, color: 'var(--red)', fontWeight: 500 }}>{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Canvas wrapper — gives a positioning context for highlight rects */}
+        <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
+          <canvas
+            ref={canvasRef}
+            style={{
+              display: 'block',
+              borderRadius: 3,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)',
+              opacity: isLoading ? 0 : 1,
+              transition: 'opacity 0.2s ease',
+            }}
+          />
+
+          {/* Search highlights */}
+          {cssDims && searchHighlights && searchHighlights.length > 0 && searchHighlights.map((h, i) => {
+            const isActive = i === searchActiveIndex;
+            return (
+              <div
+                key={i}
+                ref={(el) => {
+                  if (el) highlightRefs.current.set(i, el);
+                  else highlightRefs.current.delete(i);
+                }}
+                style={{
+                  position: 'absolute',
+                  left: h.x, top: h.y,
+                  width: h.w, height: h.h,
+                  background: isActive
+                    ? 'rgba(255, 110, 20, 0.55)'
+                    : 'rgba(255, 210, 0, 0.38)',
+                  borderRadius: 2,
+                  outline: isActive ? '1.5px solid rgba(255,110,20,0.7)' : 'none',
+                  pointerEvents: 'none',
+                  zIndex: 4,
+                  mixBlendMode: 'multiply',
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {overlay}
+      </div>
     </div>
   );
 }

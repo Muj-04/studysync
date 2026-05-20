@@ -8,8 +8,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PDF Study Workspace",
-  description: "Study PDFs with voice notes, annotations, and collaboration",
+  title: "StudySpace",
+  description: "Your personal PDF study workspace — annotate, record, and focus.",
 };
 
 const BG =
@@ -21,21 +21,23 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistMono.variable} h-full`}>
       <head>
-        {/* Poppins */}
+        {/* Prevent flash of wrong theme on load */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}` }} />
+        {/* Inter — primary UI font */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        {/* Boxicons */}
+        {/* Boxicons — used on login page */}
         <link
           rel="stylesheet"
           href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css"
         />
       </head>
       <body className="min-h-full flex flex-col antialiased">
-        {/* Fixed brick-wall background */}
+        {/* Brick-wall background — visible on login page only */}
         <div
           aria-hidden="true"
           style={{
@@ -48,13 +50,13 @@ export default function RootLayout({
             zIndex: -2,
           }}
         />
-        {/* Dark overlay */}
+        {/* Dark overlay — helps login glassmorphism pop */}
         <div
           aria-hidden="true"
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.48)",
+            background: "rgba(0,0,0,0.52)",
             zIndex: -1,
           }}
         />

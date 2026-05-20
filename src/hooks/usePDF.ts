@@ -22,22 +22,37 @@ export function usePDF() {
   const addDocument = useCallback(async (file: File) => {
     setIsLoading(true);
     try {
-      const url = URL.createObjectURL(file);
-      const pdfjs = await getPDFJS();
-      const pdf = await pdfjs.getDocument(url).promise;
-      const pageCount = pdf.numPages;
-      await pdf.destroy();
+      const isPPTX = file.name.toLowerCase().endsWith('.pptx');
 
-      const doc: PDFDocument = {
-        id: crypto.randomUUID(),
-        name: file.name.replace(/\.pdf$/i, ''),
-        url,
-        pageCount,
-        currentPage: 1,
-      };
-
-      setDocuments((prev) => [...prev, doc]);
-      setActiveDocumentId(doc.id);
+      if (isPPTX) {
+        const doc: PDFDocument = {
+          id: crypto.randomUUID(),
+          name: file.name.replace(/\.pptx$/i, ''),
+          url: '',
+          pageCount: 1,
+          currentPage: 1,
+          type: 'pptx',
+          slides: [],
+        };
+        setDocuments((prev) => [...prev, doc]);
+        setActiveDocumentId(doc.id);
+      } else {
+        const url = URL.createObjectURL(file);
+        const pdfjs = await getPDFJS();
+        const pdf = await pdfjs.getDocument(url).promise;
+        const pageCount = pdf.numPages;
+        await pdf.destroy();
+        const doc: PDFDocument = {
+          id: crypto.randomUUID(),
+          name: file.name.replace(/\.pdf$/i, ''),
+          url,
+          pageCount,
+          currentPage: 1,
+          type: 'pdf',
+        };
+        setDocuments((prev) => [...prev, doc]);
+        setActiveDocumentId(doc.id);
+      }
     } finally {
       setIsLoading(false);
     }

@@ -1,13 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Minus, Pencil, ChevronDown } from 'lucide-react';
 
-const glass: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.09)',
-  backdropFilter: 'blur(16px)',
-  WebkitBackdropFilter: 'blur(16px)',
-  border: '1.5px solid rgba(255,255,255,0.16)',
-};
+const BG_THEMES: Array<{ theme: 'white' | 'dark'; label: string; bg: string; dotColor: string }> = [
+  { theme: 'white', label: 'White', bg: '#ffffff',  dotColor: 'rgba(0,0,0,0.15)' },
+  { theme: 'dark',  label: 'Dark',  bg: '#1e1e2e',  dotColor: 'rgba(255,255,255,0.18)' },
+];
 
 interface Props {
   currentPage: number;
@@ -16,13 +14,93 @@ interface Props {
   onPrev: () => void;
   onNext: () => void;
   onGoToPage: (page: number) => void;
-  onInsertBlankPage: () => void;
+  onInsertBlankPage: (theme: 'white' | 'dark') => void;
   onToggleDraw?: () => void;
   isDrawing?: boolean;
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onHideBar: () => void;
+}
+
+function NavBtn({
+  onClick, disabled, 'aria-label': ariaLabel, children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  'aria-label': string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      style={{
+        width: 28, height: 28,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 6,
+        background: 'transparent',
+        border: '1px solid transparent',
+        color: disabled ? 'var(--text-3)' : 'var(--text-2)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+        flexShrink: 0,
+      }}
+      onMouseOver={(e) => {
+        if (!disabled) Object.assign(e.currentTarget.style, {
+          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+        });
+      }}
+      onMouseOut={(e) => {
+        if (!disabled) Object.assign(e.currentTarget.style, {
+          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+        });
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SmBtn({
+  onClick, disabled, 'aria-label': ariaLabel, children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  'aria-label': string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      style={{
+        width: 24, height: 24,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 5,
+        background: 'transparent',
+        border: '1px solid transparent',
+        color: disabled ? 'var(--text-3)' : 'var(--text-2)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+        flexShrink: 0,
+      }}
+      onMouseOver={(e) => {
+        if (!disabled) Object.assign(e.currentTarget.style, {
+          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+        });
+      }}
+      onMouseOut={(e) => {
+        if (!disabled) Object.assign(e.currentTarget.style, {
+          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+        });
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function PageNavigation({
@@ -32,7 +110,22 @@ export default function PageNavigation({
   zoom, onZoomIn, onZoomOut, onHideBar,
 }: Props) {
   const [inputValue, setInputValue] = useState(String(currentPage));
+  const [showBgPicker, setShowBgPicker] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => { setInputValue(String(currentPage)); }, [currentPage]);
+
+  // Close picker on outside click
+  useEffect(() => {
+    if (!showBgPicker) return;
+    const fn = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowBgPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', fn);
+    return () => document.removeEventListener('mousedown', fn);
+  }, [showBgPicker]);
 
   const commit = () => {
     const page = parseInt(inputValue, 10);
@@ -40,237 +133,220 @@ export default function PageNavigation({
     else setInputValue(String(currentPage));
   };
 
-  const canPrev = currentPage > 1;
-  const canNext = currentPage < pageCount;
-  const canZoomOut = !isBlankPage && zoom > 0.5;
-  const canZoomIn = !isBlankPage && zoom < 2;
-
-  const navBtnStyle = (enabled: boolean): React.CSSProperties => ({
-    width: 36, height: 36,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    borderRadius: 10,
-    background: enabled ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.04)',
-    border: `1.5px solid ${enabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.06)'}`,
-    color: enabled ? '#fff' : 'rgba(255,255,255,0.18)',
-    cursor: enabled ? 'pointer' : 'not-allowed',
-    transition: 'background 0.15s ease, border-color 0.15s ease',
-    flexShrink: 0,
-  });
-
-  const zoomBtnStyle = (enabled: boolean): React.CSSProperties => ({
-    width: 30, height: 30,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    borderRadius: 8,
-    background: enabled ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.03)',
-    border: `1.5px solid ${enabled ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.05)'}`,
-    color: enabled ? '#fff' : 'rgba(255,255,255,0.15)',
-    cursor: enabled ? 'pointer' : 'not-allowed',
-    transition: 'background 0.15s ease, border-color 0.15s ease',
-    flexShrink: 0,
-  });
+  const canPrev   = currentPage > 1;
+  const canNext   = currentPage < pageCount;
+  const canZoomOut = zoom > 0.5;
+  const canZoomIn  = zoom < 2;
 
   return (
-    <div
-      className="flex items-center justify-between flex-shrink-0"
-      style={{
-        ...glass,
-        height: 52,
-        paddingLeft: 14, paddingRight: 14,
-        borderLeft: 'none', borderRight: 'none', borderBottom: 'none', borderRadius: 0,
-        boxShadow: '0 -1px 0 rgba(255,255,255,0.05)',
-      }}
-    >
-      {/* ── Left: Insert blank page ── */}
-      <button
-        onClick={onInsertBlankPage}
-        title="Insert blank page after current page"
-        aria-label="Insert blank page"
-        className="flex items-center gap-1.5 cursor-pointer"
-        style={{
-          height: 32, padding: '0 12px',
-          borderRadius: 20, flexShrink: 0,
-          background: 'rgba(255,255,255,0.12)',
-          border: '1.5px solid rgba(255,255,255,0.22)',
-          color: 'rgba(255,255,255,0.85)',
-          fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-          transition: 'background 0.18s ease, border-color 0.18s ease, color 0.18s ease',
-        }}
-        onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-          background: 'rgba(255,255,255,0.22)',
-          borderColor: 'rgba(255,255,255,0.45)',
-          color: '#fff',
-        })}
-        onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-          background: 'rgba(255,255,255,0.12)',
-          borderColor: 'rgba(255,255,255,0.22)',
-          color: 'rgba(255,255,255,0.85)',
-        })}
-      >
-        <Plus size={12} strokeWidth={2.5} />
-        <span className="hidden sm:inline">Blank</span>
-      </button>
+    <div style={{
+      height: 48,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0 12px',
+      background: 'var(--bg-sidebar)',
+      borderTop: '1px solid var(--border-subtle)',
+      flexShrink: 0,
+    }}>
 
-      {/* ── Center: Arrows flanking the page input ── */}
-      <div className="flex items-center gap-2">
+      {/* ── Left: insert blank page ── */}
+      <div ref={pickerRef} style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          onClick={() => setShowBgPicker((v) => !v)}
+          title="Insert blank page after current"
+          aria-label="Insert blank page"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            height: 26, padding: '0 10px',
+            borderRadius: 6,
+            background: showBgPicker ? 'var(--bg-hover)' : 'transparent',
+            border: '1px solid var(--border)',
+            color: 'var(--text-2)',
+            fontSize: 11.5, fontWeight: 500,
+            cursor: 'pointer', fontFamily: 'inherit',
+            transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+          }}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+            background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border-strong)',
+          })}
+          onMouseOut={(e) => {
+            if (!showBgPicker) Object.assign(e.currentTarget.style, {
+              background: 'transparent', color: 'var(--text-2)', borderColor: 'var(--border)',
+            });
+          }}
+        >
+          <Plus size={11} strokeWidth={2.5} />
+          <span className="hidden sm:inline">Blank</span>
+          <ChevronDown size={9} strokeWidth={2.5} style={{ marginLeft: 1, opacity: 0.6 }} />
+        </button>
+
+        {/* Theme picker popover */}
+        {showBgPicker && (
+          <div style={{
+            position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
+            background: 'var(--bg-panel)',
+            border: '1px solid var(--border)',
+            borderRadius: 9,
+            padding: '10px',
+            boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
+            zIndex: 100,
+          }}>
+            <p style={{
+              fontSize: 9.5, fontWeight: 700,
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: 'var(--text-3)', marginBottom: 8,
+            }}>
+              Background
+            </p>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {BG_THEMES.map(({ theme, label, bg, dotColor }) => (
+                <button
+                  key={theme}
+                  onClick={() => { onInsertBlankPage(theme); setShowBgPicker(false); }}
+                  title={`Add ${label} blank page`}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                    border: '1px solid var(--border)',
+                    borderRadius: 6, padding: '5px 6px',
+                    cursor: 'pointer', background: 'transparent', fontFamily: 'inherit',
+                    minWidth: 60,
+                    transition: 'background 0.13s, border-color 0.13s',
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = 'var(--bg-hover)';
+                    e.currentTarget.style.borderColor = 'var(--border-strong)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.borderColor = 'var(--border)';
+                  }}
+                >
+                  <div style={{
+                    width: 52, height: 36, borderRadius: 3,
+                    backgroundColor: bg,
+                    backgroundImage: `radial-gradient(circle, ${dotColor} 1.2px, transparent 1.2px)`,
+                    backgroundSize: '10px 10px',
+                    border: '1px solid rgba(128,128,128,0.2)',
+                  }} />
+                  <span style={{ fontSize: 10.5, color: 'var(--text-2)' }}>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Center: page navigation ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {isBlankPage && (
-          <span
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full hidden sm:inline-flex items-center"
-            style={{ background: 'rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.2)' }}
-          >
+          <span style={{
+            fontSize: 10, fontWeight: 500,
+            padding: '2px 7px', borderRadius: 4,
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-2)',
+            letterSpacing: '0.03em',
+          }}>
             Blank
           </span>
         )}
 
-        <button
-          onClick={onPrev}
-          disabled={!canPrev}
-          style={navBtnStyle(canPrev)}
-          onMouseOver={(e) => { if (canPrev) e.currentTarget.style.background = 'rgba(255,255,255,0.24)'; }}
-          onMouseOut={(e) => { if (canPrev) e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; }}
-          aria-label="Previous page"
-        >
-          <ChevronLeft size={17} strokeWidth={2.5} />
-        </button>
+        <NavBtn onClick={onPrev} disabled={!canPrev} aria-label="Previous page">
+          <ChevronLeft size={15} strokeWidth={2} />
+        </NavBtn>
 
-        <form onSubmit={(e) => { e.preventDefault(); commit(); }} className="flex items-center gap-2">
+        <form onSubmit={(e) => { e.preventDefault(); commit(); }} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <input
             type="number"
             min={1} max={pageCount}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.6)';
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.08)';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)';
-              e.currentTarget.style.boxShadow = 'none';
-              commit();
-            }}
-            className="glass-input text-center text-sm font-semibold"
+            onBlur={(e) => { commit(); void e; }}
+            className="app-input"
             style={{
-              width: 44, padding: '4px 4px',
-              background: 'rgba(255,255,255,0.09)',
-              border: '1.5px solid rgba(255,255,255,0.25)',
-              borderRadius: 9, color: '#fff', fontFamily: 'inherit',
-              transition: 'border-color 0.18s ease, box-shadow 0.18s ease',
+              width: 40, height: 26,
+              textAlign: 'center',
+              fontSize: 12.5, fontWeight: 500,
+              padding: '0 4px',
             }}
           />
-          <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>
-            / {pageCount}
+          <span style={{ fontSize: 12, color: 'var(--text-3)', userSelect: 'none' }}>
+            of {pageCount}
           </span>
         </form>
 
-        <button
-          onClick={onNext}
-          disabled={!canNext}
-          style={navBtnStyle(canNext)}
-          onMouseOver={(e) => { if (canNext) e.currentTarget.style.background = 'rgba(255,255,255,0.24)'; }}
-          onMouseOut={(e) => { if (canNext) e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; }}
-          aria-label="Next page"
-        >
-          <ChevronRight size={17} strokeWidth={2.5} />
-        </button>
+        <NavBtn onClick={onNext} disabled={!canNext} aria-label="Next page">
+          <ChevronRight size={15} strokeWidth={2} />
+        </NavBtn>
       </div>
 
-      {/* ── Right: Zoom + Draw + Hide ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      {/* ── Right: zoom + draw + hide ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
 
-        {/* Zoom controls */}
+        {/* Zoom */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <button
-            onClick={onZoomOut}
-            disabled={!canZoomOut}
-            style={zoomBtnStyle(canZoomOut)}
-            onMouseOver={(e) => { if (canZoomOut) e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
-            onMouseOut={(e) => { if (canZoomOut) e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
-            aria-label="Zoom out"
-          >
-            <Minus size={13} />
-          </button>
+          <SmBtn onClick={onZoomOut} disabled={!canZoomOut} aria-label="Zoom out">
+            <Minus size={12} />
+          </SmBtn>
           <span
             className="hidden sm:block"
             style={{
-              fontSize: 11, fontWeight: 600, minWidth: 40, textAlign: 'center',
-              color: isBlankPage ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.65)',
+              fontSize: 11, fontWeight: 500,
+              minWidth: 38, textAlign: 'center',
+              color: 'var(--text-2)',
               fontVariantNumeric: 'tabular-nums',
-              letterSpacing: '-0.01em',
             }}
           >
-            {isBlankPage ? '—' : `${Math.round(zoom * 100)}%`}
+            {`${Math.round(zoom * 100)}%`}
           </span>
-          <button
-            onClick={onZoomIn}
-            disabled={!canZoomIn}
-            style={zoomBtnStyle(canZoomIn)}
-            onMouseOver={(e) => { if (canZoomIn) e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
-            onMouseOut={(e) => { if (canZoomIn) e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
-            aria-label="Zoom in"
-          >
-            <Plus size={13} />
-          </button>
+          <SmBtn onClick={onZoomIn} disabled={!canZoomIn} aria-label="Zoom in">
+            <Plus size={12} />
+          </SmBtn>
         </div>
 
-        {/* Separator */}
-        <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+        {/* Divider */}
+        <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
 
-        {/* Draw toggle (PDF pages only) */}
+        {/* Draw toggle */}
         {!isBlankPage && onToggleDraw && (
           <button
             onClick={onToggleDraw}
-            title={isDrawing ? 'Exit drawing mode' : 'Draw on this page'}
-            aria-label={isDrawing ? 'Exit drawing mode' : 'Draw on this page'}
-            className="flex items-center gap-1.5 cursor-pointer"
+            title={isDrawing ? 'Exit drawing mode' : 'Annotate this page'}
+            aria-label={isDrawing ? 'Exit drawing mode' : 'Annotate this page'}
             style={{
-              height: 30, padding: '0 10px',
-              borderRadius: 20, flexShrink: 0,
-              background: isDrawing ? 'rgba(139,92,246,0.3)' : 'rgba(255,255,255,0.1)',
-              border: `1.5px solid ${isDrawing ? 'rgba(139,92,246,0.7)' : 'rgba(255,255,255,0.2)'}`,
-              color: isDrawing ? '#c4b5fd' : 'rgba(255,255,255,0.8)',
-              fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-              transition: 'background 0.18s ease, border-color 0.18s ease, color 0.18s ease',
-              boxShadow: isDrawing ? '0 0 12px rgba(139,92,246,0.25)' : 'none',
+              display: 'flex', alignItems: 'center', gap: 5,
+              height: 26, padding: '0 10px',
+              borderRadius: 6, flexShrink: 0,
+              background: isDrawing ? 'var(--violet-muted)' : 'transparent',
+              border: `1px solid ${isDrawing ? 'rgba(139,92,246,.35)' : 'var(--border)'}`,
+              color: isDrawing ? '#a78bfa' : 'var(--text-2)',
+              fontSize: 11.5, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'background 0.13s, color 0.13s, border-color 0.13s',
             }}
             onMouseOver={(e) => {
               if (!isDrawing) Object.assign(e.currentTarget.style, {
-                background: 'rgba(139,92,246,0.2)',
-                borderColor: 'rgba(139,92,246,0.45)',
-                color: '#ddd6fe',
+                background: 'var(--violet-muted)',
+                borderColor: 'rgba(139,92,246,.25)',
+                color: '#c4b5fd',
               });
             }}
             onMouseOut={(e) => {
               if (!isDrawing) Object.assign(e.currentTarget.style, {
-                background: 'rgba(255,255,255,0.1)',
-                borderColor: 'rgba(255,255,255,0.2)',
-                color: 'rgba(255,255,255,0.8)',
+                background: 'transparent',
+                borderColor: 'var(--border)',
+                color: 'var(--text-2)',
               });
             }}
           >
             <Pencil size={11} />
-            <span className="hidden sm:inline">{isDrawing ? 'Done' : 'Draw'}</span>
+            <span className="hidden sm:inline">{isDrawing ? 'Done' : 'Annotate'}</span>
           </button>
         )}
 
-        {/* Hide bar button */}
-        <button
-          onClick={onHideBar}
-          title="Hide toolbar"
-          aria-label="Hide toolbar"
-          style={{
-            width: 30, height: 30,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 8,
-            background: 'rgba(255,255,255,0.06)',
-            border: '1.5px solid rgba(255,255,255,0.14)',
-            color: 'rgba(255,255,255,0.38)',
-            cursor: 'pointer', flexShrink: 0,
-            transition: 'background 0.15s ease, color 0.15s ease',
-          }}
-          onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'rgba(255,255,255,0.16)', color: '#fff' })}
-          onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.38)' })}
-        >
-          <ChevronDown size={14} />
-        </button>
+        {/* Hide bar */}
+        <SmBtn onClick={onHideBar} aria-label="Hide toolbar">
+          <ChevronDown size={13} />
+        </SmBtn>
       </div>
     </div>
   );

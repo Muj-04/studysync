@@ -4,6 +4,8 @@ export interface PDFDocument {
   url: string;
   pageCount: number;
   currentPage: number;
+  type?: 'pdf' | 'pptx';
+  slides?: string[]; // pre-rendered JPEG data URLs, one per slide
 }
 
 export interface VoiceNote {
@@ -19,13 +21,24 @@ export interface VoiceNote {
 
 // Stubs for future features — not yet implemented
 
+export interface CanvasImage {
+  id: string;
+  src: string;    // base64 data URL
+  x: number;     // logical canvas px (0..PAGE_W)
+  y: number;     // logical canvas px (0..PAGE_H)
+  width: number;
+  height: number;
+}
+
 export interface BlankPage {
   id: string;
   documentId: string;
   /** 0 = before PDF page 1, n = after PDF page n */
   insertAfterPage: number;
-  canvasData?: string; // base64 PNG data URL; replace with remote URL when persisting to DB
+  canvasData?: string; // base64 PNG of freehand strokes
+  images?: CanvasImage[];
   createdAt: number; // ms timestamp — orders multiple blanks after the same PDF page
+  bgTheme?: 'white' | 'dark';
 }
 
 export interface Collaborator {
@@ -43,4 +56,15 @@ export interface WorkspaceSession {
   collaborators: Collaborator[];
   documents: PDFDocument[];
   createdAt: Date;
+}
+
+export interface TextNote {
+  id: string;
+  x: number;        // 0..100 (% of page width)
+  y: number;        // 0..100 (% of page height)
+  width: number;    // 0..100 (% of page width)
+  height: number;   // 0..100 (% of page height)
+  content: string;
+  fontSize: number; // px
+  color: string;    // hex
 }

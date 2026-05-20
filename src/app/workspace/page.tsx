@@ -1,0 +1,1243 @@
+'use client';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  BookOpen, X, LogOut, PanelLeft, PanelRight,
+  ChevronUp, FilePlus, Sun, Moon, Search,
+} from 'lucide-react';
+import { clampZoom } from '@/components/PDFViewer';
+import { usePDF } from '@/hooks/usePDF';
+import { useVoiceNotes } from '@/hooks/useVoiceNotes';
+import { useBlankPages } from '@/hooks/useBlankPages';
+import { usePDFDrawings } from '@/hooks/usePDFDrawings';
+import PDFUploader from '@/components/PDFUploader';
+import PDFWithDrawing from '@/components/PDFWithDrawing';
+import PPTXViewer from '@/components/PPTXViewer';
+import BlankPageCanvas from '@/components/BlankPageCanvas';
+import SidebarThumbnails from '@/components/SidebarThumbnails';
+import DocumentToolsPanel from '@/components/DocumentToolsPanel';
+import FloatingAnnotationToolbar from '@/components/FloatingAnnotationToolbar';
+import VoiceNotesSheet from '@/components/VoiceNotesSheet';
+import PageNavigation from '@/components/PageNavigation';
+import type { BlankPage, PDFDocument, TextNote } from '@/types';
+import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
+import type { Tool, PenType } from '@/lib/drawing';
+
+// ── Virtual page sequence ─────────────────────────────────────────────────────
+
+type VirtualPage =
+  | { type: 'pdf';   pdfPage: number }
+  | { type: 'blank'; blankPage: BlankPage };
+
+function buildVirtualSequence(pdfPageCount: number, blankPages: BlankPage[]): VirtualPage[] {
+  const pages: VirtualPage[] = [];
+  blankPages
+    .filter((b) => b.insertAfterPage === 0)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .forEach((b) => pages.push({ type: 'blank', blankPage: b }));
+  for (let p = 1; p <= pdfPageCount; p++) {
+    pages.push({ type: 'pdf', pdfPage: p });
+    blankPages
+      .filter((b) => b.insertAfterPage === p)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .forEach((b) => pages.push({ type: 'blank', blankPage: b }));
+  }
+  return pages;
+}
+
+// ── Split view icon ───────────────────────────────────────────────────────────
+
+function SplitIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="8" height="18" rx="1.5" />
+      <rect x="13" y="3" width="8" height="18" rx="1.5" />
+    </svg>
+  );
+}
+
+// ── Reusable header icon button ───────────────────────────────────────────────
+
+function HdrBtn({
+  onClick, title, active = false, children,
+}: {
+  onClick?: () => void;
+  title?: string;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      style={{
+        width: 42, height: 42,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 8, flexShrink: 0,
+        background: active ? 'var(--bg-active)' : 'transparent',
+        border: `1px solid ${active ? 'var(--border-strong)' : 'transparent'}`,
+        color: active ? 'var(--text-1)' : 'var(--text-2)',
+        cursor: 'pointer',
+        transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+      }}
+      onMouseOver={(e) => {
+        if (!active) Object.assign(e.currentTarget.style, {
+          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+        });
+      }}
+      onMouseOut={(e) => {
+        if (!active) Object.assign(e.currentTarget.style, {
+          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+        });
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── Mini nav / zoom button ────────────────────────────────────────────────────
+
+function MiniBtn({
+  onClick, disabled, children, title,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+  title?: string;
+}) {
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        width: 22, height: 22,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderRadius: 4, flexShrink: 0,
+        background: 'transparent',
+        border: '1px solid transparent',
+        color: disabled ? 'var(--text-3)' : 'var(--text-2)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontSize: 13, fontFamily: 'inherit', fontWeight: 500,
+        opacity: disabled ? 0.45 : 1,
+        transition: 'background 0.12s, color 0.12s',
+      }}
+      onMouseOver={(e) => {
+        if (!disabled) Object.assign(e.currentTarget.style, {
+          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+        });
+      }}
+      onMouseOut={(e) => {
+        if (!disabled) Object.assign(e.currentTarget.style, {
+          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+        });
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── Right pane header ─────────────────────────────────────────────────────────
+
+function RightPaneHeader({
+  rightSideMode, setRightSideMode,
+  documents, rightDocId, setRightDocId,
+  rightDoc, rightDocPage, setRightDocPage,
+  rightZoom, onRightZoomChange,
+}: {
+  rightSideMode: 'blank' | 'document';
+  setRightSideMode: (m: 'blank' | 'document') => void;
+  documents: PDFDocument[];
+  rightDocId: string | null;
+  setRightDocId: (id: string | null) => void;
+  rightDoc: PDFDocument | null;
+  rightDocPage: number;
+  setRightDocPage: (p: number) => void;
+  rightZoom: number;
+  onRightZoomChange: (z: number) => void;
+}) {
+  return (
+    <div style={{
+      height: 34, flexShrink: 0,
+      display: 'flex', alignItems: 'center',
+      padding: '0 8px', gap: 5,
+      background: 'var(--bg-panel)',
+      borderBottom: '1px solid var(--border)',
+      overflow: 'hidden',
+      userSelect: 'none',
+    }}>
+      {/* Mode toggle pills */}
+      <div style={{
+        display: 'flex', gap: 1,
+        background: 'var(--bg-elevated)',
+        borderRadius: 5, padding: 2, flexShrink: 0,
+      }}>
+        {(['blank', 'document'] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setRightSideMode(m)}
+            style={{
+              height: 20, padding: '0 7px',
+              borderRadius: 3, fontSize: 10.5, fontWeight: 500,
+              background: rightSideMode === m ? 'var(--bg-active)' : 'transparent',
+              border: `1px solid ${rightSideMode === m ? 'var(--border-strong)' : 'transparent'}`,
+              color: rightSideMode === m ? 'var(--text-1)' : 'var(--text-3)',
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+          >
+            {m === 'blank' ? 'Blank' : 'Doc'}
+          </button>
+        ))}
+      </div>
+
+      {/* Document picker (doc mode only) */}
+      {rightSideMode === 'document' && (
+        <select
+          value={rightDocId ?? ''}
+          onChange={(e) => setRightDocId(e.target.value || null)}
+          className="app-input"
+          style={{ flex: 1, height: 22, fontSize: 10.5, padding: '0 4px', minWidth: 0 }}
+        >
+          <option value="">Pick document…</option>
+          {documents.map((d) => (
+            <option key={d.id} value={d.id}>{d.name}</option>
+          ))}
+        </select>
+      )}
+
+      {rightSideMode === 'blank' && <div style={{ flex: 1 }} />}
+
+      {/* Page nav — doc mode with a doc selected */}
+      {rightSideMode === 'document' && rightDoc && (
+        <>
+          <MiniBtn
+            onClick={() => setRightDocPage(Math.max(1, rightDocPage - 1))}
+            disabled={rightDocPage <= 1}
+            title="Previous page"
+          >
+            ‹
+          </MiniBtn>
+          <span style={{ fontSize: 10, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+            {rightDocPage}/{rightDoc.pageCount}
+          </span>
+          <MiniBtn
+            onClick={() => setRightDocPage(Math.min(rightDoc!.pageCount, rightDocPage + 1))}
+            disabled={rightDocPage >= rightDoc.pageCount}
+            title="Next page"
+          >
+            ›
+          </MiniBtn>
+          <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0, margin: '0 1px' }} />
+        </>
+      )}
+
+      {/* Zoom controls (always shown) */}
+      <MiniBtn
+        onClick={() => onRightZoomChange(rightZoom - 0.25)}
+        disabled={rightZoom <= 0.5}
+        title="Zoom out"
+      >
+        −
+      </MiniBtn>
+      <span style={{
+        fontSize: 10, color: 'var(--text-3)',
+        minWidth: 30, textAlign: 'center', flexShrink: 0,
+      }}>
+        {Math.round(rightZoom * 100)}%
+      </span>
+      <MiniBtn
+        onClick={() => onRightZoomChange(rightZoom + 0.25)}
+        disabled={rightZoom >= 2.0}
+        title="Zoom in"
+      >
+        +
+      </MiniBtn>
+    </div>
+  );
+}
+
+// ── Pane empty states ─────────────────────────────────────────────────────────
+
+function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 14, background: 'var(--bg-app)', padding: 32,
+    }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: 12,
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <FilePlus size={20} style={{ color: 'var(--text-3)' }} />
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}>
+          No blank page here
+        </p>
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
+          Add a blank page to take notes<br />alongside this PDF page.
+        </p>
+      </div>
+      <button
+        onClick={onAdd}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          height: 32, padding: '0 16px',
+          borderRadius: 7,
+          background: 'var(--accent)',
+          border: '1px solid transparent',
+          color: '#fff',
+          cursor: 'pointer', fontFamily: 'inherit',
+          fontSize: 12.5, fontWeight: 500,
+          transition: 'background 0.13s',
+        }}
+        onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-hover)'; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = 'var(--accent)'; }}
+      >
+        <FilePlus size={13} />
+        Add Blank Page
+      </button>
+    </div>
+  );
+}
+
+function DocPickEmpty() {
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 8, background: 'var(--bg-app)', padding: 32,
+    }}>
+      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>No document selected</p>
+      <p style={{ fontSize: 11.5, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
+        Choose a document from the picker above.
+      </p>
+    </div>
+  );
+}
+
+// ── Keyboard shortcuts modal ──────────────────────────────────────────────────
+
+const SHORTCUTS = [
+  { key: '← / →',     desc: 'Previous / next page' },
+  { key: 'Ctrl + Z',  desc: 'Undo last stroke' },
+  { key: 'Ctrl + +',  desc: 'Zoom in' },
+  { key: 'Ctrl + −',  desc: 'Zoom out' },
+  { key: 'Escape',    desc: 'Close toolbar / deselect' },
+  { key: '?',         desc: 'Toggle this cheat sheet' },
+];
+
+function ShortcutsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 500,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0.52)',
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="animate-scale-in"
+        style={{
+          width: 340,
+          background: 'var(--bg-panel)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          boxShadow: '0 16px 64px rgba(0,0,0,0.6)',
+          padding: '18px 20px 20px',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 14,
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+            Keyboard shortcuts
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              width: 24, height: 24, borderRadius: 5, border: '1px solid transparent',
+              background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+              background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+            })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+              background: 'transparent', color: 'var(--text-3)', borderColor: 'transparent',
+            })}
+          >
+            <X size={13} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {SHORTCUTS.map(({ key, desc }) => (
+            <div key={key} style={{
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'space-between', gap: 12,
+            }}>
+              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{desc}</span>
+              <kbd style={{
+                fontSize: 11, fontFamily: 'inherit', fontWeight: 600,
+                color: 'var(--text-2)',
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border-strong)',
+                borderRadius: 4, padding: '2px 7px',
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}>
+                {key}
+              </kbd>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export default function WorkspacePage() {
+  const router = useRouter();
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!localStorage.getItem('isLoggedIn')) router.replace('/login');
+  }, [router]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('isLoggedIn');
+    router.push('/login');
+  };
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  const [isDark, setIsDark] = useState(true);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('theme');
+    if (stored === 'light') {
+      setIsDark(false);
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const html = document.documentElement;
+    html.setAttribute('data-transitioning', '');
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      html.removeAttribute('data-theme');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      html.setAttribute('data-theme', 'light');
+      localStorage.setItem('theme', 'light');
+    }
+    setTimeout(() => html.removeAttribute('data-transitioning'), 350);
+  }, [isDark]);
+
+  // ── Shortcuts modal ───────────────────────────────────────────────────────
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // ── Hooks ─────────────────────────────────────────────────────────────────
+  const {
+    documents, activeDocument, activeDocumentId,
+    isLoading, addDocument, removeDocument, setActiveDocument, goToPage,
+  } = usePDF();
+  const {
+    isRecording, recordingDuration, recordingContext,
+    startRecording, stopRecording, deleteNote, updateNoteTitle, getNotesForPage,
+  } = useVoiceNotes();
+  const {
+    insertBlankPage, removeBlankPage,
+    updateCanvasData, updateImages, updateBgTheme, getBlankPagesForDocument,
+  } = useBlankPages();
+  const { getDrawing, saveDrawing } = usePDFDrawings();
+
+  // ── Virtual pages ─────────────────────────────────────────────────────────
+  const [virtualIndex, setVirtualIndex] = useState(0);
+  const docBlankPages = activeDocument
+    ? getBlankPagesForDocument(activeDocument.id)
+    : [];
+  const virtualSequence = activeDocument
+    ? buildVirtualSequence(activeDocument.pageCount, docBlankPages)
+    : [];
+  const currentVP: VirtualPage | null = virtualSequence[virtualIndex] ?? null;
+  const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : null;
+
+  useEffect(() => { setVirtualIndex(0); }, [activeDocumentId]);
+  useEffect(() => {
+    if (currentPdfPage !== null) goToPage(currentPdfPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPdfPage]);
+
+  const goVirtualPrev = useCallback(
+    () => setVirtualIndex((i) => Math.max(0, i - 1)),
+    [],
+  );
+  const goVirtualNext = useCallback(
+    () => setVirtualIndex((i) => Math.min(i + 1, virtualSequence.length - 1)),
+    [virtualSequence.length],
+  );
+  const goVirtualToPage = useCallback(
+    (page: number) =>
+      setVirtualIndex(Math.max(0, Math.min(page - 1, virtualSequence.length - 1))),
+    [virtualSequence.length],
+  );
+
+  const handleInsertBlankPage = useCallback((theme: 'white' | 'dark' = 'white') => {
+    if (!activeDocument) return;
+    const afterPage = currentVP?.type === 'pdf'
+      ? currentVP.pdfPage
+      : currentVP?.type === 'blank'
+        ? currentVP.blankPage.insertAfterPage
+        : activeDocument.currentPage;
+    insertBlankPage(activeDocument.id, afterPage, theme);
+    setVirtualIndex((i) => i + 1);
+  }, [activeDocument, currentVP, insertBlankPage]);
+
+  const handleDeleteBlankPage = useCallback((id: string) => {
+    removeBlankPage(id);
+    setVirtualIndex((i) => Math.max(0, i - 1));
+  }, [removeBlankPage]);
+
+  // ── Left-side drawing state ───────────────────────────────────────────────
+  const [leftTool, setLeftTool]             = useState<Tool>('pen');
+  const [leftPenType, setLeftPenType]       = useState<PenType>('normal');
+  const [leftColor, setLeftColor]           = useState('#ededf0');
+  const [leftStrokeSize, setLeftStrokeSize] = useState(5);
+  const [leftZoom, setLeftZoom]             = useState(1.0);
+
+  // ── Right-side drawing state ──────────────────────────────────────────────
+  const [rightTool, setRightTool]             = useState<Tool>('pen');
+  const [rightPenType, setRightPenType]       = useState<PenType>('normal');
+  const [rightColor, setRightColor]           = useState('#ededf0');
+  const [rightStrokeSize, setRightStrokeSize] = useState(5);
+  const [rightZoom, setRightZoom]             = useState(1.0);
+
+  // ── Active side ───────────────────────────────────────────────────────────
+  const [activeSide, setActiveSide] = useState<'left' | 'right'>('left');
+
+  const pdfDrawingRef      = useRef<DrawingCanvasHandle | null>(null);
+  const blankDrawingRef    = useRef<DrawingCanvasHandle | null>(null);
+  const rightDocDrawingRef = useRef<DrawingCanvasHandle | null>(null);
+  const mainRef            = useRef<HTMLElement>(null);
+
+  // ── Text notes (session-only, per page) ───────────────────────────────────
+  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
+
+  // ── Refs for keyboard handler (avoids stale closures) ────────────────────
+  const showSplitRef    = useRef(false);
+  const activeSideRef   = useRef<'left' | 'right'>('left');
+  const rightSideModeRef = useRef<'blank' | 'document'>('blank');
+  const currentVPRef    = useRef<VirtualPage | null>(null);
+  const leftZoomRef     = useRef(1.0);
+  const rightZoomRef    = useRef(1.0);
+
+  const [annotationBarOpen, setAnnotationBarOpen] = useState(false);
+
+  const handleLeftZoomChange  = useCallback((z: number) => setLeftZoom(clampZoom(z)), []);
+  const handleRightZoomChange = useCallback((z: number) => setRightZoom(clampZoom(z)), []);
+
+  const currentDrawing = activeDocument && currentVP?.type === 'pdf'
+    ? getDrawing(activeDocument.id, currentVP.pdfPage)
+    : undefined;
+
+  const handleSaveDrawing = useCallback((data: string) => {
+    if (activeDocument && currentVP?.type === 'pdf') {
+      saveDrawing(activeDocument.id, currentVP.pdfPage, data);
+    }
+  }, [activeDocument, currentVP, saveDrawing]);
+
+  // ── Split view ────────────────────────────────────────────────────────────
+  const [splitMode, setSplitMode] = useState(false);
+  const [isMobile, setIsMobile]   = useState(false);
+  const showSplit = splitMode && !isMobile;
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // ── Right pane mode ───────────────────────────────────────────────────────
+  const [rightSideMode, setRightSideMode] = useState<'blank' | 'document'>('blank');
+  const [rightDocId, setRightDocId]       = useState<string | null>(null);
+  const [rightDocPage, setRightDocPage]   = useState(1);
+
+  const rightDoc = useMemo(
+    () => documents.find((d) => d.id === rightDocId) ?? null,
+    [documents, rightDocId],
+  );
+
+  // Shallow-clone with overridden page so right pane navigates independently
+  const rightDocForViewer = useMemo(
+    () => rightDoc ? { ...rightDoc, currentPage: rightDocPage } : null,
+    [rightDoc, rightDocPage],
+  );
+
+  // Reset page when the selected right doc changes
+  useEffect(() => { setRightDocPage(1); }, [rightDocId]);
+
+  const rightDocDrawing = useMemo(
+    () => (rightDoc ? getDrawing(rightDoc.id, rightDocPage) : undefined),
+    [rightDoc, rightDocPage, getDrawing],
+  );
+
+  const handleSaveRightDocDrawing = useCallback((data: string) => {
+    if (rightDoc) saveDrawing(rightDoc.id, rightDocPage, data);
+  }, [rightDoc, rightDocPage, saveDrawing]);
+
+  // Blank page associated with the current PDF page in split mode
+  const splitRightBlankPage = useMemo((): BlankPage | null => {
+    if (!showSplit || !activeDocument || activeDocument.type === 'pptx') return null;
+    if (currentVP?.type === 'blank') return currentVP.blankPage;
+    return docBlankPages.find(
+      (p) => p.insertAfterPage === activeDocument.currentPage,
+    ) ?? null;
+  }, [showSplit, currentVP, activeDocument, docBlankPages]);
+
+  const handleInsertSplitBlankPage = useCallback((theme: 'white' | 'dark' = 'white') => {
+    if (!activeDocument) return;
+    const afterPage = activeDocument.currentPage;
+    const newPage = insertBlankPage(activeDocument.id, afterPage, theme);
+    const newIndex = virtualSequence.findIndex(
+      (vp) => vp.type === 'blank' && vp.blankPage.id === newPage.id,
+    );
+    if (newIndex >= 0) setVirtualIndex(newIndex);
+  }, [activeDocument, insertBlankPage, virtualSequence]);
+
+  // ── UI panels ─────────────────────────────────────────────────────────────
+  const [sidebarOpen, setSidebarOpen]       = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [navBarVisible, setNavBarVisible]   = useState(true);
+  const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
+  const [searchOpen, setSearchOpen]         = useState(false);
+
+  useEffect(() => { if (isRecording) setVoiceSheetOpen(true); }, [isRecording]);
+
+  // ── Voice notes ───────────────────────────────────────────────────────────
+  const activePdfPage = activeDocument?.currentPage ?? 1;
+  const pageIdentifier: number | string =
+    currentVP?.type === 'blank' ? currentVP.blankPage.id : activePdfPage;
+  const pageNotes = activeDocument
+    ? getNotesForPage(activeDocument.id, pageIdentifier)
+    : [];
+  const pageKey = activeDocument ? `${activeDocument.id}:${pageIdentifier}` : '';
+
+  // ── Undo handler — targets the correct canvas per context ────────────────
+  const handleUndo = useCallback(() => {
+    if (showSplit) {
+      if (activeSide === 'left') {
+        pdfDrawingRef.current?.undo?.();
+      } else if (rightSideMode === 'blank') {
+        blankDrawingRef.current?.undo?.();
+      } else {
+        rightDocDrawingRef.current?.undo?.();
+      }
+    } else if (currentVP?.type === 'blank') {
+      blankDrawingRef.current?.undo?.();
+    } else {
+      pdfDrawingRef.current?.undo?.();
+    }
+  }, [showSplit, activeSide, rightSideMode, currentVP]);
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      const inInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+
+      // Escape always works
+      if (e.key === 'Escape') {
+        setAnnotationBarOpen(false);
+        setShortcutsOpen(false);
+        setSearchOpen(false);
+        return;
+      }
+
+      if (inInput) return;
+
+      if (e.key === 'ArrowRight') { goVirtualNext(); return; }
+      if (e.key === 'ArrowLeft')  { goVirtualPrev(); return; }
+      if (e.key === '?') { setShortcutsOpen(o => !o); return; }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          if (!isPPTX && hasDocument) setSearchOpen((o) => !o);
+          return;
+        }
+        if (e.key === 'z' || e.key === 'Z') {
+          e.preventDefault();
+          handleUndo();
+          return;
+        }
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          if (showSplitRef.current && activeSideRef.current === 'right')
+            handleRightZoomChange(rightZoomRef.current + 0.25);
+          else
+            handleLeftZoomChange(leftZoomRef.current + 0.25);
+          return;
+        }
+        if (e.key === '-') {
+          e.preventDefault();
+          if (showSplitRef.current && activeSideRef.current === 'right')
+            handleRightZoomChange(rightZoomRef.current - 0.25);
+          else
+            handleLeftZoomChange(leftZoomRef.current - 0.25);
+          return;
+        }
+      }
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [goVirtualNext, goVirtualPrev, handleLeftZoomChange, handleRightZoomChange, handleUndo]);
+
+  // ── Clear handler — targets the correct canvas per context ────────────────
+  const handleClear = useCallback(() => {
+    if (showSplit) {
+      if (activeSide === 'left') {
+        pdfDrawingRef.current?.clear();
+      } else if (rightSideMode === 'blank') {
+        blankDrawingRef.current?.clear();
+      } else {
+        rightDocDrawingRef.current?.clear();
+      }
+    } else if (currentVP?.type === 'blank') {
+      blankDrawingRef.current?.clear();
+    } else {
+      pdfDrawingRef.current?.clear();
+    }
+  }, [showSplit, activeSide, rightSideMode, currentVP]);
+
+  const handleFilesAdded = (files: File[]) => files.forEach((f) => addDocument(f));
+
+  // ── Derived booleans ──────────────────────────────────────────────────────
+  const isBlankPage  = currentVP?.type === 'blank';
+  const isPPTX       = activeDocument?.type === 'pptx';
+  const hasDocument  = !!activeDocument;
+
+  // ── Insert image (blank page canvas) ─────────────────────────────────────
+  const handleInsertImage = useCallback((dataUrl: string) => {
+    blankDrawingRef.current?.insertImage?.(dataUrl);
+  }, []);
+
+  // ── Active-side tool props (routed to the correct side state) ─────────────
+  const atTool          = showSplit && activeSide === 'right' ? rightTool          : leftTool;
+  const atPenType       = showSplit && activeSide === 'right' ? rightPenType       : leftPenType;
+  const atColor         = showSplit && activeSide === 'right' ? rightColor         : leftColor;
+  const atStrokeSize    = showSplit && activeSide === 'right' ? rightStrokeSize    : leftStrokeSize;
+  const atSetTool       = showSplit && activeSide === 'right' ? setRightTool       : setLeftTool;
+  const atSetPenType    = showSplit && activeSide === 'right' ? setRightPenType    : setLeftPenType;
+  const atSetColor      = showSplit && activeSide === 'right' ? setRightColor      : setLeftColor;
+  const atSetStrokeSize = showSplit && activeSide === 'right' ? setRightStrokeSize : setLeftStrokeSize;
+
+  // Keep keyboard-handler refs in sync
+  showSplitRef.current     = showSplit;
+  activeSideRef.current    = activeSide;
+  rightSideModeRef.current = rightSideMode;
+  currentVPRef.current     = currentVP;
+  leftZoomRef.current      = leftZoom;
+  rightZoomRef.current     = rightZoom;
+
+  // ── Text notes helpers ────────────────────────────────────────────────────
+  const leftNotesKey = pageKey;
+  const rightBlankNotesKey = activeDocument && splitRightBlankPage
+    ? `${activeDocument.id}:${splitRightBlankPage.id}` : '';
+  const rightDocNotesKey = rightDocId && rightDocPage
+    ? `${rightDocId}:${rightDocPage}` : '';
+
+  const handleLeftNotesChange = useCallback((notes: TextNote[]) => {
+    if (!leftNotesKey) return;
+    setPageTextNotes(prev => ({ ...prev, [leftNotesKey]: notes }));
+  }, [leftNotesKey]);
+
+  const handleRightBlankNotesChange = useCallback((notes: TextNote[]) => {
+    if (!rightBlankNotesKey) return;
+    setPageTextNotes(prev => ({ ...prev, [rightBlankNotesKey]: notes }));
+  }, [rightBlankNotesKey]);
+
+  const handleRightDocNotesChange = useCallback((notes: TextNote[]) => {
+    if (!rightDocNotesKey) return;
+    setPageTextNotes(prev => ({ ...prev, [rightDocNotesKey]: notes }));
+  }, [rightDocNotesKey]);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  return (
+    <div
+      className="h-screen flex flex-col overflow-hidden"
+      style={{ background: 'var(--bg-app)', color: 'var(--text-1)' }}
+    >
+
+      {/* ══ Header ══ */}
+      <header style={{
+        height: 56, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 10px 0 12px',
+        background: 'var(--bg-sidebar)',
+        borderBottom: '1px solid var(--border-subtle)',
+        zIndex: 20,
+        gap: 8,
+      }}>
+
+        {/* Left: sidebar toggle + logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <HdrBtn
+            onClick={() => setSidebarOpen((o) => !o)}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            active={sidebarOpen}
+          >
+            <PanelLeft size={18} />
+          </HdrBtn>
+
+          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+              background: 'var(--accent-muted)',
+              border: '1px solid rgba(89,101,217,.25)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <BookOpen size={13} style={{ color: 'var(--accent-hover)' }} />
+            </div>
+            <span style={{
+              fontSize: 13, fontWeight: 600,
+              color: 'var(--text-1)', letterSpacing: '-0.01em',
+            }}>
+              StudySpace
+            </span>
+          </div>
+
+          {/* Active document name */}
+          {activeDocument && (
+            <>
+              <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+              <span style={{
+                fontSize: 12, color: 'var(--text-2)',
+                maxWidth: 200, overflow: 'hidden',
+                textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {activeDocument.name}
+              </span>
+            </>
+          )}
+        </div>
+
+        {/* Right: actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {documents.length > 0 && (
+            <PDFUploader onFilesAdded={handleFilesAdded} compact />
+          )}
+
+          <HdrBtn onClick={toggleTheme} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </HdrBtn>
+
+          {documents.length > 0 && !isPPTX && (
+            <HdrBtn
+              onClick={() => setSearchOpen((o) => !o)}
+              title={searchOpen ? 'Close search' : 'Search in PDF (Ctrl+F)'}
+              active={searchOpen}
+            >
+              <Search size={17} />
+            </HdrBtn>
+          )}
+
+          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+          {documents.length > 0 && !isPPTX && (
+            <HdrBtn
+              onClick={() => setSplitMode((m) => !m)}
+              title={splitMode ? 'Exit split view' : 'Split view: PDF + notes'}
+              active={splitMode}
+            >
+              <SplitIcon />
+            </HdrBtn>
+          )}
+
+          {documents.length > 0 && (
+            <HdrBtn
+              onClick={() => setRightPanelOpen((o) => !o)}
+              title={rightPanelOpen ? 'Collapse tools' : 'Expand tools'}
+              active={rightPanelOpen}
+            >
+              <PanelRight size={18} />
+            </HdrBtn>
+          )}
+
+          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+          <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title="Keyboard shortcuts (?)">
+            <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
+          </HdrBtn>
+
+          <button
+            onClick={handleLogout}
+            title="Log out"
+            aria-label="Log out"
+            style={{
+              height: 42, padding: '0 14px',
+              display: 'flex', alignItems: 'center', gap: 7,
+              borderRadius: 8, flexShrink: 0,
+              background: 'transparent',
+              border: '1px solid transparent',
+              color: 'var(--text-2)',
+              cursor: 'pointer',
+              fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
+              transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+              background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'rgba(229,72,77,.22)',
+            })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+              background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+            })}
+          >
+            <LogOut size={17} />
+            <span className="hidden sm:inline">Log out</span>
+          </button>
+        </div>
+      </header>
+
+      {/* Shortcuts modal */}
+      {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+
+      {documents.length === 0 ? (
+
+        /* ══ Empty state ══ */
+        <div
+          className="flex-1 flex flex-col items-center justify-center p-8 animate-fade-in"
+          style={{ background: 'var(--bg-app)' }}
+        >
+          <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 14, margin: '0 auto 20px',
+              background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <BookOpen size={24} style={{ color: 'var(--text-2)' }} />
+            </div>
+            <h1 style={{
+              fontSize: 18, fontWeight: 600, color: 'var(--text-1)',
+              letterSpacing: '-0.02em', marginBottom: 8,
+            }}>
+              No documents yet
+            </h1>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 28 }}>
+              Upload a PDF or PowerPoint file to get started.<br />
+              Annotate, record voice notes, and add blank pages.
+            </p>
+            {isLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <div style={{
+                  width: 20, height: 20, borderRadius: '50%',
+                  border: '2px solid var(--border-strong)',
+                  borderTopColor: 'var(--text-2)',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+              </div>
+            ) : (
+              <PDFUploader onFilesAdded={handleFilesAdded} />
+            )}
+          </div>
+        </div>
+
+      ) : (
+
+        /* ══ Main workspace ══ */
+        <div className="flex flex-1 overflow-hidden">
+
+          {/* ── Left sidebar (thumbnails) ── */}
+          <div className="hidden sm:block">
+            <SidebarThumbnails
+              isOpen={sidebarOpen}
+              documents={documents}
+              activeDocumentId={activeDocumentId}
+              activeDocument={activeDocument}
+              virtualPages={virtualSequence}
+              currentVirtualIndex={virtualIndex}
+              onSelectDocument={setActiveDocument}
+              onRemoveDocument={removeDocument}
+              onNavigate={setVirtualIndex}
+            />
+          </div>
+
+          {/* ── Main column ── */}
+          <main
+            ref={mainRef}
+            className="flex-1 flex flex-col overflow-hidden"
+            style={{ position: 'relative', minWidth: 0 }}
+          >
+            {activeDocument && (
+              <>
+                {/* ── Content area ── */}
+                <div style={{
+                  flex: 1, overflow: 'hidden',
+                  display: 'flex',
+                }}>
+
+                  {/* Left pane */}
+                  <div
+                    style={{
+                      flex: 1, overflow: 'hidden',
+                      display: 'flex', flexDirection: 'column',
+                      borderRight: showSplit ? '1px solid var(--border)' : 'none',
+                      minWidth: 0,
+                    }}
+                    onPointerDown={() => setActiveSide('left')}
+                  >
+                    {!showSplit && isBlankPage ? (
+                      <BlankPageCanvas
+                        ref={blankDrawingRef}
+                        blankPage={currentVP!.blankPage}
+                        onSaveData={updateCanvasData}
+                        onSaveImages={updateImages}
+                        tool={leftTool}
+                        penType={leftPenType}
+                        color={leftColor}
+                        strokeSize={leftStrokeSize}
+                        zoom={leftZoom}
+                        onZoomChange={handleLeftZoomChange}
+                        notes={pageTextNotes[leftNotesKey] ?? []}
+                        onNotesChange={handleLeftNotesChange}
+                        onActivateTextTool={() => setLeftTool('text')}
+                        onExitTextTool={() => setLeftTool('pen')}
+                      />
+                    ) : isPPTX ? (
+                      <PPTXViewer document={activeDocument} />
+                    ) : (
+                      <PDFWithDrawing
+                        ref={pdfDrawingRef}
+                        document={activeDocument}
+                        tool={leftTool}
+                        penType={leftPenType}
+                        color={leftColor}
+                        strokeSize={leftStrokeSize}
+                        savedData={currentDrawing}
+                        onSave={handleSaveDrawing}
+                        zoom={leftZoom}
+                        onZoomChange={handleLeftZoomChange}
+                        interactive={annotationBarOpen && (!showSplit || activeSide === 'left')}
+                        notes={pageTextNotes[leftNotesKey] ?? []}
+                        onNotesChange={handleLeftNotesChange}
+                        onActivateTextTool={() => setLeftTool('text')}
+                        onExitTextTool={() => setLeftTool('pen')}
+                        searchOpen={searchOpen}
+                        onSearchClose={() => setSearchOpen(false)}
+                      />
+                    )}
+                  </div>
+
+                  {/* Right pane (split mode) */}
+                  {showSplit && (
+                    <div
+                      style={{
+                        flex: 1, overflow: 'hidden',
+                        display: 'flex', flexDirection: 'column',
+                        minWidth: 0,
+                      }}
+                      onPointerDown={() => setActiveSide('right')}
+                    >
+                      <RightPaneHeader
+                        rightSideMode={rightSideMode}
+                        setRightSideMode={setRightSideMode}
+                        documents={documents}
+                        rightDocId={rightDocId}
+                        setRightDocId={setRightDocId}
+                        rightDoc={rightDoc}
+                        rightDocPage={rightDocPage}
+                        setRightDocPage={setRightDocPage}
+                        rightZoom={rightZoom}
+                        onRightZoomChange={handleRightZoomChange}
+                      />
+
+                      {/* Right pane content */}
+                      {rightSideMode === 'blank' ? (
+                        splitRightBlankPage ? (
+                          <BlankPageCanvas
+                            ref={blankDrawingRef}
+                            blankPage={splitRightBlankPage}
+                            onSaveData={updateCanvasData}
+                            onSaveImages={updateImages}
+                            tool={rightTool}
+                            penType={rightPenType}
+                            color={rightColor}
+                            strokeSize={rightStrokeSize}
+                            zoom={rightZoom}
+                            onZoomChange={handleRightZoomChange}
+                            notes={pageTextNotes[rightBlankNotesKey] ?? []}
+                            onNotesChange={handleRightBlankNotesChange}
+                            onActivateTextTool={() => setRightTool('text')}
+                            onExitTextTool={() => setRightTool('pen')}
+                          />
+                        ) : (
+                          <BlankPaneEmpty onAdd={() => handleInsertSplitBlankPage()} />
+                        )
+                      ) : rightDocForViewer ? (
+                        <PDFWithDrawing
+                          ref={rightDocDrawingRef}
+                          document={rightDocForViewer}
+                          tool={rightTool}
+                          penType={rightPenType}
+                          color={rightColor}
+                          strokeSize={rightStrokeSize}
+                          savedData={rightDocDrawing}
+                          onSave={handleSaveRightDocDrawing}
+                          zoom={rightZoom}
+                          onZoomChange={handleRightZoomChange}
+                          interactive={annotationBarOpen && activeSide === 'right'}
+                          notes={pageTextNotes[rightDocNotesKey] ?? []}
+                          onNotesChange={handleRightDocNotesChange}
+                          onActivateTextTool={() => setRightTool('text')}
+                          onExitTextTool={() => setRightTool('pen')}
+                        />
+                      ) : (
+                        <DocPickEmpty />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Bottom panels (collapsible) ── */}
+                <div style={{
+                  flexShrink: 0, overflow: 'hidden',
+                  maxHeight: navBarVisible ? 800 : 0,
+                  transition: navBarVisible
+                    ? 'max-height 0.3s cubic-bezier(0,0,0.2,1)'
+                    : 'max-height 0.22s cubic-bezier(0.4,0,1,1)',
+                }}>
+
+                  <VoiceNotesSheet
+                    isOpen={voiceSheetOpen}
+                    onToggle={() => setVoiceSheetOpen((o) => !o)}
+                    notes={pageNotes}
+                    pageKey={pageKey}
+                    documentId={activeDocument.id}
+                    pageNumber={pageIdentifier}
+                    isRecording={isRecording}
+                    recordingDuration={recordingDuration}
+                    recordingContext={recordingContext}
+                    onStart={() => startRecording(activeDocument.id, pageIdentifier)}
+                    onStop={stopRecording}
+                    onDelete={deleteNote}
+                    onUpdateTitle={updateNoteTitle}
+                  />
+
+                  <PageNavigation
+                    currentPage={virtualIndex + 1}
+                    pageCount={virtualSequence.length}
+                    isBlankPage={isBlankPage}
+                    onPrev={goVirtualPrev}
+                    onNext={goVirtualNext}
+                    onGoToPage={goVirtualToPage}
+                    onInsertBlankPage={handleInsertBlankPage}
+                    onToggleDraw={undefined}
+                    isDrawing={false}
+                    zoom={leftZoom}
+                    onZoomIn={() => handleLeftZoomChange(leftZoom + 0.25)}
+                    onZoomOut={() => handleLeftZoomChange(leftZoom - 0.25)}
+                    onHideBar={() => setNavBarVisible(false)}
+                  />
+                </div>
+
+                {/* Floating annotation toolbar */}
+                <FloatingAnnotationToolbar
+                  isOpen={annotationBarOpen}
+                  onOpen={() => setAnnotationBarOpen(true)}
+                  onClose={() => setAnnotationBarOpen(false)}
+                  tool={atTool}
+                  setTool={atSetTool}
+                  penType={atPenType}
+                  setPenType={atSetPenType}
+                  color={atColor}
+                  setColor={atSetColor}
+                  strokeSize={atStrokeSize}
+                  setStrokeSize={atSetStrokeSize}
+                  onClear={handleClear}
+                  onUndo={handleUndo}
+                  splitMode={showSplit}
+                  activeSide={showSplit ? activeSide : undefined}
+                  onSwitchSide={showSplit ? setActiveSide : undefined}
+                  containerRef={mainRef}
+                />
+
+                {/* Restore bottom bar button */}
+                {!navBarVisible && (
+                  <button
+                    onClick={() => setNavBarVisible(true)}
+                    title="Show toolbar"
+                    aria-label="Show toolbar"
+                    className="animate-scale-in"
+                    style={{
+                      position: 'absolute', bottom: 14, right: 14, zIndex: 30,
+                      width: 34, height: 34, borderRadius: 8,
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-2)',
+                      cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                      transition: 'background 0.15s, color 0.15s',
+                    }}
+                    onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'var(--bg-active)', color: 'var(--text-1)',
+                    })}
+                    onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'var(--bg-elevated)', color: 'var(--text-2)',
+                    })}
+                  >
+                    <ChevronUp size={15} />
+                    {isRecording && (
+                      <span className="rec-dot" style={{
+                        position: 'absolute', top: 5, right: 5,
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: 'var(--red)',
+                      }} />
+                    )}
+                  </button>
+                )}
+              </>
+            )}
+          </main>
+
+          {/* ── Right panel (document tools) ── */}
+          <div className="hidden sm:block">
+            <DocumentToolsPanel
+              isOpen={rightPanelOpen}
+              hasDocument={hasDocument}
+              isBlankPage={isBlankPage}
+              onInsertBlankPage={handleInsertBlankPage}
+              onInsertImage={isBlankPage ? handleInsertImage : undefined}
+              onDeleteBlankPage={
+                currentVP?.type === 'blank'
+                  ? () => handleDeleteBlankPage(currentVP.blankPage.id)
+                  : undefined
+              }
+              currentBgTheme={currentVP?.type === 'blank' ? (currentVP.blankPage.bgTheme ?? 'white') : undefined}
+              onChangeBgTheme={
+                currentVP?.type === 'blank'
+                  ? (theme) => updateBgTheme(currentVP.blankPage.id, theme)
+                  : undefined
+              }
+            />
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}

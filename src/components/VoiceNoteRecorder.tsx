@@ -17,46 +17,58 @@ interface Props {
   onStop: () => void;
 }
 
-export default function VoiceNoteRecorder({ documentId, pageNumber, isRecording, recordingDuration, recordingContext, onStart, onStop }: Props) {
-  const isRecordingHere = isRecording && recordingContext?.documentId === documentId && recordingContext?.pageNumber === pageNumber;
+export default function VoiceNoteRecorder({
+  documentId, pageNumber,
+  isRecording, recordingDuration, recordingContext,
+  onStart, onStop,
+}: Props) {
+  const isRecordingHere = isRecording
+    && recordingContext?.documentId === documentId
+    && recordingContext?.pageNumber === pageNumber;
   const isRecordingElsewhere = isRecording && !isRecordingHere;
 
   if (isRecordingHere) {
     return (
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span
-            className="rec-dot"
-            style={{
-              display: 'inline-block',
-              width: 7, height: 7, borderRadius: '50%',
-              background: '#ef4444',
-              boxShadow: '0 0 6px rgba(239,68,68,0.6)',
-            }}
-          />
-          <span
-            className="text-xs font-mono font-semibold tabular-nums"
-            style={{ color: '#fca5a5', letterSpacing: '0.02em' }}
-          >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Live indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="rec-dot" style={{
+            display: 'inline-block',
+            width: 6, height: 6, borderRadius: '50%',
+            background: 'var(--red)',
+          }} />
+          <span style={{
+            fontSize: 11.5, fontWeight: 600,
+            color: 'var(--red)',
+            fontVariantNumeric: 'tabular-nums',
+            fontFamily: 'inherit',
+          }}>
             {formatDuration(recordingDuration)}
           </span>
         </div>
+
+        {/* Stop button */}
         <button
           onClick={onStop}
-          className="flex items-center gap-1.5 text-xs font-semibold rounded-full cursor-pointer"
           style={{
-            padding: '7px 14px',
-            background: '#fff',
-            color: '#7f1d1d',
-            border: 'none',
-            fontFamily: 'inherit',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-            transition: 'opacity 0.18s ease, transform 0.18s ease',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            height: 28, padding: '0 12px',
+            borderRadius: 6,
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-strong)',
+            color: 'var(--text-1)',
+            fontSize: 12, fontWeight: 500,
+            cursor: 'pointer', fontFamily: 'inherit',
+            transition: 'background 0.13s, border-color 0.13s',
           }}
-          onMouseOver={(e) => Object.assign(e.currentTarget.style, { opacity: '0.88', transform: 'scale(1.02)' })}
-          onMouseOut={(e) => Object.assign(e.currentTarget.style, { opacity: '1', transform: 'scale(1)' })}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+            background: 'var(--bg-active)', borderColor: 'var(--border-strong)',
+          })}
+          onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+            background: 'var(--bg-elevated)', borderColor: 'var(--border-strong)',
+          })}
         >
-          <Square size={9} fill="#7f1d1d" />
+          <Square size={10} fill="currentColor" />
           Stop
         </button>
       </div>
@@ -67,32 +79,25 @@ export default function VoiceNoteRecorder({ documentId, pageNumber, isRecording,
     <button
       onClick={onStart}
       disabled={isRecordingElsewhere}
-      title={isRecordingElsewhere ? 'Recording in progress on another page' : 'Record a voice note for this page'}
-      className="flex items-center gap-1.5 text-xs font-semibold rounded-full cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+      title={isRecordingElsewhere ? 'Recording in progress on another page' : 'Record a voice note'}
       style={{
-        padding: '7px 14px',
-        background: '#ef4444',
-        color: '#fff',
-        border: 'none',
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        height: 28, padding: '0 12px',
+        borderRadius: 6,
+        background: isRecordingElsewhere ? 'var(--bg-elevated)' : 'var(--red)',
+        border: `1px solid ${isRecordingElsewhere ? 'var(--border)' : 'transparent'}`,
+        color: isRecordingElsewhere ? 'var(--text-3)' : '#fff',
+        fontSize: 12, fontWeight: 500,
+        cursor: isRecordingElsewhere ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit',
-        boxShadow: '0 2px 8px rgba(239,68,68,0.3)',
-        transition: 'background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease',
+        opacity: isRecordingElsewhere ? 0.5 : 1,
+        transition: 'background 0.13s, opacity 0.13s',
       }}
       onMouseOver={(e) => {
-        if (!e.currentTarget.disabled) {
-          Object.assign(e.currentTarget.style, {
-            background: '#dc2626',
-            boxShadow: '0 4px 14px rgba(239,68,68,0.4)',
-            transform: 'scale(1.02)',
-          });
-        }
+        if (!isRecordingElsewhere) e.currentTarget.style.background = '#d03f44';
       }}
       onMouseOut={(e) => {
-        Object.assign(e.currentTarget.style, {
-          background: '#ef4444',
-          boxShadow: '0 2px 8px rgba(239,68,68,0.3)',
-          transform: 'scale(1)',
-        });
+        if (!isRecordingElsewhere) e.currentTarget.style.background = 'var(--red)';
       }}
     >
       <Mic size={12} />

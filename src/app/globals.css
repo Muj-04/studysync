@@ -4,88 +4,140 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* ── Global typography ── */
-body {
-  font-family: 'Poppins', sans-serif;
-  color: #ffffff;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ── Design tokens ── */
+:root {
+  /* Backgrounds — dark navy/charcoal base (softer than pure black) */
+  --bg-app:      #111827;
+  --bg-sidebar:  #17202f;
+  --bg-panel:    #1c2638;
+  --bg-elevated: #212d40;
+  --bg-input:    #1e2840;
+  --bg-hover:    #212d40;
+  --bg-active:   #283445;
+
+  /* Borders */
+  --border-subtle: #1c2537;
+  --border:        #262f44;
+  --border-strong: #333e57;
+
+  /* Text */
+  --text-1: #ededf0;
+  --text-2: #8e8e9f;
+  --text-3: #50505e;
+
+  /* Accent – Linear indigo */
+  --accent:       #5965d9;
+  --accent-hover: #6b78f0;
+  --accent-muted: rgba(89, 101, 217, 0.14);
+
+  /* Violet – drawing mode */
+  --violet:       #8b5cf6;
+  --violet-muted: rgba(139, 92, 246, 0.14);
+
+  /* Functional */
+  --red:       #e5484d;
+  --red-muted: rgba(229, 72, 77, 0.12);
+  --green:     #30a46c;
 }
 
-/* ── Glass input helpers ── */
-.glass-input::placeholder {
-  color: rgba(255, 255, 255, 0.38);
+/* ── Light theme overrides ── */
+[data-theme="light"] {
+  --bg-app:      #f0f0f3;
+  --bg-sidebar:  #ffffff;
+  --bg-panel:    #f7f7f9;
+  --bg-elevated: #ececef;
+  --bg-input:    #f7f7f9;
+  --bg-hover:    #e6e6ea;
+  --bg-active:   #dddde2;
+
+  --border-subtle: #e2e2e7;
+  --border:        #d5d5dc;
+  --border-strong: #b8b8c2;
+
+  --text-1: #111117;
+  --text-2: #56565e;
+  --text-3: #9090a0;
+
+  --accent-muted: rgba(89, 101, 217, 0.12);
+  --violet-muted: rgba(139, 92, 246, 0.12);
+  --red-muted:    rgba(229, 72, 77, 0.10);
 }
+
+[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.06); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 4px; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+
+/* Smooth theme transition (applied only during switch via JS) */
+[data-transitioning] *,
+[data-transitioning] *::before,
+[data-transitioning] *::after {
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease !important;
+}
+
+/* ── Base ── */
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--text-1);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* ── Glass input — login page only ── */
+.glass-input::placeholder { color: rgba(255, 255, 255, 0.38); }
 .glass-input:focus {
   outline: none;
   border-color: rgba(255, 255, 255, 0.65) !important;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
 }
-/* Remove number input spinner arrows */
 .glass-input[type="number"]::-webkit-inner-spin-button,
-.glass-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-.glass-input[type="number"] {
-  -moz-appearance: textfield;
-}
-/* Override browser autofill yellow/blue background */
+.glass-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .glass-input:-webkit-autofill,
 .glass-input:-webkit-autofill:hover,
 .glass-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #ffffff;
+  -webkit-text-fill-color: #fff;
   -webkit-box-shadow: 0 0 0px 1000px transparent inset;
   transition: background-color 5000s ease-in-out 0s;
 }
 
-/* ── Scrollbar styling ── */
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+/* ── App input — workspace ── */
+.app-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-1);
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+.app-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-muted);
 }
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 9999px;
-  transition: background 0.2s;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.38);
-}
+.app-input::placeholder { color: var(--text-3); }
+.app-input[type="number"]::-webkit-inner-spin-button,
+.app-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.app-input[type="number"] { -moz-appearance: textfield; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.15); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
 
 /* ── Animations ── */
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.85); }
-}
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-@keyframes scale-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scale-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 
-.animate-fade-in {
-  animation: fade-in 0.2s ease-out both;
-}
-.animate-scale-in {
-  animation: scale-in 0.18s ease-out both;
-}
+.animate-fade-in  { animation: fade-in  0.2s ease-out both; }
+.animate-scale-in { animation: scale-in 0.15s ease-out both; }
+.animate-slide-up { animation: slide-up 0.22s ease-out both; }
+.rec-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
 
-/* Recording dot pulse */
-.rec-dot {
-  animation: pulse-dot 1.4s ease-in-out infinite;
-}
-
-/* ── Reduced motion ── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
