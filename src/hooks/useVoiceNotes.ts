@@ -1,6 +1,17 @@
 'use client';
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
+import { storageGet, storageSet, KEYS } from '@/lib/storage';
+
+interface PersistedNote {
+  id: string;
+  documentId: string;
+  pageNumber: number | string;
+  audioDataUrl: string; // "data:audio/webm;base64,..."
+  duration: number;
+  timestamp: string;   // ISO date string
+  title?: string;
+}
 
 interface RecordingState {
   mediaRecorder: MediaRecorder;
@@ -23,6 +34,40 @@ function getSupportedMimeType(): string {
   return candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, base64] = dataUrl.split(',');
+  const mimeType = header?.split(':')[1]?.split(';')[0] ?? 'audio/webm';
+  const bytes = atob(base64);
+  const buffer = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) buffer[i] = bytes.charCodeAt(i);
+  return new Blob([buffer], { type: mimeType });
+}
+
+function deserializeNotes(persisted: PersistedNote[]): VoiceNote[] {
+  return persisted.map((p) => {
+    const blob = dataUrlToBlob(p.audioDataUrl);
+    return {
+      id: p.id,
+      documentId: p.documentId,
+      pageNumber: p.pageNumber,
+      audioBlob: blob,
+      audioUrl: URL.createObjectURL(blob),
+      duration: p.duration,
+      timestamp: new Date(p.timestamp),
+      title: p.title,
+    };
+  });
+}
+
 export function useVoiceNotes() {
   const [notes, setNotes] = useState<VoiceNote[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -32,6 +77,51 @@ export function useVoiceNotes() {
     pageNumber: number | string;
   } | null>(null);
   const recordingRef = useRef<RecordingState | null>(null);
+
+  // Load persisted notes on mount
+  useEffect(() => {
+    const persisted = storageGet<PersistedNote[]>(KEYS.VOICE_NOTES);
+    if (persisted?.length) {
+      try {
+        setNotes(deserializeNotes(persisted));
+      } catch {
+        // Corrupted storage — start fresh
+      }
+    }
+  }, []);
+
+  // Persist notes whenever they change (async blob serialization)
+  useEffect(() => {
+    if (notes.length === 0) {
+      storageSet(KEYS.VOICE_NOTES, []);
+      return;
+    }
+    let cancelled = false;
+    Promise.all(
+      notes.map(async (n): Promise<PersistedNote | null> => {
+        try {
+          return {
+            id: n.id,
+            documentId: n.documentId,
+            pageNumber: n.pageNumber,
+            audioDataUrl: await blobToDataUrl(n.audioBlob),
+            duration: n.duration,
+            timestamp: n.timestamp.toISOString(),
+            title: n.title,
+          };
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const valid = results.filter((r): r is PersistedNote => r !== null);
+      if (!storageSet(KEYS.VOICE_NOTES, valid)) {
+        console.warn('StudySync: voice notes could not be saved — storage quota exceeded');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [notes]);
 
   const startRecording = useCallback(async (documentId: string, pageNumber: number | string) => {
     if (recordingRef.current) return;
@@ -55,8 +145,6 @@ export function useVoiceNotes() {
 
     mediaRecorder.onstop = () => {
       const duration = (Date.now() - startTime) / 1000;
-      // Use the type the recorder actually used, not the requested candidate —
-      // the browser may have adjusted it (e.g. added codec params or switched format).
       const recordedType = mediaRecorder.mimeType || mimeType || 'audio/webm';
       const blob = new Blob(chunks, { type: recordedType });
       const audioUrl = URL.createObjectURL(blob);

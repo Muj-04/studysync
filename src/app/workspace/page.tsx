@@ -19,6 +19,7 @@ import DocumentToolsPanel from '@/components/DocumentToolsPanel';
 import FloatingAnnotationToolbar from '@/components/FloatingAnnotationToolbar';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
+import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import type { BlankPage, PDFDocument, TextNote } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
 import type { Tool, PenType } from '@/lib/drawing';
@@ -425,7 +426,7 @@ export default function WorkspacePage() {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem('theme');
+    const stored = storageGet<string>(KEYS.THEME) ?? localStorage.getItem('theme');
     if (stored === 'light') {
       setIsDark(false);
       document.documentElement.setAttribute('data-theme', 'light');
@@ -439,10 +440,10 @@ export default function WorkspacePage() {
     setIsDark(next);
     if (next) {
       html.removeAttribute('data-theme');
-      localStorage.setItem('theme', 'dark');
+      storageSet(KEYS.THEME, 'dark');
     } else {
       html.setAttribute('data-theme', 'light');
-      localStorage.setItem('theme', 'light');
+      storageSet(KEYS.THEME, 'light');
     }
     setTimeout(() => html.removeAttribute('data-transitioning'), 350);
   }, [isDark]);
@@ -476,7 +477,21 @@ export default function WorkspacePage() {
   const currentVP: VirtualPage | null = virtualSequence[virtualIndex] ?? null;
   const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : null;
 
-  useEffect(() => { setVirtualIndex(0); }, [activeDocumentId]);
+  // Restore last page when a document is activated; fall back to 0 for new docs
+  useEffect(() => {
+    if (!activeDocumentId) return;
+    const session = storageGet<{ docId: string; virtualIndex: number }>(KEYS.SESSION);
+    setVirtualIndex(
+      session?.docId === activeDocumentId ? session.virtualIndex : 0
+    );
+  }, [activeDocumentId]);
+
+  // Save session (active doc + page) whenever either changes
+  useEffect(() => {
+    if (!activeDocumentId) return;
+    storageSet(KEYS.SESSION, { docId: activeDocumentId, virtualIndex });
+  }, [activeDocumentId, virtualIndex]);
+
   useEffect(() => {
     if (currentPdfPage !== null) goToPage(currentPdfPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -534,8 +549,10 @@ export default function WorkspacePage() {
   const rightDocDrawingRef = useRef<DrawingCanvasHandle | null>(null);
   const mainRef            = useRef<HTMLElement>(null);
 
-  // ── Text notes (session-only, per page) ───────────────────────────────────
-  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
+  // ── Text notes (persisted per doc+page) ──────────────────────────────────
+  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>(
+    () => storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES) ?? {}
+  );
 
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
@@ -547,7 +564,32 @@ export default function WorkspacePage() {
 
   const [annotationBarOpen, setAnnotationBarOpen] = useState(false);
 
-  const handleLeftZoomChange  = useCallback((z: number) => setLeftZoom(clampZoom(z)), []);
+  // ── Persistence: text notes ───────────────────────────────────────────────
+  useEffect(() => {
+    storageSet(KEYS.TEXT_NOTES, pageTextNotes);
+  }, [pageTextNotes]);
+
+  // ── Persistence: zoom per document ────────────────────────────────────────
+  const activeDocumentIdRef = useRef<string | null>(null);
+  activeDocumentIdRef.current = activeDocumentId;
+
+  // Restore zoom when the active document changes
+  useEffect(() => {
+    if (!activeDocumentId) return;
+    const stored = storageGet<Record<string, number>>(KEYS.ZOOM);
+    if (stored?.[activeDocumentId]) setLeftZoom(stored[activeDocumentId]);
+  }, [activeDocumentId]);
+
+  const handleLeftZoomChange = useCallback((z: number) => {
+    const clamped = clampZoom(z);
+    setLeftZoom(clamped);
+    const docId = activeDocumentIdRef.current;
+    if (docId) {
+      const stored = storageGet<Record<string, number>>(KEYS.ZOOM) ?? {};
+      stored[docId] = clamped;
+      storageSet(KEYS.ZOOM, stored);
+    }
+  }, []);
   const handleRightZoomChange = useCallback((z: number) => setRightZoom(clampZoom(z)), []);
 
   const currentDrawing = activeDocument && currentVP?.type === 'pdf'
