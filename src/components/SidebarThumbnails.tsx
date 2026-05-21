@@ -88,20 +88,11 @@ function PDFThumb({ url, page }: { url: string; page: number }) {
           src={src}
           alt=""
           draggable={false}
+          className="animate-fade-in"
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
       ) : (
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <div style={{
-            width: 14, height: 14, borderRadius: '50%',
-            border: '2px solid var(--border-strong)',
-            borderTopColor: 'var(--text-3)',
-            animation: 'spin 0.7s linear infinite',
-          }} />
-        </div>
+        <div className="skeleton" style={{ position: 'absolute', inset: 0, borderRadius: 2 }} />
       )}
     </div>
   );
@@ -156,6 +147,8 @@ export default function SidebarThumbnails({
         background: 'var(--bg-sidebar)',
         borderRight: '1px solid var(--border-subtle)',
         display: 'flex', flexDirection: 'column',
+        opacity: isOpen ? 1 : 0,
+        transition: 'opacity 0.18s ease',
       }}>
 
         {/* ── Documents ── */}
