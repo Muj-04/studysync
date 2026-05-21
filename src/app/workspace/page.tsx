@@ -238,20 +238,32 @@ function RightPaneHeader({
 
       {/* Zoom controls (always shown) */}
       <MiniBtn
-        onClick={() => onRightZoomChange(rightZoom - 0.25)}
+        onClick={() => onRightZoomChange(rightZoom - 0.1)}
         disabled={rightZoom <= 0.5}
         title="Zoom out"
       >
         −
       </MiniBtn>
+      <input
+        type="range"
+        min={50}
+        max={200}
+        step={5}
+        value={Math.round(rightZoom * 100)}
+        onChange={(e) => onRightZoomChange(Number(e.target.value) / 100)}
+        className="zoom-slider"
+        aria-label="Zoom level"
+        style={{ width: 64 }}
+      />
       <span style={{
         fontSize: 10, color: 'var(--text-3)',
         minWidth: 30, textAlign: 'center', flexShrink: 0,
+        fontVariantNumeric: 'tabular-nums',
       }}>
         {Math.round(rightZoom * 100)}%
       </span>
       <MiniBtn
-        onClick={() => onRightZoomChange(rightZoom + 0.25)}
+        onClick={() => onRightZoomChange(rightZoom + 0.1)}
         disabled={rightZoom >= 2.0}
         title="Zoom in"
       >
@@ -1322,8 +1334,9 @@ export default function WorkspacePage() {
                     onToggleDraw={undefined}
                     isDrawing={false}
                     zoom={leftZoom}
-                    onZoomIn={() => handleLeftZoomChange(leftZoom + 0.25)}
-                    onZoomOut={() => handleLeftZoomChange(leftZoom - 0.25)}
+                    onZoomChange={handleLeftZoomChange}
+                    onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
+                    onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
                     onHideBar={() => setNavBarVisible(false)}
                   />
                 </div>
