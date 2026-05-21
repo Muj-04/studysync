@@ -155,11 +155,10 @@ export default function DocumentToolsPanel({
 
   return (
     <aside style={{
-      width: isOpen ? 220 : 0,
+      width: 220,          // fixed — parent wrapper in page.tsx owns the animated width
       flexShrink: 0,
       height: '100%',
       overflow: 'hidden',
-      transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
     }}>
       <div style={{
         width: 220,
@@ -167,6 +166,8 @@ export default function DocumentToolsPanel({
         background: 'var(--bg-sidebar)',
         borderLeft: '1px solid var(--border-subtle)',
         display: 'flex', flexDirection: 'column',
+        opacity: isOpen ? 1 : 0,
+        transition: 'opacity 0.18s ease',
       }}>
 
         {/* Header */}
