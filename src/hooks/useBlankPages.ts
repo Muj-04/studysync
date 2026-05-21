@@ -1,12 +1,15 @@
 'use client';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { BlankPage, CanvasImage } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 
 export function useBlankPages() {
-  const [blankPages, setBlankPages] = useState<BlankPage[]>(
-    () => storageGet<BlankPage[]>(KEYS.BLANK_PAGES) ?? []
-  );
+  const [blankPages, setBlankPages] = useState<BlankPage[]>([]);
+
+  useEffect(() => {
+    const stored = storageGet<BlankPage[]>(KEYS.BLANK_PAGES);
+    if (stored?.length) setBlankPages(stored);
+  }, []);
 
   const persist = useCallback((pages: BlankPage[]) => {
     storageSet(KEYS.BLANK_PAGES, pages);
