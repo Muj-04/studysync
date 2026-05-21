@@ -205,21 +205,44 @@ export default function PDFViewer({
         }}
       >
         {isLoading && (
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 10,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            minHeight: 160,
-          }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 20, height: 20, borderRadius: '50%',
-                border: '2px solid var(--border-strong)',
-                borderTopColor: 'var(--text-2)',
-                animation: 'spin 0.75s linear infinite',
-              }} />
-              <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 400 }}>
-                Rendering…
-              </span>
+          <div
+            className="animate-fade-in"
+            style={{
+              position: 'absolute', inset: 0, zIndex: 10,
+              display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+              padding: 24, pointerEvents: 'none',
+            }}
+          >
+            <div style={{
+              ...(cssDims
+                ? { width: cssDims.w, height: cssDims.h }
+                : { width: '100%', maxWidth: 560, aspectRatio: '0.707 / 1' }),
+              flexShrink: 0,
+              background: 'var(--bg-panel)',
+              borderRadius: 3,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)',
+              padding: '9% 12%',
+              display: 'flex', flexDirection: 'column', gap: 11,
+              overflow: 'hidden', boxSizing: 'border-box',
+            }}>
+              <div className="skeleton" style={{ height: 17, width: '52%', marginBottom: 10 }} />
+              <div className="skeleton" style={{ height: 10, width: '100%' }} />
+              <div className="skeleton" style={{ height: 10, width: '97%' }} />
+              <div className="skeleton" style={{ height: 10, width: '89%' }} />
+              <div className="skeleton" style={{ height: 10, width: '94%' }} />
+              <div style={{ height: 6, flexShrink: 0 }} />
+              <div className="skeleton" style={{ height: 10, width: '100%' }} />
+              <div className="skeleton" style={{ height: 10, width: '93%' }} />
+              <div className="skeleton" style={{ height: 10, width: '98%' }} />
+              <div className="skeleton" style={{ height: 10, width: '82%' }} />
+              <div style={{ height: 6, flexShrink: 0 }} />
+              <div className="skeleton" style={{ height: 10, width: '100%' }} />
+              <div className="skeleton" style={{ height: 10, width: '96%' }} />
+              <div className="skeleton" style={{ height: 10, width: '75%' }} />
+              <div style={{ height: 6, flexShrink: 0 }} />
+              <div className="skeleton" style={{ height: 10, width: '100%' }} />
+              <div className="skeleton" style={{ height: 10, width: '88%' }} />
+              <div className="skeleton" style={{ height: 10, width: '70%' }} />
             </div>
           </div>
         )}
@@ -248,7 +271,7 @@ export default function PDFViewer({
               borderRadius: 3,
               boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)',
               opacity: isLoading ? 0 : 1,
-              transition: 'opacity 0.2s ease',
+              transition: 'opacity 0.25s ease',
             }}
           />
 

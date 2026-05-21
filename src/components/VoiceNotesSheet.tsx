@@ -131,9 +131,10 @@ export default function VoiceNotesSheet({
       <div style={{
         overflow: 'hidden',
         maxHeight: isOpen ? 280 : 0,
+        opacity: isOpen ? 1 : 0,
         transition: isOpen
-          ? 'max-height 0.3s cubic-bezier(0,0,0.2,1)'
-          : 'max-height 0.18s cubic-bezier(0.4,0,1,1)',
+          ? 'max-height 0.3s cubic-bezier(0,0,0.2,1), opacity 0.22s ease'
+          : 'max-height 0.18s cubic-bezier(0.4,0,1,1), opacity 0.12s ease',
       }}>
         <div style={{ borderTop: '1px solid var(--border)' }}>
 

@@ -889,11 +889,15 @@ export default function WorkspacePage() {
           {activeDocument && (
             <>
               <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
-              <span style={{
-                fontSize: 12, color: 'var(--text-2)',
-                maxWidth: 200, overflow: 'hidden',
-                textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
+              <span
+                key={activeDocument.id}
+                className="animate-fade-in"
+                style={{
+                  fontSize: 12, color: 'var(--text-2)',
+                  maxWidth: 200, overflow: 'hidden',
+                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+              >
                 {activeDocument.name}
               </span>
             </>
@@ -1022,7 +1026,7 @@ export default function WorkspacePage() {
       ) : (
 
         /* ══ Main workspace ══ */
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 overflow-hidden animate-fade-in">
 
           {/* ── Left sidebar (thumbnails) ── */}
           <div className="hidden sm:block">
@@ -1305,7 +1309,7 @@ export default function WorkspacePage() {
       {/* ══ Toast ══ */}
       {toast && (
         <div
-          className="animate-scale-in"
+          className="animate-slide-up"
           style={{
             position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
             display: 'flex', alignItems: 'center', gap: 10,

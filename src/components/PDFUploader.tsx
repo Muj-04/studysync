@@ -51,18 +51,20 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
           fontSize: 12, fontWeight: 500,
           cursor: 'pointer',
           fontFamily: 'inherit',
-          transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+          transition: 'background 0.15s, color 0.15s, border-color 0.15s, transform 0.15s',
           userSelect: 'none',
         }}
         onMouseOver={(e) => Object.assign(e.currentTarget.style, {
           background: 'var(--bg-active)',
           color: 'var(--text-1)',
           borderColor: 'var(--border-strong)',
+          transform: 'scale(1.03)',
         })}
         onMouseOut={(e) => Object.assign(e.currentTarget.style, {
           background: 'var(--bg-elevated)',
           color: 'var(--text-2)',
           borderColor: 'var(--border)',
+          transform: 'scale(1)',
         })}
       >
         <Upload size={12} />
@@ -79,6 +81,7 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
 
   return (
     <div
+      className="animate-fade-in"
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -94,7 +97,8 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
         background: isDragging ? 'var(--accent-muted)' : 'var(--bg-elevated)',
         cursor: 'pointer',
         userSelect: 'none',
-        transition: 'border-color 0.15s, background 0.15s',
+        transform: isDragging ? 'scale(1.02)' : 'scale(1)',
+        transition: 'border-color 0.18s, background 0.18s, transform 0.18s cubic-bezier(0.34,1.56,0.64,1)',
       }}
     >
       <div style={{
@@ -103,9 +107,10 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
         border: `1px solid ${isDragging ? 'rgba(89,101,217,.3)' : 'var(--border)'}`,
         borderRadius: 10,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background 0.15s, border-color 0.15s',
+        transform: isDragging ? 'scale(1.12)' : 'scale(1)',
+        transition: 'background 0.18s, border-color 0.18s, transform 0.22s cubic-bezier(0.34,1.56,0.64,1)',
       }}>
-        <FileText size={20} style={{ color: isDragging ? 'var(--accent-hover)' : 'var(--text-2)' }} />
+        <FileText size={20} style={{ color: isDragging ? 'var(--accent-hover)' : 'var(--text-2)', transition: 'color 0.18s' }} />
       </div>
 
       <div style={{ textAlign: 'center' }}>
