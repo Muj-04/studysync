@@ -18,6 +18,7 @@ interface Props {
   onToggleDraw?: () => void;
   isDrawing?: boolean;
   zoom: number;
+  onZoomChange: (z: number) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onHideBar: () => void;
@@ -107,7 +108,7 @@ export default function PageNavigation({
   currentPage, pageCount, isBlankPage = false,
   onPrev, onNext, onGoToPage, onInsertBlankPage,
   onToggleDraw, isDrawing = false,
-  zoom, onZoomIn, onZoomOut, onHideBar,
+  zoom, onZoomChange, onZoomIn, onZoomOut, onHideBar,
 }: Props) {
   const [inputValue, setInputValue] = useState(String(currentPage));
   const [showBgPicker, setShowBgPicker] = useState(false);
@@ -283,17 +284,28 @@ export default function PageNavigation({
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
 
         {/* Zoom */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <SmBtn onClick={onZoomOut} disabled={!canZoomOut} aria-label="Zoom out">
             <Minus size={12} />
           </SmBtn>
+          <input
+            type="range"
+            min={50}
+            max={200}
+            step={5}
+            value={Math.round(zoom * 100)}
+            onChange={(e) => onZoomChange(Number(e.target.value) / 100)}
+            className="zoom-slider"
+            aria-label="Zoom level"
+            style={{ width: 88 }}
+          />
           <span
-            className="hidden sm:block"
             style={{
               fontSize: 11, fontWeight: 500,
-              minWidth: 38, textAlign: 'center',
+              minWidth: 34, textAlign: 'center',
               color: 'var(--text-2)',
               fontVariantNumeric: 'tabular-nums',
+              flexShrink: 0,
             }}
           >
             {`${Math.round(zoom * 100)}%`}
