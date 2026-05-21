@@ -92,7 +92,13 @@ function PDFThumb({ url, page }: { url: string; page: number }) {
           style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
       ) : (
-        <div className="skeleton" style={{ position: 'absolute', inset: 0, borderRadius: 2 }} />
+        <div
+          className="animate-pulse"
+          style={{
+            position: 'absolute', inset: 0, borderRadius: 2,
+            background: 'var(--bg-active)',
+          }}
+        />
       )}
     </div>
   );
@@ -134,11 +140,10 @@ export default function SidebarThumbnails({
   return (
     <aside
       style={{
-        width: isOpen ? 180 : 0,
+        width: 180,       // always 180px — parent wrapper handles the width animation
         flexShrink: 0,
         height: '100%',
         overflow: 'hidden',
-        transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
       }}
     >
       <div style={{
