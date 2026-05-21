@@ -560,9 +560,7 @@ export default function WorkspacePage() {
   const mainRef            = useRef<HTMLElement>(null);
 
   // ── Text notes (persisted per doc+page) ──────────────────────────────────
-  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>(
-    () => storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES) ?? {}
-  );
+  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
 
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
@@ -578,6 +576,12 @@ export default function WorkspacePage() {
   useEffect(() => {
     storageSet(KEYS.TEXT_NOTES, pageTextNotes);
   }, [pageTextNotes]);
+
+  // ── Restore text notes from storage on mount ──────────────────────────────
+  useEffect(() => {
+    const stored = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES);
+    if (stored && Object.keys(stored).length > 0) setPageTextNotes(stored);
+  }, []);
 
   // ── Persistence: zoom per document ────────────────────────────────────────
   const activeDocumentIdRef = useRef<string | null>(null);
