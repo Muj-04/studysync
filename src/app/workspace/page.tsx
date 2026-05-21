@@ -682,6 +682,75 @@ export default function WorkspacePage() {
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
 
+  // ── Resizable panels ──────────────────────────────────────────────────────
+  const SIDEBAR_MIN = 150;
+  const SIDEBAR_MAX = 350;
+  const SIDEBAR_DEFAULT = 256;
+  const RPANEL_MIN = 150;
+  const RPANEL_MAX = 300;
+  const RPANEL_DEFAULT = 220;
+
+  const [sidebarWidth, setSidebarWidth]       = useState(SIDEBAR_DEFAULT);
+  const [rightPanelWidth, setRightPanelWidth] = useState(RPANEL_DEFAULT);
+  const [isDraggingLeft, setIsDraggingLeft]   = useState(false);
+  const [isDraggingRight, setIsDraggingRight] = useState(false);
+  const dragStartXRef      = useRef(0);
+  const dragStartWidthRef  = useRef(0);
+  const dragSideRef        = useRef<'left' | 'right' | null>(null);
+
+  const startLeftDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragStartXRef.current     = e.clientX;
+    dragStartWidthRef.current = sidebarWidth;
+    dragSideRef.current       = 'left';
+    setIsDraggingLeft(true);
+  }, [sidebarWidth]);
+
+  const startRightDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragStartXRef.current     = e.clientX;
+    dragStartWidthRef.current = rightPanelWidth;
+    dragSideRef.current       = 'right';
+    setIsDraggingRight(true);
+  }, [rightPanelWidth]);
+
+  useEffect(() => {
+    if (!isDraggingLeft && !isDraggingRight) return;
+    const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStartXRef.current;
+      if (dragSideRef.current === 'left') {
+        const next = dragStartWidthRef.current + dx;
+        if (next < SIDEBAR_MIN) {
+          setSidebarOpen(false);
+          setSidebarWidth(SIDEBAR_DEFAULT);
+        } else {
+          setSidebarOpen(true);
+          setSidebarWidth(Math.min(next, SIDEBAR_MAX));
+        }
+      } else {
+        const next = dragStartWidthRef.current - dx;
+        if (next < RPANEL_MIN) {
+          setRightPanelOpen(false);
+          setRightPanelWidth(RPANEL_DEFAULT);
+        } else {
+          setRightPanelOpen(true);
+          setRightPanelWidth(Math.min(next, RPANEL_MAX));
+        }
+      }
+    };
+    const onUp = () => {
+      setIsDraggingLeft(false);
+      setIsDraggingRight(false);
+      dragSideRef.current = null;
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [isDraggingLeft, isDraggingRight]);
+
   useEffect(() => { if (isRecording) setVoiceSheetOpen(true); }, [isRecording]);
 
   // ── Voice notes ───────────────────────────────────────────────────────────
@@ -1031,9 +1100,9 @@ export default function WorkspacePage() {
           {/* ── Left sidebar (thumbnails) ── */}
           <div
             style={{
-              width: sidebarOpen ? '256px' : '0px',
+              width: sidebarOpen ? sidebarWidth : 0,
               overflow: 'hidden',
-              transition: 'width 0.3s ease',
+              transition: isDraggingLeft ? 'none' : 'width 0.3s ease',
               flexShrink: 0,
             }}
           >
@@ -1049,6 +1118,23 @@ export default function WorkspacePage() {
               onNavigate={setVirtualIndex}
             />
           </div>
+
+          {/* ── Left resize handle ── */}
+          {sidebarOpen && (
+            <div
+              onMouseDown={startLeftDrag}
+              style={{
+                width: 4,
+                flexShrink: 0,
+                cursor: 'col-resize',
+                background: isDraggingLeft ? 'var(--accent)' : 'transparent',
+                transition: 'background 0.15s',
+                zIndex: 20,
+              }}
+              onMouseOver={(e) => { if (!isDraggingLeft) e.currentTarget.style.background = 'var(--border-strong)'; }}
+              onMouseOut={(e)  => { if (!isDraggingLeft) e.currentTarget.style.background = 'transparent'; }}
+            />
+          )}
 
           {/* ── Main column ── */}
           <main
@@ -1302,12 +1388,29 @@ export default function WorkspacePage() {
             )}
           </main>
 
+          {/* ── Right resize handle ── */}
+          {rightPanelOpen && (
+            <div
+              onMouseDown={startRightDrag}
+              style={{
+                width: 4,
+                flexShrink: 0,
+                cursor: 'col-resize',
+                background: isDraggingRight ? 'var(--accent)' : 'transparent',
+                transition: 'background 0.15s',
+                zIndex: 20,
+              }}
+              onMouseOver={(e) => { if (!isDraggingRight) e.currentTarget.style.background = 'var(--border-strong)'; }}
+              onMouseOut={(e)  => { if (!isDraggingRight) e.currentTarget.style.background = 'transparent'; }}
+            />
+          )}
+
           {/* ── Right panel (document tools) ── */}
           <div
             style={{
-              width: rightPanelOpen ? '220px' : '0px',
+              width: rightPanelOpen ? rightPanelWidth : 0,
               overflow: 'hidden',
-              transition: 'width 0.3s ease',
+              transition: isDraggingRight ? 'none' : 'width 0.3s ease',
               flexShrink: 0,
             }}
           >

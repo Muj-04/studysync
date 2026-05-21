@@ -155,13 +155,13 @@ export default function DocumentToolsPanel({
 
   return (
     <aside style={{
-      width: 220,          // fixed — parent wrapper in page.tsx owns the animated width
+      width: '100%',
       flexShrink: 0,
       height: '100%',
       overflow: 'hidden',
     }}>
       <div style={{
-        width: 220,
+        width: '100%',
         height: '100%',
         background: 'var(--bg-sidebar)',
         borderLeft: '1px solid var(--border-subtle)',
