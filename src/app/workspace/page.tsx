@@ -1029,7 +1029,11 @@ export default function WorkspacePage() {
         <div className="flex flex-1 overflow-hidden animate-fade-in">
 
           {/* ── Left sidebar (thumbnails) ── */}
-          <div className="hidden sm:block">
+          {/* Width is controlled here so Tailwind transition-all applies cleanly */}
+          <div
+            className="hidden sm:block overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out"
+            style={{ width: sidebarOpen ? 180 : 0 }}
+          >
             <SidebarThumbnails
               isOpen={sidebarOpen}
               documents={documents}
@@ -1063,10 +1067,24 @@ export default function WorkspacePage() {
                       flex: 1, overflow: 'hidden',
                       display: 'flex', flexDirection: 'column',
                       borderRight: showSplit ? '1px solid var(--border)' : 'none',
-                      minWidth: 0,
+                      minWidth: 0, position: 'relative',
                     }}
                     onPointerDown={() => setActiveSide('left')}
                   >
+                    {/* Page-change flash: keyed on virtualIndex so it re-mounts on
+                        every navigation and replays the CSS animation. The overlay
+                        sits on top of the PDF but is pointer-events:none and fades
+                        to fully transparent within 0.2 s. */}
+                    <div
+                      key={`flash-${activeDocumentId}-${virtualIndex}`}
+                      style={{
+                        position: 'absolute', inset: 0, zIndex: 6,
+                        pointerEvents: 'none',
+                        background: 'var(--bg-app)',
+                        opacity: 0,
+                        animation: 'page-flash 0.22s ease-out both',
+                      }}
+                    />
                     {!showSplit && isBlankPage ? (
                       <BlankPageCanvas
                         ref={blankDrawingRef}
