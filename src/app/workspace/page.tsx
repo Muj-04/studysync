@@ -1029,10 +1029,10 @@ export default function WorkspacePage() {
         <div className="flex flex-1 overflow-hidden animate-fade-in">
 
           {/* ── Left sidebar (thumbnails) ── */}
-          {/* Width is controlled here so Tailwind transition-all applies cleanly */}
+          {/* BEFORE: className="hidden sm:block overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out" style={{ width: sidebarOpen ? 180 : 0 }} */}
+          {/* AFTER:  pure Tailwind w-0/w-[180px] — no inline style so transition-all fires correctly */}
           <div
-            className="hidden sm:block overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out"
-            style={{ width: sidebarOpen ? 180 : 0 }}
+            className={`hidden sm:block overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out ${sidebarOpen ? 'w-[180px]' : 'w-0'}`}
           >
             <SidebarThumbnails
               isOpen={sidebarOpen}
@@ -1300,7 +1300,9 @@ export default function WorkspacePage() {
           </main>
 
           {/* ── Right panel (document tools) ── */}
-          <div className="hidden sm:block">
+          {/* BEFORE: className="hidden sm:block" (no transition, DocumentToolsPanel owned its own width animation) */}
+          {/* AFTER:  same Tailwind pattern as left sidebar — parent controls width, transition-all fires cleanly */}
+          <div className={`hidden sm:block overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out ${rightPanelOpen ? 'w-[220px]' : 'w-0'}`}>
             <DocumentToolsPanel
               isOpen={rightPanelOpen}
               hasDocument={hasDocument}
