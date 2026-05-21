@@ -140,14 +140,14 @@ export default function SidebarThumbnails({
   return (
     <aside
       style={{
-        width: 180,       // always 180px — parent wrapper handles the width animation
+        width: 256,       // always 256px — parent wrapper handles the width animation
         flexShrink: 0,
         height: '100%',
         overflow: 'hidden',
       }}
     >
       <div style={{
-        width: 180,
+        width: 256,
         height: '100%',
         background: 'var(--bg-sidebar)',
         borderRight: '1px solid var(--border-subtle)',
