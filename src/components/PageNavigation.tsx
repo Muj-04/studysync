@@ -104,6 +104,12 @@ function SmBtn({
   );
 }
 
+function Sep() {
+  return (
+    <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+  );
+}
+
 export default function PageNavigation({
   currentPage, pageCount, isBlankPage = false,
   onPrev, onNext, onGoToPage, onInsertBlankPage,
@@ -116,7 +122,6 @@ export default function PageNavigation({
 
   useEffect(() => { setInputValue(String(currentPage)); }, [currentPage]);
 
-  // Close picker on outside click
   useEffect(() => {
     if (!showBgPicker) return;
     const fn = (e: MouseEvent) => {
@@ -134,30 +139,33 @@ export default function PageNavigation({
     else setInputValue(String(currentPage));
   };
 
-  const canPrev   = currentPage > 1;
-  const canNext   = currentPage < pageCount;
+  const canPrev    = currentPage > 1;
+  const canNext    = currentPage < pageCount;
   const canZoomOut = zoom > 0.5;
   const canZoomIn  = zoom < 2;
 
   return (
     <div style={{
       height: 48,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 12px',
+      display: 'flex', alignItems: 'center',
+      padding: '0 10px',
+      gap: 6,
       background: 'var(--bg-sidebar)',
       borderTop: '1px solid var(--border-subtle)',
       flexShrink: 0,
+      overflow: 'hidden',
+      minWidth: 0,
     }}>
 
-      {/* ── Left: insert blank page ── */}
+      {/* ── 1. Insert blank page ── */}
       <div ref={pickerRef} style={{ position: 'relative', flexShrink: 0 }}>
         <button
           onClick={() => setShowBgPicker((v) => !v)}
           title="Insert blank page after current"
           aria-label="Insert blank page"
           style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            height: 26, padding: '0 10px',
+            display: 'flex', alignItems: 'center', gap: 4,
+            height: 26, padding: '0 8px',
             borderRadius: 6,
             background: showBgPicker ? 'var(--bg-hover)' : 'transparent',
             border: '1px solid var(--border)',
@@ -165,6 +173,7 @@ export default function PageNavigation({
             fontSize: 11.5, fontWeight: 500,
             cursor: 'pointer', fontFamily: 'inherit',
             transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+            whiteSpace: 'nowrap',
           }}
           onMouseOver={(e) => Object.assign(e.currentTarget.style, {
             background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border-strong)',
@@ -177,10 +186,9 @@ export default function PageNavigation({
         >
           <Plus size={11} strokeWidth={2.5} />
           <span className="hidden sm:inline">Blank</span>
-          <ChevronDown size={9} strokeWidth={2.5} style={{ marginLeft: 1, opacity: 0.6 }} />
+          <ChevronDown size={9} strokeWidth={2.5} style={{ opacity: 0.6 }} />
         </button>
 
-        {/* Theme picker popover */}
         {showBgPicker && (
           <div style={{
             position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
@@ -236,16 +244,23 @@ export default function PageNavigation({
         )}
       </div>
 
-      {/* ── Center: page navigation ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <Sep />
+
+      {/* ── 2. Page navigation (centered) ── */}
+      <div style={{
+        flex: 1, minWidth: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 4,
+      }}>
         {isBlankPage && (
           <span style={{
             fontSize: 10, fontWeight: 500,
-            padding: '2px 7px', borderRadius: 4,
+            padding: '2px 6px', borderRadius: 4,
             background: 'var(--bg-elevated)',
             border: '1px solid var(--border)',
             color: 'var(--text-2)',
             letterSpacing: '0.03em',
+            flexShrink: 0,
           }}>
             Blank
           </span>
@@ -255,7 +270,10 @@ export default function PageNavigation({
           <ChevronLeft size={15} strokeWidth={2} />
         </NavBtn>
 
-        <form onSubmit={(e) => { e.preventDefault(); commit(); }} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <form
+          onSubmit={(e) => { e.preventDefault(); commit(); }}
+          style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+        >
           <input
             type="number"
             min={1} max={pageCount}
@@ -264,13 +282,13 @@ export default function PageNavigation({
             onBlur={(e) => { commit(); void e; }}
             className="app-input"
             style={{
-              width: 40, height: 26,
+              width: 38, height: 26,
               textAlign: 'center',
               fontSize: 12.5, fontWeight: 500,
               padding: '0 4px',
             }}
           />
-          <span style={{ fontSize: 12, color: 'var(--text-3)', userSelect: 'none' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-3)', userSelect: 'none', whiteSpace: 'nowrap' }}>
             of {pageCount}
           </span>
         </form>
@@ -280,14 +298,16 @@ export default function PageNavigation({
         </NavBtn>
       </div>
 
-      {/* ── Right: zoom + draw + hide ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <Sep />
 
-        {/* Zoom */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <SmBtn onClick={onZoomOut} disabled={!canZoomOut} aria-label="Zoom out">
-            <Minus size={12} />
-          </SmBtn>
+      {/* ── 3. Zoom controls ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+        <SmBtn onClick={onZoomOut} disabled={!canZoomOut} aria-label="Zoom out">
+          <Minus size={12} />
+        </SmBtn>
+
+        {/* Slider + label — visible on sm+ only */}
+        <div className="hidden sm:flex" style={{ alignItems: 'center', gap: 4 }}>
           <input
             type="range"
             min={50}
@@ -297,36 +317,34 @@ export default function PageNavigation({
             onChange={(e) => onZoomChange(Number(e.target.value) / 100)}
             className="zoom-slider"
             aria-label="Zoom level"
-            style={{ width: 88 }}
+            style={{ width: 80 }}
           />
-          <span
-            style={{
-              fontSize: 11, fontWeight: 500,
-              minWidth: 34, textAlign: 'center',
-              color: 'var(--text-2)',
-              fontVariantNumeric: 'tabular-nums',
-              flexShrink: 0,
-            }}
-          >
+          <span style={{
+            fontSize: 11, fontWeight: 500,
+            minWidth: 32, textAlign: 'right',
+            color: 'var(--text-2)',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
             {`${Math.round(zoom * 100)}%`}
           </span>
-          <SmBtn onClick={onZoomIn} disabled={!canZoomIn} aria-label="Zoom in">
-            <Plus size={12} />
-          </SmBtn>
         </div>
 
-        {/* Divider */}
-        <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
+        <SmBtn onClick={onZoomIn} disabled={!canZoomIn} aria-label="Zoom in">
+          <Plus size={12} />
+        </SmBtn>
+      </div>
 
-        {/* Draw toggle */}
-        {!isBlankPage && onToggleDraw && (
+      {/* ── 4. Draw toggle (PDF pages only) ── */}
+      {!isBlankPage && onToggleDraw && (
+        <>
+          <Sep />
           <button
             onClick={onToggleDraw}
             title={isDrawing ? 'Exit drawing mode' : 'Annotate this page'}
             aria-label={isDrawing ? 'Exit drawing mode' : 'Annotate this page'}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
-              height: 26, padding: '0 10px',
+              height: 26, padding: '0 9px',
               borderRadius: 6, flexShrink: 0,
               background: isDrawing ? 'var(--violet-muted)' : 'transparent',
               border: `1px solid ${isDrawing ? 'rgba(139,92,246,.35)' : 'var(--border)'}`,
@@ -334,6 +352,7 @@ export default function PageNavigation({
               fontSize: 11.5, fontWeight: 500,
               cursor: 'pointer', fontFamily: 'inherit',
               transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+              whiteSpace: 'nowrap',
             }}
             onMouseOver={(e) => {
               if (!isDrawing) Object.assign(e.currentTarget.style, {
@@ -353,13 +372,13 @@ export default function PageNavigation({
             <Pencil size={11} />
             <span className="hidden sm:inline">{isDrawing ? 'Done' : 'Annotate'}</span>
           </button>
-        )}
+        </>
+      )}
 
-        {/* Hide bar */}
-        <SmBtn onClick={onHideBar} aria-label="Hide toolbar">
-          <ChevronDown size={13} />
-        </SmBtn>
-      </div>
+      {/* ── 5. Hide bar ── */}
+      <SmBtn onClick={onHideBar} aria-label="Hide toolbar">
+        <ChevronDown size={13} />
+      </SmBtn>
     </div>
   );
 }
