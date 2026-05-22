@@ -124,12 +124,22 @@ interface Props {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+const SIDEBAR_TABS = [
+  { id: 'thumbnails',  label: 'Thumbnails' },
+  { id: 'outlines',    label: 'Outlines' },
+  { id: 'annotations', label: 'Annotations' },
+  { id: 'templates',   label: 'Templates' },
+] as const;
+
+type SidebarTab = typeof SIDEBAR_TABS[number]['id'];
+
 export default function SidebarThumbnails({
   isOpen, documents, activeDocumentId, activeDocument,
   virtualPages, currentVirtualIndex,
   onSelectDocument, onRemoveDocument, onNavigate,
 }: Props) {
   const thumbListRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<SidebarTab>('thumbnails');
 
   // Scroll active thumbnail into view whenever the page changes
   useEffect(() => {
@@ -156,8 +166,74 @@ export default function SidebarThumbnails({
         transition: 'opacity 0.18s ease',
       }}>
 
+        {/* ── Tab navigation ── */}
+        <div style={{
+          padding: '8px 8px 0',
+          borderBottom: '1px solid var(--border-subtle)',
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', gap: 0 }}>
+            {SIDEBAR_TABS.map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                style={{
+                  flex: 1,
+                  padding: '6px 4px 8px',
+                  fontSize: 10, fontWeight: 600,
+                  letterSpacing: '0.06em', textTransform: 'uppercase',
+                  color: activeTab === id ? 'var(--accent)' : 'var(--text-3)',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: `2px solid ${activeTab === id ? 'var(--accent)' : 'transparent'}`,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'color 0.13s, border-color 0.13s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseOver={(e) => {
+                  if (activeTab !== id) (e.currentTarget as HTMLElement).style.color = 'var(--text-2)';
+                }}
+                onMouseOut={(e) => {
+                  if (activeTab !== id) (e.currentTarget as HTMLElement).style.color = 'var(--text-3)';
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Non-thumbnail placeholder tabs ── */}
+        {activeTab !== 'thumbnails' && (
+          <div style={{
+            flex: 1, display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            padding: 24, gap: 8,
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 8,
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: 4,
+            }}>
+              <FileImage size={16} style={{ color: 'var(--text-3)' }} />
+            </div>
+            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', textAlign: 'center' }}>
+              {activeTab === 'outlines' ? 'Outlines' : activeTab === 'annotations' ? 'Annotations' : 'Templates'}
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
+              Coming soon
+            </p>
+          </div>
+        )}
+
+        {/* ── Thumbnails tab content ── */}
+        {activeTab === 'thumbnails' && (
+          <>
         {/* ── Documents ── */}
-        <div style={{ padding: '10px 10px 5px', flexShrink: 0 }}>
+        <div style={{ padding: '8px 10px 4px', flexShrink: 0 }}>
           <span style={{
             fontSize: 9.5, fontWeight: 700,
             letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -345,6 +421,8 @@ export default function SidebarThumbnails({
               </div>
             )}
         </div>
+          </>
+        )}
       </div>
     </aside>
   );
