@@ -946,15 +946,15 @@ export default function WorkspacePage() {
       <header style={{
         height: 56, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 10px 0 12px',
-        background: 'var(--bg-sidebar)',
+        padding: '0 12px 0 8px',
+        background: 'var(--bg-app)',
         borderBottom: '1px solid var(--border-subtle)',
         zIndex: 20,
         gap: 8,
       }}>
 
-        {/* Left: sidebar toggle + logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* Left: sidebar toggle + brand + nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <HdrBtn
             onClick={() => setSidebarOpen((o) => !o)}
             title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -963,35 +963,58 @@ export default function WorkspacePage() {
             <PanelLeft size={18} />
           </HdrBtn>
 
-          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <div style={{
-              width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-              background: 'var(--accent-muted)',
-              border: '1px solid rgba(89,101,217,.25)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <BookOpen size={13} style={{ color: 'var(--accent-hover)' }} />
-            </div>
-            <span style={{
-              fontSize: 13, fontWeight: 600,
-              color: 'var(--text-1)', letterSpacing: '-0.01em',
-            }}>
-              StudySpace
-            </span>
-          </div>
+          {/* Brand */}
+          <span style={{
+            fontSize: 14, fontWeight: 700,
+            color: 'var(--text-1)', letterSpacing: '-0.02em', flexShrink: 0,
+          }}>
+            StudySync
+          </span>
+
+          {/* Nav links — hidden on small screens */}
+          <nav style={{
+            display: 'flex', gap: 2, marginLeft: 16,
+          }} className="hidden md:flex">
+            {[
+              { label: 'Dashboard', active: false },
+              { label: 'Documents', active: true },
+              { label: 'Library',   active: false },
+              { label: 'Community', active: false },
+            ].map(({ label, active }) => (
+              <a
+                key={label}
+                href="#"
+                onClick={(e) => e.preventDefault()}
+                style={{
+                  fontSize: 13, fontWeight: 400,
+                  color: active ? 'var(--accent)' : 'var(--text-2)',
+                  textDecoration: 'none',
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent',
+                  transition: 'color 0.15s',
+                  cursor: 'pointer',
+                }}
+                onMouseOver={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'; }}
+                onMouseOut={(e)  => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
 
           {/* Active document name */}
           {activeDocument && (
             <>
-              <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+              <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
               <span
                 key={activeDocument.id}
                 className="animate-fade-in"
                 style={{
-                  fontSize: 12, color: 'var(--text-2)',
-                  maxWidth: 200, overflow: 'hidden',
+                  fontSize: 11.5, color: 'var(--text-3)',
+                  maxWidth: 180, overflow: 'hidden',
                   textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}
               >
@@ -1494,6 +1517,8 @@ export default function WorkspacePage() {
                   ? (theme) => updateBgTheme(currentVP.blankPage.id, theme)
                   : undefined
               }
+              onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
+              isRecording={isRecording}
             />
           </div>
 

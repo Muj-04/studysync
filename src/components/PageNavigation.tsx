@@ -296,8 +296,8 @@ export default function PageNavigation({
                 width: 26, height: 26, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 5, border: 'none', cursor: 'pointer',
-                background: viewMode === 'page' ? 'var(--violet-muted)' : 'transparent',
-                color: viewMode === 'page' ? '#a78bfa' : 'var(--text-3)',
+                background: viewMode === 'page' ? 'var(--accent-muted)' : 'transparent',
+                color: viewMode === 'page' ? 'var(--accent-hover)' : 'var(--text-3)',
                 transition: 'background 0.13s, color 0.13s',
               }}
               onMouseOver={(e) => {
@@ -321,8 +321,8 @@ export default function PageNavigation({
                 width: 26, height: 26, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 5, border: 'none', cursor: 'pointer',
-                background: viewMode === 'scroll' ? 'var(--violet-muted)' : 'transparent',
-                color: viewMode === 'scroll' ? '#a78bfa' : 'var(--text-3)',
+                background: viewMode === 'scroll' ? 'var(--accent-muted)' : 'transparent',
+                color: viewMode === 'scroll' ? 'var(--accent-hover)' : 'var(--text-3)',
                 transition: 'background 0.13s, color 0.13s',
               }}
               onMouseOver={(e) => {
@@ -386,9 +386,9 @@ export default function PageNavigation({
               display: 'flex', alignItems: 'center', gap: 5,
               height: 26, padding: '0 8px',
               borderRadius: 6, flexShrink: 0,
-              background: isDrawing ? 'var(--violet-muted)' : 'transparent',
-              border: `1px solid ${isDrawing ? 'rgba(139,92,246,.35)' : 'var(--border)'}`,
-              color: isDrawing ? '#a78bfa' : 'var(--text-2)',
+              background: isDrawing ? 'var(--accent-muted)' : 'transparent',
+              border: `1px solid ${isDrawing ? 'rgba(37,99,235,.35)' : 'var(--border)'}`,
+              color: isDrawing ? 'var(--accent-hover)' : 'var(--text-2)',
               fontSize: 11.5, fontWeight: 500,
               cursor: 'pointer', fontFamily: 'inherit',
               transition: 'background 0.13s, color 0.13s, border-color 0.13s',
@@ -396,7 +396,7 @@ export default function PageNavigation({
             }}
             onMouseOver={(e) => {
               if (!isDrawing) Object.assign(e.currentTarget.style, {
-                background: 'var(--violet-muted)', borderColor: 'rgba(139,92,246,.25)', color: '#c4b5fd',
+                background: 'var(--accent-muted)', borderColor: 'rgba(37,99,235,.25)', color: 'var(--accent-hover)',
               });
             }}
             onMouseOut={(e) => {

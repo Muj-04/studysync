@@ -154,8 +154,8 @@ export default function FloatingAnnotationToolbar({
     el.id = 'fab-annotation-styles';
     el.textContent = `
       @keyframes fab-pulse {
-        0%, 100% { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 0 rgba(139,92,246,0.38); }
-        55%       { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 13px rgba(139,92,246,0); }
+        0%, 100% { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 0 rgba(37,99,235,0.38); }
+        55%       { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 13px rgba(37,99,235,0); }
       }
       @keyframes fab-hint-in {
         from { opacity: 0; transform: translateY(-50%) translateX(10px); }
@@ -577,13 +577,13 @@ export default function FloatingAnnotationToolbar({
           zIndex: 2,
         }}>
           <div style={{
-            background: 'var(--violet)',
+            background: 'var(--accent)',
             color: '#fff',
             padding: '6px 13px',
             borderRadius: 20,
             fontSize: 12.5, fontWeight: 600,
             whiteSpace: 'nowrap',
-            boxShadow: '0 4px 18px rgba(139,92,246,0.45)',
+            boxShadow: '0 4px 18px rgba(37,99,235,0.45)',
           }}>
             Tap to annotate
           </div>
@@ -592,7 +592,7 @@ export default function FloatingAnnotationToolbar({
             width: 0, height: 0,
             borderTop: '7px solid transparent',
             borderBottom: '7px solid transparent',
-            borderLeft: '9px solid var(--violet)',
+            borderLeft: '9px solid var(--accent)',
             flexShrink: 0,
           }} />
         </div>
@@ -611,9 +611,9 @@ export default function FloatingAnnotationToolbar({
           position: 'absolute',
           inset: 0,
           borderRadius: '50%',
-          border: `1.5px solid ${isOpen ? 'rgba(139,92,246,.6)' : 'var(--border-strong)'}`,
-          background: isOpen ? 'var(--violet-muted)' : 'var(--bg-elevated)',
-          color: isOpen ? '#a78bfa' : 'var(--text-1)',
+          border: `1.5px solid ${isOpen ? 'rgba(37,99,235,.6)' : 'var(--border-strong)'}`,
+          background: isOpen ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+          color: isOpen ? 'var(--accent-hover)' : 'var(--text-1)',
           cursor: isDragging ? 'grabbing' : 'grab',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           // Pulse only when closed and not being dragged
