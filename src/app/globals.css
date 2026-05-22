@@ -6,33 +6,33 @@
 
 /* ── Design tokens ── */
 :root {
-  /* Backgrounds — dark navy/charcoal base (softer than pure black) */
-  --bg-app:      #111827;
-  --bg-sidebar:  #17202f;
-  --bg-panel:    #1c2638;
-  --bg-elevated: #212d40;
-  --bg-input:    #1e2840;
-  --bg-hover:    #212d40;
-  --bg-active:   #283445;
+  /* Backgrounds — pure black base */
+  --bg-app:      #000000;
+  --bg-sidebar:  #0a0a0a;
+  --bg-panel:    #0a0a0a;
+  --bg-elevated: #111111;
+  --bg-input:    #111111;
+  --bg-hover:    #141414;
+  --bg-active:   #1a1a1a;
 
   /* Borders */
-  --border-subtle: #1c2537;
-  --border:        #262f44;
-  --border-strong: #333e57;
+  --border-subtle: #171717;
+  --border:        #262626;
+  --border-strong: #404040;
 
   /* Text */
-  --text-1: #ededf0;
-  --text-2: #8e8e9f;
-  --text-3: #50505e;
+  --text-1: #e2e2e2;
+  --text-2: #a0a0a0;
+  --text-3: #525252;
 
-  /* Accent – Linear indigo */
-  --accent:       #5965d9;
-  --accent-hover: #6b78f0;
-  --accent-muted: rgba(89, 101, 217, 0.14);
+  /* Accent – blue */
+  --accent:       #2563eb;
+  --accent-hover: #3b82f6;
+  --accent-muted: rgba(37, 99, 235, 0.14);
 
-  /* Violet – drawing mode */
-  --violet:       #8b5cf6;
-  --violet-muted: rgba(139, 92, 246, 0.14);
+  /* Violet — now blue (annotation toolbar) */
+  --violet:       #2563eb;
+  --violet-muted: rgba(37, 99, 235, 0.14);
 
   /* Functional */
   --red:       #e5484d;
@@ -42,32 +42,32 @@
 
 /* ── Light theme overrides ── */
 [data-theme="light"] {
-  --bg-app:      #f0f0f3;
+  --bg-app:      #f5f5f5;
   --bg-sidebar:  #ffffff;
-  --bg-panel:    #f7f7f9;
-  --bg-elevated: #ececef;
-  --bg-input:    #f7f7f9;
-  --bg-hover:    #e6e6ea;
-  --bg-active:   #dddde2;
+  --bg-panel:    #f9f9f9;
+  --bg-elevated: #ececec;
+  --bg-input:    #f5f5f5;
+  --bg-hover:    #e8e8e8;
+  --bg-active:   #e0e0e0;
 
-  --border-subtle: #e2e2e7;
-  --border:        #d5d5dc;
-  --border-strong: #b8b8c2;
+  --border-subtle: #e5e5e5;
+  --border:        #d4d4d4;
+  --border-strong: #a3a3a3;
 
-  --text-1: #111117;
-  --text-2: #56565e;
-  --text-3: #9090a0;
+  --text-1: #111111;
+  --text-2: #525252;
+  --text-3: #a0a0a0;
 
-  --accent-muted: rgba(89, 101, 217, 0.12);
-  --violet-muted: rgba(139, 92, 246, 0.12);
+  --accent-muted: rgba(37, 99, 235, 0.12);
+  --violet-muted: rgba(37, 99, 235, 0.12);
   --red-muted:    rgba(229, 72, 77, 0.10);
 }
 
-[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.06); }
-[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); border-radius: 4px; }
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.04); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.14); border-radius: 4px; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); }
 
-/* Smooth theme transition (applied only during switch via JS) */
+/* Smooth theme transition */
 [data-transitioning] *,
 [data-transitioning] *::before,
 [data-transitioning] *::after {
@@ -76,7 +76,7 @@
 
 /* ── Base ── */
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
   color: var(--text-1);
   background: var(--bg-app);
   -webkit-font-smoothing: antialiased;
@@ -121,10 +121,10 @@ body {
 .app-input[type="number"] { -moz-appearance: textfield; }
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: rgba(0,0,0,0.15); border-radius: 4px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #000000; }
+::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #404040; }
 
 /* ── Animations ── */
 @keyframes spin       { to { transform: rotate(360deg); } }
@@ -156,7 +156,7 @@ body {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }
 [data-theme="light"] .skeleton::after {
@@ -179,7 +179,7 @@ body {
 .zoom-slider {
   -webkit-appearance: none;
   appearance: none;
-  height: 3px;
+  height: 2px;
   border-radius: 2px;
   background: var(--border-strong);
   outline: none;
@@ -188,8 +188,8 @@ body {
 }
 .zoom-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
@@ -200,15 +200,15 @@ body {
   transform: scale(1.25);
 }
 .zoom-slider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
   border: none;
 }
 .zoom-slider::-moz-range-track {
-  height: 3px;
+  height: 2px;
   background: var(--border-strong);
   border-radius: 2px;
 }

@@ -30,11 +30,11 @@ export default function RootLayout({
       <head>
         {/* Prevent flash of wrong theme on load */}
         <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('studysync_theme')||localStorage.getItem('theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}` }} />
-        {/* Inter — primary UI font */}
+        {/* Geist — primary UI font */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
         {/* Boxicons — used on login page */}
