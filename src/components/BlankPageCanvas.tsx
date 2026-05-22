@@ -605,7 +605,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
                 display: 'block',
                 position: 'relative',
                 cursor: tool === 'text' ? 'default' : getDrawingCursor(tool, penType),
-                touchAction: tool !== 'text' ? 'none' : 'auto',
+                touchAction: tool !== 'text' ? 'none' : 'pan-y',
                 pointerEvents: tool === 'text' ? 'none' : 'auto',
               }}
             />
