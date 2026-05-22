@@ -38,15 +38,13 @@ function NavBtn({
       disabled={disabled}
       aria-label={ariaLabel}
       style={{
-        width: 28, height: 28,
+        width: 28, height: 28, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         borderRadius: 6,
-        background: 'transparent',
-        border: '1px solid transparent',
+        background: 'transparent', border: '1px solid transparent',
         color: disabled ? 'var(--text-3)' : 'var(--text-2)',
         cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'background 0.13s, color 0.13s, border-color 0.13s',
-        flexShrink: 0,
       }}
       onMouseOver={(e) => {
         if (!disabled) Object.assign(e.currentTarget.style, {
@@ -78,15 +76,13 @@ function SmBtn({
       disabled={disabled}
       aria-label={ariaLabel}
       style={{
-        width: 24, height: 24,
+        width: 24, height: 24, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         borderRadius: 5,
-        background: 'transparent',
-        border: '1px solid transparent',
+        background: 'transparent', border: '1px solid transparent',
         color: disabled ? 'var(--text-3)' : 'var(--text-2)',
         cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'background 0.13s, color 0.13s, border-color 0.13s',
-        flexShrink: 0,
       }}
       onMouseOver={(e) => {
         if (!disabled) Object.assign(e.currentTarget.style, {
@@ -101,12 +97,6 @@ function SmBtn({
     >
       {children}
     </button>
-  );
-}
-
-function Sep() {
-  return (
-    <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
   );
 }
 
@@ -148,8 +138,8 @@ export default function PageNavigation({
     <div style={{
       height: 48,
       display: 'flex', alignItems: 'center',
-      padding: '0 10px',
-      gap: 6,
+      padding: '0 8px',
+      gap: 4,
       background: 'var(--bg-sidebar)',
       borderTop: '1px solid var(--border-subtle)',
       flexShrink: 0,
@@ -164,8 +154,8 @@ export default function PageNavigation({
           title="Insert blank page after current"
           aria-label="Insert blank page"
           style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            height: 26, padding: '0 8px',
+            display: 'flex', alignItems: 'center', gap: 3,
+            height: 26, padding: '0 7px',
             borderRadius: 6,
             background: showBgPicker ? 'var(--bg-hover)' : 'transparent',
             border: '1px solid var(--border)',
@@ -189,20 +179,18 @@ export default function PageNavigation({
           <ChevronDown size={9} strokeWidth={2.5} style={{ opacity: 0.6 }} />
         </button>
 
+        {/* Background picker popover */}
         {showBgPicker && (
           <div style={{
             position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
-            background: 'var(--bg-panel)',
-            border: '1px solid var(--border)',
-            borderRadius: 9,
-            padding: '10px',
+            background: 'var(--bg-panel)', border: '1px solid var(--border)',
+            borderRadius: 9, padding: '10px',
             boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
             zIndex: 100,
           }}>
             <p style={{
-              fontSize: 9.5, fontWeight: 700,
-              letterSpacing: '0.1em', textTransform: 'uppercase',
-              color: 'var(--text-3)', marginBottom: 8,
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
+              textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8,
             }}>
               Background
             </p>
@@ -214,11 +202,9 @@ export default function PageNavigation({
                   title={`Add ${label} blank page`}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-                    border: '1px solid var(--border)',
-                    borderRadius: 6, padding: '5px 6px',
+                    border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px',
                     cursor: 'pointer', background: 'transparent', fontFamily: 'inherit',
-                    minWidth: 60,
-                    transition: 'background 0.13s, border-color 0.13s',
+                    minWidth: 60, transition: 'background 0.13s, border-color 0.13s',
                   }}
                   onMouseOver={(e) => {
                     e.currentTarget.style.background = 'var(--bg-hover)';
@@ -244,23 +230,21 @@ export default function PageNavigation({
         )}
       </div>
 
-      <Sep />
+      {/* Divider */}
+      <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
 
-      {/* ── 2. Page navigation (centered) ── */}
+      {/* ── 2. Page navigation — takes all remaining space, centered ── */}
       <div style={{
         flex: 1, minWidth: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 4,
+        gap: 3,
       }}>
         {isBlankPage && (
           <span style={{
-            fontSize: 10, fontWeight: 500,
+            fontSize: 10, fontWeight: 500, flexShrink: 0,
             padding: '2px 6px', borderRadius: 4,
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-2)',
-            letterSpacing: '0.03em',
-            flexShrink: 0,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+            color: 'var(--text-2)', letterSpacing: '0.03em',
           }}>
             Blank
           </span>
@@ -272,7 +256,7 @@ export default function PageNavigation({
 
         <form
           onSubmit={(e) => { e.preventDefault(); commit(); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
         >
           <input
             type="number"
@@ -281,12 +265,7 @@ export default function PageNavigation({
             onChange={(e) => setInputValue(e.target.value)}
             onBlur={(e) => { commit(); void e; }}
             className="app-input"
-            style={{
-              width: 38, height: 26,
-              textAlign: 'center',
-              fontSize: 12.5, fontWeight: 500,
-              padding: '0 4px',
-            }}
+            style={{ width: 38, height: 26, textAlign: 'center', fontSize: 12.5, fontWeight: 500, padding: '0 4px' }}
           />
           <span style={{ fontSize: 12, color: 'var(--text-3)', userSelect: 'none', whiteSpace: 'nowrap' }}>
             of {pageCount}
@@ -298,21 +277,20 @@ export default function PageNavigation({
         </NavBtn>
       </div>
 
-      <Sep />
+      {/* Divider */}
+      <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
 
       {/* ── 3. Zoom controls ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
         <SmBtn onClick={onZoomOut} disabled={!canZoomOut} aria-label="Zoom out">
           <Minus size={12} />
         </SmBtn>
 
-        {/* Slider + label — visible on sm+ only */}
-        <div className="hidden sm:flex" style={{ alignItems: 'center', gap: 4 }}>
+        {/* Slider + label: shown via CSS media query (.nav-zoom-slider-wrap in globals.css) */}
+        <div className="nav-zoom-slider-wrap">
           <input
             type="range"
-            min={50}
-            max={200}
-            step={5}
+            min={50} max={200} step={5}
             value={Math.round(zoom * 100)}
             onChange={(e) => onZoomChange(Number(e.target.value) / 100)}
             className="zoom-slider"
@@ -320,10 +298,8 @@ export default function PageNavigation({
             style={{ width: 80 }}
           />
           <span style={{
-            fontSize: 11, fontWeight: 500,
-            minWidth: 32, textAlign: 'right',
-            color: 'var(--text-2)',
-            fontVariantNumeric: 'tabular-nums',
+            fontSize: 11, fontWeight: 500, minWidth: 30, textAlign: 'right',
+            color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums',
           }}>
             {`${Math.round(zoom * 100)}%`}
           </span>
@@ -337,14 +313,14 @@ export default function PageNavigation({
       {/* ── 4. Draw toggle (PDF pages only) ── */}
       {!isBlankPage && onToggleDraw && (
         <>
-          <Sep />
+          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
           <button
             onClick={onToggleDraw}
             title={isDrawing ? 'Exit drawing mode' : 'Annotate this page'}
             aria-label={isDrawing ? 'Exit drawing mode' : 'Annotate this page'}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
-              height: 26, padding: '0 9px',
+              height: 26, padding: '0 8px',
               borderRadius: 6, flexShrink: 0,
               background: isDrawing ? 'var(--violet-muted)' : 'transparent',
               border: `1px solid ${isDrawing ? 'rgba(139,92,246,.35)' : 'var(--border)'}`,
@@ -356,16 +332,12 @@ export default function PageNavigation({
             }}
             onMouseOver={(e) => {
               if (!isDrawing) Object.assign(e.currentTarget.style, {
-                background: 'var(--violet-muted)',
-                borderColor: 'rgba(139,92,246,.25)',
-                color: '#c4b5fd',
+                background: 'var(--violet-muted)', borderColor: 'rgba(139,92,246,.25)', color: '#c4b5fd',
               });
             }}
             onMouseOut={(e) => {
               if (!isDrawing) Object.assign(e.currentTarget.style, {
-                background: 'transparent',
-                borderColor: 'var(--border)',
-                color: 'var(--text-2)',
+                background: 'transparent', borderColor: 'var(--border)', color: 'var(--text-2)',
               });
             }}
           >
