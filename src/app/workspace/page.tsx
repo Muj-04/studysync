@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BookOpen, X, LogOut, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Sun, Moon, Search, CheckCircle,
+  ChevronUp, FilePlus, Search, CheckCircle,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -12,6 +12,7 @@ import { useBlankPages } from '@/hooks/useBlankPages';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import PDFUploader from '@/components/PDFUploader';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
+import PDFScrollViewer from '@/components/PDFScrollViewer';
 import PPTXViewer from '@/components/PPTXViewer';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
 import SidebarThumbnails from '@/components/SidebarThumbnails';
@@ -19,6 +20,7 @@ import DocumentToolsPanel from '@/components/DocumentToolsPanel';
 import FloatingAnnotationToolbar from '@/components/FloatingAnnotationToolbar';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
+import SettingsDropdown from '@/components/SettingsDropdown';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import type { BlankPage, PDFDocument, TextNote } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
@@ -460,6 +462,19 @@ export default function WorkspacePage() {
     setTimeout(() => html.removeAttribute('data-transitioning'), 350);
   }, [isDark]);
 
+  // ── Default blank page background ────────────────────────────────────────
+  const [defaultBgTheme, setDefaultBgTheme] = useState<'white' | 'dark'>('white');
+
+  useEffect(() => {
+    const stored = storageGet<'white' | 'dark'>('studysync_default_bg');
+    if (stored === 'white' || stored === 'dark') setDefaultBgTheme(stored);
+  }, []);
+
+  const handleDefaultBgThemeChange = useCallback((theme: 'white' | 'dark') => {
+    setDefaultBgTheme(theme);
+    storageSet('studysync_default_bg', theme);
+  }, []);
+
   // ── Shortcuts modal ───────────────────────────────────────────────────────
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -533,16 +548,16 @@ export default function WorkspacePage() {
     [virtualSequence.length],
   );
 
-  const handleInsertBlankPage = useCallback((theme: 'white' | 'dark' = 'white') => {
+  const handleInsertBlankPage = useCallback((theme?: 'white' | 'dark') => {
     if (!activeDocument) return;
     const afterPage = currentVP?.type === 'pdf'
       ? currentVP.pdfPage
       : currentVP?.type === 'blank'
         ? currentVP.blankPage.insertAfterPage
         : activeDocument.currentPage;
-    insertBlankPage(activeDocument.id, afterPage, theme);
+    insertBlankPage(activeDocument.id, afterPage, theme ?? defaultBgTheme);
     setVirtualIndex((i) => i + 1);
-  }, [activeDocument, currentVP, insertBlankPage]);
+  }, [activeDocument, currentVP, insertBlankPage, defaultBgTheme]);
 
   const handleDeleteBlankPage = useCallback((id: string) => {
     removeBlankPage(id);
@@ -693,6 +708,7 @@ export default function WorkspacePage() {
   const [navBarVisible, setNavBarVisible]   = useState(true);
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
+  const [viewMode, setViewMode]             = useState<'page' | 'scroll'>('page');
 
   // ── Resizable panels ──────────────────────────────────────────────────────
   const SIDEBAR_MIN = 150;
@@ -991,10 +1007,6 @@ export default function WorkspacePage() {
             <PDFUploader onFilesAdded={handleFilesAdded} compact />
           )}
 
-          <HdrBtn onClick={toggleTheme} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
-          </HdrBtn>
-
           {documents.length > 0 && !isPPTX && (
             <HdrBtn
               onClick={() => setSearchOpen((o) => !o)}
@@ -1028,6 +1040,18 @@ export default function WorkspacePage() {
           )}
 
           <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+          <SettingsDropdown
+            isDark={isDark}
+            onThemeChange={toggleTheme}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            defaultBgTheme={defaultBgTheme}
+            onDefaultBgThemeChange={handleDefaultBgThemeChange}
+            onZoomReset={() => handleLeftZoomChange(1.0)}
+            hasDocument={hasDocument}
+            isPPTX={isPPTX}
+          />
 
           <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title="Keyboard shortcuts (?)">
             <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
@@ -1186,7 +1210,21 @@ export default function WorkspacePage() {
                         animation: 'page-flash 0.22s ease-out both',
                       }}
                     />
-                    {!showSplit && isBlankPage ? (
+                    {/* Scroll mode — all pages at once (PDF only) */}
+                    {!showSplit && viewMode === 'scroll' && !isPPTX ? (
+                      <PDFScrollViewer
+                        document={activeDocument}
+                        virtualPages={virtualSequence}
+                        currentVirtualIndex={virtualIndex}
+                        onPageChange={setVirtualIndex}
+                        zoom={leftZoom}
+                        getNotesForPage={getNotesForPage}
+                        isRecording={isRecording}
+                        recordingContext={recordingContext}
+                        onRecordStart={startRecording}
+                        onRecordStop={stopRecording}
+                      />
+                    ) : !showSplit && isBlankPage ? (
                       <BlankPageCanvas
                         ref={blankDrawingRef}
                         blankPage={currentVP!.blankPage}
@@ -1307,21 +1345,24 @@ export default function WorkspacePage() {
                     : 'max-height 0.22s cubic-bezier(0.4,0,1,1)',
                 }}>
 
-                  <VoiceNotesSheet
-                    isOpen={voiceSheetOpen}
-                    onToggle={() => setVoiceSheetOpen((o) => !o)}
-                    notes={pageNotes}
-                    pageKey={pageKey}
-                    documentId={activeDocument.id}
-                    pageNumber={pageIdentifier}
-                    isRecording={isRecording}
-                    recordingDuration={recordingDuration}
-                    recordingContext={recordingContext}
-                    onStart={() => startRecording(activeDocument.id, pageIdentifier)}
-                    onStop={stopRecording}
-                    onDelete={deleteNote}
-                    onUpdateTitle={updateNoteTitle}
-                  />
+                  {/* Voice notes panel: hidden in scroll mode (shown per-page there) */}
+                  {viewMode !== 'scroll' && (
+                    <VoiceNotesSheet
+                      isOpen={voiceSheetOpen}
+                      onToggle={() => setVoiceSheetOpen((o) => !o)}
+                      notes={pageNotes}
+                      pageKey={pageKey}
+                      documentId={activeDocument.id}
+                      pageNumber={pageIdentifier}
+                      isRecording={isRecording}
+                      recordingDuration={recordingDuration}
+                      recordingContext={recordingContext}
+                      onStart={() => startRecording(activeDocument.id, pageIdentifier)}
+                      onStop={stopRecording}
+                      onDelete={deleteNote}
+                      onUpdateTitle={updateNoteTitle}
+                    />
+                  )}
 
                   <PageNavigation
                     currentPage={virtualIndex + 1}
@@ -1338,6 +1379,8 @@ export default function WorkspacePage() {
                     onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
                     onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
                     onHideBar={() => setNavBarVisible(false)}
+                    viewMode={isPPTX ? undefined : viewMode}
+                    onViewModeChange={isPPTX || showSplit ? undefined : setViewMode}
                   />
                 </div>
 
