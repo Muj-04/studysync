@@ -624,7 +624,6 @@ export default function FloatingAnnotationToolbar({
           transition: isDragging
             ? 'box-shadow 0.1s'
             : 'background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s',
-          touchAction: 'none',
         }}
       >
         <Pencil size={22} strokeWidth={1.75} />
