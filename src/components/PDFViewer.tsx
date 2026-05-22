@@ -39,11 +39,14 @@ interface Props {
   searchHighlights?: HighlightRect[];
   /** Index of the currently active highlight (orange vs yellow). */
   searchActiveIndex?: number;
+  /** When true, the pinch-to-zoom gesture is suppressed (drawing mode is active). */
+  disablePinch?: boolean;
 }
 
 export default function PDFViewer({
   document, zoom = 1, onZoomChange, onCanvasDimensions, overlay,
   onPageReady, searchHighlights, searchActiveIndex,
+  disablePinch = false,
 }: Props) {
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const scrollRef   = useRef<HTMLDivElement>(null);
@@ -54,6 +57,7 @@ export default function PDFViewer({
   const onZoomChangeRef = useRef(onZoomChange);
   const onPageReadyRef  = useRef(onPageReady);
   const liveZoomRef     = useRef(zoom);
+  const disablePinchRef = useRef(disablePinch);
   const lastPinchDistRef = useRef<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +70,7 @@ export default function PDFViewer({
   useEffect(() => { onZoomChangeRef.current = onZoomChange; });
   useEffect(() => { onPageReadyRef.current  = onPageReady; });
   useEffect(() => { liveZoomRef.current     = zoom; });
+  useEffect(() => { disablePinchRef.current = disablePinch; });
   useEffect(() => { return () => { pdfRef.current?.destroy(); }; }, []);
 
   // Scroll active highlight into view when it changes
@@ -155,11 +160,12 @@ export default function PDFViewer({
     return () => el.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Pinch-to-zoom
+  // Pinch-to-zoom — suppressed when drawing is active
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onTouchStart = (e: TouchEvent) => {
+      if (disablePinchRef.current) { lastPinchDistRef.current = null; return; }
       if (e.touches.length === 2) {
         lastPinchDistRef.current = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
@@ -168,6 +174,7 @@ export default function PDFViewer({
       }
     };
     const onTouchMove = (e: TouchEvent) => {
+      if (disablePinchRef.current) { lastPinchDistRef.current = null; return; }
       if (e.touches.length !== 2 || lastPinchDistRef.current === null) return;
       e.preventDefault();
       const dist  = Math.hypot(
