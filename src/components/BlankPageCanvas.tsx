@@ -110,6 +110,9 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
     const liveZoomRef = useRef(zoom);
     zoomRef.current   = zoom;
 
+    const toolRef = useRef(tool);
+    toolRef.current = tool;
+
     const lastPinchDistRef = useRef<number | null>(null);
 
     const [cssDims, setCssDims]   = useState({ w: PAGE_W, h: PAGE_H });
@@ -214,6 +217,8 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       if (!el) return;
 
       const onTouchStart = (e: TouchEvent) => {
+        // Suppress pinch zoom while a drawing tool is active
+        if (toolRef.current !== 'text') { lastPinchDistRef.current = null; return; }
         if (e.touches.length === 2) {
           lastPinchDistRef.current = Math.hypot(
             e.touches[0].clientX - e.touches[1].clientX,
@@ -222,6 +227,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
         }
       };
       const onTouchMove = (e: TouchEvent) => {
+        if (toolRef.current !== 'text') { lastPinchDistRef.current = null; return; }
         if (e.touches.length !== 2 || lastPinchDistRef.current === null) return;
         e.preventDefault();
         const dist = Math.hypot(
@@ -599,7 +605,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
                 display: 'block',
                 position: 'relative',
                 cursor: tool === 'text' ? 'default' : getDrawingCursor(tool, penType),
-                touchAction: 'none',
+                touchAction: tool !== 'text' ? 'none' : 'auto',
                 pointerEvents: tool === 'text' ? 'none' : 'auto',
               }}
             />
