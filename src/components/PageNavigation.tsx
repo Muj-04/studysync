@@ -22,6 +22,8 @@ interface Props {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onHideBar: () => void;
+  viewMode?: 'page' | 'scroll';
+  onViewModeChange?: (mode: 'page' | 'scroll') => void;
 }
 
 function NavBtn({
@@ -105,6 +107,7 @@ export default function PageNavigation({
   onPrev, onNext, onGoToPage, onInsertBlankPage,
   onToggleDraw, isDrawing = false,
   zoom, onZoomChange, onZoomIn, onZoomOut, onHideBar,
+  viewMode = 'page', onViewModeChange,
 }: Props) {
   const [inputValue, setInputValue] = useState(String(currentPage));
   const [showBgPicker, setShowBgPicker] = useState(false);
@@ -279,6 +282,67 @@ export default function PageNavigation({
 
       {/* Divider */}
       <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
+
+      {/* ── 2b. View mode icon toggle — between nav arrows and zoom ── */}
+      {onViewModeChange && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+            {/* Page mode — single page rectangle */}
+            <button
+              onClick={() => onViewModeChange('page')}
+              title="Page mode"
+              aria-label="Page mode"
+              style={{
+                width: 26, height: 26, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 5, border: 'none', cursor: 'pointer',
+                background: viewMode === 'page' ? 'var(--violet-muted)' : 'transparent',
+                color: viewMode === 'page' ? '#a78bfa' : 'var(--text-3)',
+                transition: 'background 0.13s, color 0.13s',
+              }}
+              onMouseOver={(e) => {
+                if (viewMode !== 'page') Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-2)' });
+              }}
+              onMouseOut={(e) => {
+                if (viewMode !== 'page') Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)' });
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="1" width="10" height="12" rx="1.2"/>
+              </svg>
+            </button>
+
+            {/* Scroll mode — three stacked page rectangles */}
+            <button
+              onClick={() => onViewModeChange('scroll')}
+              title="Scroll mode"
+              aria-label="Scroll mode"
+              style={{
+                width: 26, height: 26, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 5, border: 'none', cursor: 'pointer',
+                background: viewMode === 'scroll' ? 'var(--violet-muted)' : 'transparent',
+                color: viewMode === 'scroll' ? '#a78bfa' : 'var(--text-3)',
+                transition: 'background 0.13s, color 0.13s',
+              }}
+              onMouseOver={(e) => {
+                if (viewMode !== 'scroll') Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-2)' });
+              }}
+              onMouseOut={(e) => {
+                if (viewMode !== 'scroll') Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)' });
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="1"   width="12" height="3"  rx="0.7"/>
+                <rect x="1" y="5.5" width="12" height="3"  rx="0.7"/>
+                <rect x="1" y="10"  width="12" height="3"  rx="0.7"/>
+              </svg>
+            </button>
+          </div>
+
+          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
+        </>
+      )}
 
       {/* ── 3. Zoom controls ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
