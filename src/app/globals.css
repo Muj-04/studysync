@@ -163,6 +163,18 @@ body {
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
 }
 
+/* ── Nav bar responsive zoom section ── */
+.nav-zoom-slider-wrap {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+@media (min-width: 580px) {
+  .nav-zoom-slider-wrap {
+    display: flex;
+  }
+}
+
 /* ── Zoom slider ── */
 .zoom-slider {
   -webkit-appearance: none;
