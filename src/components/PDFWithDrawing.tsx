@@ -429,7 +429,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
               display: 'block',
               pointerEvents: canDrawNow ? 'auto' : 'none',
               cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
-              touchAction: canDrawNow ? 'none' : 'auto',
+              touchAction: canDrawNow ? 'none' : 'pan-y',
             }}
             onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent)); }}
             onMouseMove={(e) => { if (!canDrawNow) return; continueDraw(getPos(e.nativeEvent)); }}
