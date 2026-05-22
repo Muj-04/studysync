@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { PDFDocument, VoiceNote, BlankPage } from '@/types';
+import type { Tool, PenType } from '@/lib/drawing';
+import { getDrawingCursor } from '@/lib/drawing';
 import { Mic, Plus, Square } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,7 +23,7 @@ async function getPDFJS() {
   return pdfjs;
 }
 
-// ── Document cache (shared across page renders) ───────────────────────────────
+// ── Document cache ────────────────────────────────────────────────────────────
 
 const docCache = new Map<string, Promise<PDFDocumentProxy>>();
 async function getDocProxy(url: string): Promise<PDFDocumentProxy> {
@@ -30,6 +32,51 @@ async function getDocProxy(url: string): Promise<PDFDocumentProxy> {
     docCache.set(url, pdfjs.getDocument(url).promise);
   }
   return docCache.get(url)!;
+}
+
+// ── Drawing helpers ───────────────────────────────────────────────────────────
+
+function applyCtx(
+  ctx: CanvasRenderingContext2D,
+  tool: Tool,
+  penType: PenType,
+  color: string,
+  strokeSize: number,
+) {
+  if (tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.lineWidth = strokeSize * 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  } else if (penType === 'normal') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = strokeSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  } else if (penType === 'marker') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = strokeSize * 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+  } else {
+    // highlighter
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = strokeSize * 7;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'round';
+  }
 }
 
 // ── Voice note badge ──────────────────────────────────────────────────────────
@@ -111,7 +158,7 @@ function VoiceNoteBadge({
   );
 }
 
-// ── Single page item (lazy render) ────────────────────────────────────────────
+// ── Single page item ──────────────────────────────────────────────────────────
 
 interface PageItemProps {
   vp: VirtualPage;
@@ -124,20 +171,35 @@ interface PageItemProps {
   onRecordStop: () => void;
   pageRefsMap: Map<number, HTMLDivElement>;
   index: number;
+  tool: Tool;
+  penType: PenType;
+  color: string;
+  strokeSize: number;
+  annotationActive: boolean;
+  savedDrawing?: string;
+  onSavePageDrawing: (docId: string, page: number, data: string) => void;
 }
 
 const ScrollPageItem = memo(function ScrollPageItem({
   vp, document, containerWidth, zoom, notes,
   isRecordingHere, onRecordStart, onRecordStop,
   pageRefsMap, index,
+  tool, penType, color, strokeSize, annotationActive,
+  savedDrawing, onSavePageDrawing,
 }: PageItemProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawCanvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
-  const [canvasH, setCanvasH] = useState<number | null>(null);
+  const [cssDims, setCssDims] = useState<{ w: number; h: number } | null>(null);
   const renderKeyRef = useRef(0);
 
-  // Register this element in the parent's scroll-tracking map
+  // Drawing state
+  const isDrawing = useRef(false);
+  const lastPos = useRef<{ x: number; y: number } | null>(null);
+  const canvasDimsRef = useRef<{ w: number; h: number } | null>(null);
+
+  // Register in parent scroll-tracking map
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return;
@@ -145,19 +207,19 @@ const ScrollPageItem = memo(function ScrollPageItem({
     return () => { pageRefsMap.delete(index); };
   }, [index, pageRefsMap]);
 
-  // Only load/render once visible (+ generous pre-load margin)
+  // Lazy-load via IntersectionObserver
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return;
     const obs = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setVisible(true); },
-      { rootMargin: '600px' }
+      { rootMargin: '600px' },
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
 
-  // Render the PDF page onto the canvas
+  // PDF render — DPR baked into viewport scale (correct, matches PDFViewer.tsx)
   useEffect(() => {
     if (!visible || vp.type !== 'pdf') return;
     const canvas = canvasRef.current;
@@ -171,27 +233,108 @@ const ScrollPageItem = memo(function ScrollPageItem({
         const page = await doc.getPage(vp.pdfPage);
         if (key !== renderKeyRef.current) return;
 
-        const naturalVP = page.getViewport({ scale: 1 });
-        const scale = (containerWidth * zoom) / naturalVP.width;
-        const vport = page.getViewport({ scale });
         const dpr = window.devicePixelRatio || 1;
+        const baseVp = page.getViewport({ scale: 1 });
+        const cssScale = (containerWidth / baseVp.width) * zoom;
+        const cssVp = page.getViewport({ scale: cssScale });
+        const viewport = page.getViewport({ scale: cssScale * dpr });
 
-        canvas.width = Math.round(vport.width * dpr);
-        canvas.height = Math.round(vport.height * dpr);
-        canvas.style.width = `${vport.width}px`;
-        canvas.style.height = `${vport.height}px`;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = `${cssVp.width}px`;
+        canvas.style.height = `${cssVp.height}px`;
 
-        const ctx = canvas.getContext('2d')!;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        await page.render({ canvasContext: ctx, viewport: vport, canvas }).promise;
+        const renderTask = page.render({ canvas, viewport });
+        await renderTask.promise;
         if (key !== renderKeyRef.current) return;
-        setCanvasH(vport.height);
+        setCssDims({ w: cssVp.width, h: cssVp.height });
       } catch { /* cancelled or PDF error */ }
     })();
   }, [visible, vp, document.url, containerWidth, zoom]);
 
+  // Drawing canvas setup — runs when PDF CSS dims change (zoom/resize/first render)
+  useEffect(() => {
+    if (vp.type !== 'pdf' || !cssDims) return;
+    const drawCanvas = drawCanvasRef.current;
+    if (!drawCanvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const { w, h } = cssDims;
+    canvasDimsRef.current = { w, h };
+    drawCanvas.width = Math.round(w * dpr);
+    drawCanvas.height = Math.round(h * dpr);
+    drawCanvas.style.width = `${w}px`;
+    drawCanvas.style.height = `${h}px`;
+    const ctx = drawCanvas.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (savedDrawing) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, w, h);
+      img.src = savedDrawing;
+    }
+    isDrawing.current = false;
+    lastPos.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cssDims?.w, cssDims?.h, vp.type]);
+
+  const getPos = (e: { clientX: number; clientY: number }) => {
+    const dims = canvasDimsRef.current;
+    const drawCanvas = drawCanvasRef.current;
+    if (!dims || !drawCanvas) return { x: 0, y: 0 };
+    const rect = drawCanvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (dims.w / rect.width),
+      y: (e.clientY - rect.top) * (dims.h / rect.height),
+    };
+  };
+
+  const saveCanvas = useCallback(() => {
+    const drawCanvas = drawCanvasRef.current;
+    if (drawCanvas && vp.type === 'pdf') {
+      onSavePageDrawing(document.id, vp.pdfPage, drawCanvas.toDataURL('image/png'));
+    }
+  }, [document.id, onSavePageDrawing, vp]);
+
+  const startDraw = (pos: { x: number; y: number }) => {
+    if (tool === 'text') return;
+    const drawCanvas = drawCanvasRef.current;
+    const ctx = drawCanvas?.getContext('2d');
+    if (!drawCanvas || !ctx || !canvasDimsRef.current) return;
+    isDrawing.current = true;
+    lastPos.current = pos;
+    ctx.save();
+    applyCtx(ctx, tool, penType, color, strokeSize);
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, Math.max(ctx.lineWidth / 2, 1), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  const continueDraw = (pos: { x: number; y: number }) => {
+    if (!isDrawing.current || !lastPos.current) return;
+    const drawCanvas = drawCanvasRef.current;
+    const ctx = drawCanvas?.getContext('2d');
+    if (!drawCanvas || !ctx) return;
+    ctx.save();
+    applyCtx(ctx, tool, penType, color, strokeSize);
+    ctx.beginPath();
+    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.restore();
+    lastPos.current = pos;
+  };
+
+  const stopDraw = () => {
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
+    lastPos.current = null;
+    saveCanvas();
+  };
+
+  const canDrawNow = annotationActive && vp.type === 'pdf' && tool !== 'text';
   const pageW = containerWidth * zoom;
-  const pageH = canvasH ?? pageW * 1.414; // A4 aspect ratio as placeholder
+  const pageH = cssDims?.h ?? pageW * 1.414;
   const shadow = '0 2px 16px rgba(0,0,0,0.45)';
 
   if (vp.type === 'blank') {
@@ -228,7 +371,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
       background: '#fff',
     }}>
       {/* Spinner while page is loading */}
-      {visible && !canvasH && (
+      {visible && !cssDims && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -242,6 +385,34 @@ const ScrollPageItem = memo(function ScrollPageItem({
         </div>
       )}
       <canvas ref={canvasRef} style={{ display: 'block' }} />
+      {/* Drawing canvas overlay — mounted once PDF renders */}
+      {cssDims && (
+        <canvas
+          ref={drawCanvasRef}
+          style={{
+            position: 'absolute', top: 0, left: 0,
+            display: 'block',
+            pointerEvents: canDrawNow ? 'auto' : 'none',
+            cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
+            touchAction: canDrawNow ? 'none' : 'pan-y',
+          }}
+          onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent)); }}
+          onMouseMove={(e) => { if (!canDrawNow) return; continueDraw(getPos(e.nativeEvent)); }}
+          onMouseUp={() => canDrawNow && stopDraw()}
+          onMouseLeave={() => canDrawNow && stopDraw()}
+          onTouchStart={(e) => {
+            if (!canDrawNow) return;
+            e.preventDefault();
+            if (e.touches.length === 1) startDraw(getPos(e.touches[0]));
+          }}
+          onTouchMove={(e) => {
+            if (!canDrawNow) return;
+            e.preventDefault();
+            if (e.touches.length === 1) continueDraw(getPos(e.touches[0]));
+          }}
+          onTouchEnd={() => canDrawNow && stopDraw()}
+        />
+      )}
       <VoiceNoteBadge
         notes={notes} isRecordingHere={isRecordingHere}
         onRecordStart={onRecordStart} onRecordStop={onRecordStop}
@@ -263,12 +434,21 @@ interface Props {
   recordingContext: { documentId: string; pageNumber: number | string } | null;
   onRecordStart: (docId: string, pageId: number | string) => void;
   onRecordStop: () => void;
+  tool: Tool;
+  penType: PenType;
+  color: string;
+  strokeSize: number;
+  annotationActive: boolean;
+  getDrawing: (docId: string, page: number) => string | undefined;
+  saveDrawing: (docId: string, page: number, data: string) => void;
 }
 
 export default function PDFScrollViewer({
   document, virtualPages, currentVirtualIndex, onPageChange,
   zoom, getNotesForPage, isRecording, recordingContext,
   onRecordStart, onRecordStop,
+  tool, penType, color, strokeSize, annotationActive,
+  getDrawing, saveDrawing,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -278,19 +458,20 @@ export default function PDFScrollViewer({
   const mountedRef = useRef(false);
   const initialIndexRef = useRef(currentVirtualIndex);
 
-  // Measure container width for page sizing
+  // Measure content width consistently — getBoundingClientRect includes padding (24px×2=48px)
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    setContainerWidth(Math.floor(el.getBoundingClientRect().width));
+    setContainerWidth(Math.floor(el.getBoundingClientRect().width - 48));
     const obs = new ResizeObserver(([entry]) => {
+      // contentRect already excludes padding
       setContainerWidth(Math.floor(entry.contentRect.width));
     });
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
 
-  // On mount: jump to the current page (no animation, just position)
+  // On mount: jump to current page without animation
   useEffect(() => {
     if (mountedRef.current) return;
     mountedRef.current = true;
@@ -303,10 +484,9 @@ export default function PDFScrollViewer({
     return () => clearTimeout(t);
   }, []);
 
-  // External index change (nav buttons / thumbnail click) → smooth scroll to page
+  // External index change (nav buttons / thumbnails) → smooth scroll
   useEffect(() => {
     if (!mountedRef.current) return;
-    // Skip if this index change came from the user scrolling
     if (Date.now() - lastUserScrollRef.current < 400) return;
     const el = pageRefsMap.current.get(currentVirtualIndex);
     if (!el || !containerRef.current) return;
@@ -316,13 +496,12 @@ export default function PDFScrollViewer({
     return () => clearTimeout(t);
   }, [currentVirtualIndex]);
 
-  // User scroll → find nearest page → update index in parent
+  // User scroll → find nearest page → update index
   const onScroll = useCallback(() => {
     if (programmaticRef.current) return;
     const container = containerRef.current;
     if (!container) return;
     lastUserScrollRef.current = Date.now();
-
     const viewMid = container.scrollTop + container.clientHeight / 2;
     let bestIdx = 0;
     let bestDist = Infinity;
@@ -333,9 +512,6 @@ export default function PDFScrollViewer({
     });
     onPageChange(bestIdx);
   }, [onPageChange]);
-
-  // Usable width = container minus horizontal padding (24px each side)
-  const usableWidth = Math.max(containerWidth - 48, 100);
 
   return (
     <div
@@ -361,13 +537,16 @@ export default function PDFScrollViewer({
           isRecording &&
           recordingContext?.documentId === document.id &&
           recordingContext?.pageNumber === pageId;
+        const savedDrawing = vp.type === 'pdf'
+          ? getDrawing(document.id, vp.pdfPage)
+          : undefined;
 
         return (
           <ScrollPageItem
             key={vp.type === 'pdf' ? `pdf-${vp.pdfPage}` : `blank-${vp.blankPage.id}`}
             vp={vp}
             document={document}
-            containerWidth={usableWidth}
+            containerWidth={containerWidth}
             zoom={zoom}
             notes={notes}
             isRecordingHere={isRecordingHere}
@@ -375,6 +554,13 @@ export default function PDFScrollViewer({
             onRecordStop={onRecordStop}
             pageRefsMap={pageRefsMap.current}
             index={idx}
+            tool={tool}
+            penType={penType}
+            color={color}
+            strokeSize={strokeSize}
+            annotationActive={annotationActive}
+            savedDrawing={savedDrawing}
+            onSavePageDrawing={saveDrawing}
           />
         );
       })}

@@ -1223,6 +1223,13 @@ export default function WorkspacePage() {
                         recordingContext={recordingContext}
                         onRecordStart={startRecording}
                         onRecordStop={stopRecording}
+                        tool={leftTool}
+                        penType={leftPenType}
+                        color={leftColor}
+                        strokeSize={leftStrokeSize}
+                        annotationActive={annotationBarOpen}
+                        getDrawing={getDrawing}
+                        saveDrawing={saveDrawing}
                       />
                     ) : !showSplit && isBlankPage ? (
                       <BlankPageCanvas
