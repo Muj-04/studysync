@@ -28,6 +28,7 @@ export default function LoginPage() {
 
   const handleLogin = () => {
     localStorage.setItem('isLoggedIn', 'true');
+    window.location.href = '/workspace';
   };
 
   return (
@@ -103,13 +104,12 @@ export default function LoginPage() {
         </div>
 
         {/* Login button */}
-        <Link
-          href="/workspace"
+        <button
           onClick={handleLogin}
-          style={{ display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px', background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', fontFamily: 'inherit', textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box' }}
+          style={{ display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px', background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box' }}
         >
           Login
-        </Link>
+        </button>
 
         {/* Register link */}
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
