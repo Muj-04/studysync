@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 // Glassmorphism constants shared across inputs
 const glassInput: React.CSSProperties = {
@@ -17,20 +17,19 @@ const glassInput: React.CSSProperties = {
 };
 
 export default function LoginPage() {
-  const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('isLoggedIn')) router.replace('/workspace');
-  }, [router]);
+    if (localStorage.getItem('isLoggedIn')) window.location.replace('/workspace');
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('isLoggedIn', 'true');
-    router.push('/workspace');
+    window.location.href = '/workspace';
   };
 
   return (
@@ -119,11 +118,9 @@ export default function LoginPage() {
         {/* Register link */}
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
           Don&apos;t have an account?{' '}
-          <a href="#" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}
-            onMouseOver={(e) => (e.currentTarget.style.textDecoration = 'underline')}
-            onMouseOut={(e) => (e.currentTarget.style.textDecoration = 'none')}>
+          <Link href="/register" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}>
             Register
-          </a>
+          </Link>
         </p>
       </form>
     </div>
