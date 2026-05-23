@@ -137,17 +137,14 @@ export default function PDFViewer({
           const tlContainer = textLayerRef.current;
           if (tlContainer) {
             tlContainer.innerHTML = '';
+            tlContainer.style.setProperty('--total-scale-factor', String(cssScale));
             try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const TextLayerCls = (pdfjs as any).TextLayer;
-              if (TextLayerCls) {
-                const layer = new TextLayerCls({
-                  textContentSource: page.streamTextContent(),
-                  container: tlContainer,
-                  viewport: cssVp,
-                });
-                await layer.render();
-              }
+              const layer = new pdfjs.TextLayer({
+                textContentSource: page.streamTextContent(),
+                container: tlContainer,
+                viewport: cssVp,
+              });
+              await layer.render();
             } catch { /* text layer is non-critical */ }
           }
         }

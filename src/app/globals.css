@@ -220,7 +220,7 @@ button:active:not(:disabled) {
   transition: transform 0.08s ease !important;
 }
 
-/* ── PDF.js text layer — transparent but selectable ── */
+/* ── PDF.js 5.x text layer — transparent but selectable ── */
 .pdf-text-layer {
   position: absolute;
   inset: 0;
@@ -228,19 +228,44 @@ button:active:not(:disabled) {
   z-index: 2;
   line-height: 1;
   -webkit-text-size-adjust: none;
+     -moz-text-size-adjust: none;
+          text-size-adjust: none;
   forced-color-adjust: none;
+  transform-origin: 0 0;
   user-select: text;
   -webkit-user-select: text;
+
+  /* pdfjs 5.x CSS variable cascade — --total-scale-factor is set via inline style */
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor, 1) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
 }
-.pdf-text-layer span,
-.pdf-text-layer br {
+
+.pdf-text-layer > :not(.markedContent),
+.pdf-text-layer .markedContent span:not(.markedContent) {
   color: transparent;
   position: absolute;
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
+
+.pdf-text-layer .markedContent {
+  display: contents;
+}
+
 .pdf-text-layer ::selection {
+  background: rgba(37, 99, 235, 0.35);
+  color: transparent;
+}
+
+.pdf-text-layer ::-moz-selection {
   background: rgba(37, 99, 235, 0.35);
   color: transparent;
 }
