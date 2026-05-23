@@ -1,11 +1,31 @@
 'use client';
-import { useRef } from 'react';
-import { ImagePlus, Trash2, FileOutput, Mic, Sparkles, Languages, Table2, Quote, FunctionSquare, BookMarked } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { ImagePlus, Trash2, FileOutput, Mic, Sparkles, Languages, Table2, Quote, FunctionSquare, BookMarked, Loader2 } from 'lucide-react';
+import { callGemini } from '@/lib/gemini';
+
+// ── PDF text extraction ───────────────────────────────────────────────────────
+
+async function extractPageText(url: string, pageNum: number): Promise<string> {
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
+  const doc = await pdfjs.getDocument(url).promise;
+  const page = await doc.getPage(pageNum);
+  const content = await page.getTextContent();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return content.items.map((item: any) => item.str ?? '').join(' ').trim();
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const BG_THEMES: Array<{ theme: 'white' | 'dark'; label: string; bg: string; dotColor: string }> = [
   { theme: 'white', label: 'White', bg: '#ffffff',  dotColor: 'rgba(0,0,0,0.15)' },
   { theme: 'dark',  label: 'Dark',  bg: '#1e1e2e',  dotColor: 'rgba(255,255,255,0.18)' },
 ];
+
+const LANGS = ['Arabic', 'French', 'Spanish'] as const;
+type Lang = typeof LANGS[number];
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   isOpen:             boolean;
@@ -18,6 +38,9 @@ interface Props {
   onChangeBgTheme?:   (theme: 'white' | 'dark') => void;
   onVoiceNote?:       () => void;
   isRecording?:       boolean;
+  documentUrl?:       string;
+  currentPdfPage?:    number | null;
+  selectedText?:      string;
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────
@@ -31,48 +54,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     }}>
       {children}
     </p>
-  );
-}
-
-// ── Glass card tool button ────────────────────────────────────────────────────
-
-function ToolCard({
-  icon, title, sub, onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  sub: string;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '100%',
-        display: 'flex', alignItems: 'flex-start', gap: 10,
-        padding: '10px 11px',
-        borderRadius: 8,
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        color: 'var(--text-1)',
-        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-        transition: 'border-color 0.13s, background 0.13s',
-      }}
-      onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-        borderColor: 'rgba(37,99,235,0.45)',
-        background: 'var(--bg-hover)',
-      })}
-      onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-        borderColor: 'var(--border)',
-        background: 'var(--bg-elevated)',
-      })}
-    >
-      <span style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }}>{icon}</span>
-      <div>
-        <p style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-1)', lineHeight: 1.3 }}>{title}</p>
-        <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.4 }}>{sub}</p>
-      </div>
-    </button>
   );
 }
 
@@ -92,12 +73,10 @@ function TemplateTile({ icon, label }: { icon: React.ReactNode; label: string })
         transition: 'border-color 0.13s, background 0.13s',
       }}
       onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-        borderColor: 'rgba(37,99,235,0.45)',
-        background: 'var(--bg-hover)',
+        borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)',
       })}
       onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-        borderColor: 'var(--border)',
-        background: 'var(--bg-elevated)',
+        borderColor: 'var(--border)', background: 'var(--bg-elevated)',
       })}
     >
       <span style={{ color: 'var(--text-3)' }}>{icon}</span>
@@ -179,8 +158,77 @@ export default function DocumentToolsPanel({
   onInsertBlankPage, onInsertImage, onDeleteBlankPage,
   currentBgTheme, onChangeBgTheme,
   onVoiceNote, isRecording = false,
+  documentUrl, currentPdfPage, selectedText = '',
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Summary state ──────────────────────────────────────────────────────────
+  const [summaryState, setSummaryState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [summaryBullets, setSummaryBullets] = useState<string[]>([]);
+  const [summaryError, setSummaryError]   = useState('');
+
+  useEffect(() => {
+    setSummaryState('idle');
+    setSummaryBullets([]);
+    setSummaryError('');
+  }, [documentUrl, currentPdfPage]);
+
+  async function handleSummary() {
+    if (!documentUrl || !currentPdfPage || isBlankPage) return;
+    setSummaryState('loading');
+    try {
+      const text = await extractPageText(documentUrl, currentPdfPage);
+      if (!text) {
+        setSummaryState('error');
+        setSummaryError('No extractable text found on this page (may be image-based).');
+        return;
+      }
+      const prompt =
+        'Summarize the following text in 3–5 concise bullet points. ' +
+        'Return ONLY the bullet points, one per line, each starting with "• ". No headers or extra text.\n\n' +
+        text.slice(0, 8000);
+      const raw = await callGemini(prompt);
+      const bullets = raw
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+        .map(l => l.replace(/^[•\-\*]\s*/, '').replace(/^\d+[.)]\s*/, '').trim())
+        .filter(Boolean);
+      setSummaryBullets(bullets.length ? bullets : [raw.trim()]);
+      setSummaryState('done');
+    } catch (e) {
+      setSummaryState('error');
+      setSummaryError((e as Error).message.slice(0, 120));
+    }
+  }
+
+  // ── Translate state ────────────────────────────────────────────────────────
+  const [translateLang, setTranslateLang]     = useState<Lang>('French');
+  const [translateState, setTranslateState]   = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [translateResult, setTranslateResult] = useState('');
+  const [translateError, setTranslateError]   = useState('');
+
+  async function handleTranslate() {
+    if (!selectedText.trim()) return;
+    setTranslateState('loading');
+    setTranslateResult('');
+    setTranslateError('');
+    try {
+      const prompt =
+        `Translate the following text to ${translateLang}. ` +
+        'Return ONLY the translation, no explanations or notes.\n\n' +
+        selectedText.slice(0, 2000);
+      const result = await callGemini(prompt);
+      setTranslateResult(result.trim());
+      setTranslateState('done');
+    } catch (e) {
+      setTranslateState('error');
+      setTranslateError((e as Error).message.slice(0, 120));
+    }
+  }
+
+  const canSummarize = !!documentUrl && !!currentPdfPage && !isBlankPage;
+  const canTranslate = !!selectedText.trim() && translateState !== 'loading';
 
   return (
     <aside style={{ width: '100%', flexShrink: 0, height: '100%', overflow: 'hidden' }}>
@@ -215,20 +263,222 @@ export default function DocumentToolsPanel({
           display: 'flex', flexDirection: 'column', gap: 14,
         }}>
 
-          {/* ── AI Tools ── */}
+          {/* ── AI Assistant ── */}
           <div>
             <SectionLabel>AI Assistant</SectionLabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <ToolCard
-                icon={<Sparkles size={15} />}
-                title="AI Summary"
-                sub="Generate a concise summary of current page content."
-              />
-              <ToolCard
-                icon={<Languages size={15} />}
-                title="Translate Section"
-                sub="Select text to translate to a secondary language."
-              />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+
+              {/* AI Summary card */}
+              <div style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 8, padding: '10px 11px',
+              }}>
+                {/* Header row */}
+                <div style={{
+                  display: 'flex', alignItems: 'center',
+                  justifyContent: 'space-between', marginBottom: 6,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Sparkles size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
+                      AI Summary
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleSummary}
+                    disabled={!canSummarize || summaryState === 'loading'}
+                    style={{
+                      height: 22, padding: '0 9px',
+                      borderRadius: 5, fontSize: 10.5, fontWeight: 500,
+                      background: canSummarize && summaryState !== 'loading'
+                        ? 'var(--accent)' : 'var(--bg-active)',
+                      border: 'none',
+                      color: canSummarize && summaryState !== 'loading'
+                        ? '#fff' : 'var(--text-3)',
+                      cursor: canSummarize && summaryState !== 'loading'
+                        ? 'pointer' : 'not-allowed',
+                      fontFamily: 'inherit', flexShrink: 0,
+                      transition: 'background 0.13s',
+                    }}
+                    onMouseOver={(e) => {
+                      if (canSummarize && summaryState !== 'loading')
+                        e.currentTarget.style.background = 'var(--accent-hover)';
+                    }}
+                    onMouseOut={(e) => {
+                      if (canSummarize && summaryState !== 'loading')
+                        e.currentTarget.style.background = 'var(--accent)';
+                    }}
+                  >
+                    {summaryState === 'done' ? 'Regenerate' : 'Generate'}
+                  </button>
+                </div>
+
+                {/* Loading */}
+                {summaryState === 'loading' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
+                    <Loader2 size={12} style={{
+                      color: 'var(--accent)', flexShrink: 0,
+                      animation: 'spin 0.9s linear infinite',
+                    }} />
+                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Analyzing page…</span>
+                  </div>
+                )}
+
+                {/* Bullets */}
+                {summaryState === 'done' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {summaryBullets.map((bullet, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <span style={{
+                          width: 4, height: 4, borderRadius: '50%',
+                          background: 'var(--accent)', flexShrink: 0, marginTop: 6,
+                        }} />
+                        <p style={{
+                          fontSize: 11.5, color: 'var(--text-2)',
+                          lineHeight: 1.55, margin: 0,
+                        }}>
+                          {bullet}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Error */}
+                {summaryState === 'error' && (
+                  <p style={{ fontSize: 11, color: 'var(--red)', lineHeight: 1.4, margin: 0 }}>
+                    {summaryError}
+                  </p>
+                )}
+
+                {/* Idle hint */}
+                {summaryState === 'idle' && (
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
+                    {!hasDocument
+                      ? 'Open a PDF first.'
+                      : isBlankPage
+                        ? 'Not available on blank pages.'
+                        : 'Generate a 3–5 bullet summary of this page.'}
+                  </p>
+                )}
+              </div>
+
+              {/* Translate card */}
+              <div style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 8, padding: '10px 11px',
+              }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <Languages size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
+                    Translate
+                  </span>
+                </div>
+
+                {/* Language pills */}
+                <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                  {LANGS.map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => setTranslateLang(lang)}
+                      style={{
+                        flex: 1, height: 24,
+                        borderRadius: 5, fontSize: 10, fontWeight: 600,
+                        background: translateLang === lang ? 'var(--accent-muted)' : 'transparent',
+                        border: `1px solid ${translateLang === lang ? 'var(--accent)' : 'var(--border)'}`,
+                        color: translateLang === lang ? 'var(--accent-hover)' : 'var(--text-3)',
+                        cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '0.03em',
+                        transition: 'background 0.12s, border-color 0.12s, color 0.12s',
+                      }}
+                    >
+                      {lang === 'Arabic' ? 'AR' : lang === 'French' ? 'FR' : 'ES'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Selected text preview */}
+                {selectedText.trim() ? (
+                  <div style={{
+                    fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.45,
+                    background: 'var(--bg-active)', borderRadius: 5,
+                    padding: '5px 8px', marginBottom: 8,
+                    border: '1px solid var(--border-subtle)',
+                    fontStyle: 'italic',
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                  }}>
+                    &ldquo;{selectedText.slice(0, 150)}{selectedText.length > 150 ? '…' : ''}&rdquo;
+                  </div>
+                ) : (
+                  <p style={{
+                    fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, marginBottom: 8,
+                  }}>
+                    Select text on the PDF page.
+                  </p>
+                )}
+
+                {/* Translate button */}
+                <button
+                  onClick={handleTranslate}
+                  disabled={!canTranslate}
+                  style={{
+                    width: '100%', height: 28,
+                    borderRadius: 6, fontSize: 11.5, fontWeight: 500,
+                    background: canTranslate ? 'var(--accent)' : 'var(--bg-active)',
+                    border: 'none',
+                    color: canTranslate ? '#fff' : 'var(--text-3)',
+                    cursor: canTranslate ? 'pointer' : 'not-allowed',
+                    fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    transition: 'background 0.13s',
+                  }}
+                  onMouseOver={(e) => {
+                    if (canTranslate) e.currentTarget.style.background = 'var(--accent-hover)';
+                  }}
+                  onMouseOut={(e) => {
+                    if (canTranslate) e.currentTarget.style.background = 'var(--accent)';
+                  }}
+                >
+                  {translateState === 'loading' ? (
+                    <>
+                      <Loader2 size={12} style={{ animation: 'spin 0.9s linear infinite' }} />
+                      Translating…
+                    </>
+                  ) : (
+                    `Translate to ${translateLang}`
+                  )}
+                </button>
+
+                {/* Translation result */}
+                {translateState === 'done' && translateResult && (
+                  <div style={{
+                    marginTop: 8,
+                    background: 'var(--bg-active)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 6, padding: '8px 9px',
+                  }}>
+                    <p style={{
+                      fontSize: 11.5, color: 'var(--text-1)',
+                      lineHeight: 1.6, margin: 0,
+                    }}>
+                      {translateResult}
+                    </p>
+                  </div>
+                )}
+
+                {/* Error */}
+                {translateState === 'error' && (
+                  <p style={{ fontSize: 11, color: 'var(--red)', lineHeight: 1.4, marginTop: 6 }}>
+                    {translateError}
+                  </p>
+                )}
+              </div>
+
             </div>
           </div>
 
@@ -236,17 +486,17 @@ export default function DocumentToolsPanel({
           <div>
             <SectionLabel>Quick Templates</SectionLabel>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-              <TemplateTile icon={<Table2 size={15} />}    label="Data Table" />
-              <TemplateTile icon={<Quote size={15} />}     label="Citation" />
+              <TemplateTile icon={<Table2 size={15} />}         label="Data Table" />
+              <TemplateTile icon={<Quote size={15} />}          label="Citation" />
               <TemplateTile icon={<FunctionSquare size={15} />} label="Equation" />
-              <TemplateTile icon={<BookMarked size={15} />} label="Key Term" />
+              <TemplateTile icon={<BookMarked size={15} />}     label="Key Term" />
             </div>
           </div>
 
           {/* ── Divider ── */}
           <div style={{ height: 1, background: 'var(--border-subtle)' }} />
 
-          {/* ── Page Actions (blank page tools) ── */}
+          {/* ── Add Blank Page ── */}
           <div>
             <SectionLabel>Add Blank Page</SectionLabel>
             <BgSwatches disabled={!hasDocument} onSelect={onInsertBlankPage} />
@@ -259,8 +509,7 @@ export default function DocumentToolsPanel({
             style={{
               width: '100%',
               display: 'flex', alignItems: 'center', gap: 8,
-              padding: '9px 11px',
-              borderRadius: 8,
+              padding: '9px 11px', borderRadius: 8,
               background: 'transparent',
               border: `1px solid ${(!isBlankPage || !onInsertImage) ? 'var(--border-subtle)' : 'var(--border)'}`,
               color: (!isBlankPage || !onInsertImage) ? 'var(--text-3)' : 'var(--text-2)',
@@ -285,7 +534,7 @@ export default function DocumentToolsPanel({
             Insert Image
           </button>
 
-          {/* Page Background */}
+          {/* Page Background (blank pages only) */}
           {isBlankPage && onChangeBgTheme && (
             <div>
               <SectionLabel>Page Background</SectionLabel>
@@ -308,8 +557,12 @@ export default function DocumentToolsPanel({
                 fontSize: 12.5, fontWeight: 500,
                 transition: 'background 0.13s, border-color 0.13s',
               }}
-              onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--red-muted)', borderColor: 'rgba(229,72,77,.25)' })}
-              onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', borderColor: 'var(--border)' })}
+              onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                background: 'var(--red-muted)', borderColor: 'rgba(229,72,77,.25)',
+              })}
+              onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                background: 'transparent', borderColor: 'var(--border)',
+              })}
             >
               <Trash2 size={14} />
               Delete Page
@@ -342,8 +595,7 @@ export default function DocumentToolsPanel({
             style={{
               width: '100%',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 12px',
-              borderRadius: 8,
+              padding: '10px 12px', borderRadius: 8,
               background: isRecording ? 'rgba(229,72,77,0.1)' : 'var(--bg-elevated)',
               border: `1px solid ${isRecording ? 'rgba(229,72,77,0.3)' : 'var(--border)'}`,
               color: 'var(--text-1)',
@@ -351,10 +603,14 @@ export default function DocumentToolsPanel({
               transition: 'background 0.13s, border-color 0.13s',
             }}
             onMouseOver={(e) => {
-              if (!isRecording) Object.assign(e.currentTarget.style, { borderColor: 'rgba(37,99,235,0.4)', background: 'var(--bg-hover)' });
+              if (!isRecording) Object.assign(e.currentTarget.style, {
+                borderColor: 'rgba(37,99,235,0.4)', background: 'var(--bg-hover)',
+              });
             }}
             onMouseOut={(e) => {
-              if (!isRecording) Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', background: 'var(--bg-elevated)' });
+              if (!isRecording) Object.assign(e.currentTarget.style, {
+                borderColor: 'var(--border)', background: 'var(--bg-elevated)',
+              });
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -371,7 +627,8 @@ export default function DocumentToolsPanel({
             </div>
             {isRecording && (
               <span className="rec-dot" style={{
-                width: 6, height: 6, borderRadius: '50%', background: 'var(--red)', flexShrink: 0,
+                width: 6, height: 6, borderRadius: '50%',
+                background: 'var(--red)', flexShrink: 0,
               }} />
             )}
           </button>
