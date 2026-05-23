@@ -48,8 +48,9 @@ export default function PDFViewer({
   onPageReady, searchHighlights, searchActiveIndex,
   disablePinch = false,
 }: Props) {
-  const canvasRef   = useRef<HTMLCanvasElement>(null);
-  const scrollRef   = useRef<HTMLDivElement>(null);
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const scrollRef    = useRef<HTMLDivElement>(null);
+  const textLayerRef = useRef<HTMLDivElement>(null);
   const pdfRef      = useRef<PDFDocumentProxy | null>(null);
   const pdfUrlRef   = useRef<string>('');
   const renderTaskRef = useRef<RenderTask | null>(null);
@@ -131,6 +132,24 @@ export default function PDFViewer({
           setCssDims({ w: cssVp.width, h: cssVp.height });
           onDimsRef.current?.(cssVp.width, cssVp.height);
           onPageReadyRef.current?.(page, cssVp);
+
+          // Render text layer so text is selectable
+          const tlContainer = textLayerRef.current;
+          if (tlContainer) {
+            tlContainer.innerHTML = '';
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const TextLayerCls = (pdfjs as any).TextLayer;
+              if (TextLayerCls) {
+                const layer = new TextLayerCls({
+                  textContentSource: page.streamTextContent(),
+                  container: tlContainer,
+                  viewport: cssVp,
+                });
+                await layer.render();
+              }
+            } catch { /* text layer is non-critical */ }
+          }
         }
       } catch (err) {
         if (cancelled) return;
@@ -277,7 +296,7 @@ export default function PDFViewer({
           </div>
         )}
 
-        {/* Canvas wrapper — gives a positioning context for highlight rects */}
+        {/* Canvas wrapper — gives a positioning context for highlight rects and text layer */}
         <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
           <canvas
             ref={canvasRef}
@@ -289,6 +308,8 @@ export default function PDFViewer({
               transition: 'opacity 0.25s ease',
             }}
           />
+
+          <div ref={textLayerRef} className="pdf-text-layer" />
 
           {/* Search highlights */}
           {cssDims && searchHighlights && searchHighlights.length > 0 && searchHighlights.map((h, i) => {

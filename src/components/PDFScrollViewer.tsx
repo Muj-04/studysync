@@ -190,6 +190,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
+  const textLayerRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [cssDims, setCssDims] = useState<{ w: number; h: number } | null>(null);
   const renderKeyRef = useRef(0);
@@ -248,6 +249,24 @@ const ScrollPageItem = memo(function ScrollPageItem({
         await renderTask.promise;
         if (key !== renderKeyRef.current) return;
         setCssDims({ w: cssVp.width, h: cssVp.height });
+
+        const tlContainer = textLayerRef.current;
+        if (tlContainer) {
+          tlContainer.innerHTML = '';
+          try {
+            const pdfjs = await getPDFJS();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const TextLayerCls = (pdfjs as any).TextLayer;
+            if (TextLayerCls) {
+              const layer = new TextLayerCls({
+                textContentSource: page.streamTextContent(),
+                container: tlContainer,
+                viewport: cssVp,
+              });
+              await layer.render();
+            }
+          } catch { /* text layer is non-critical */ }
+        }
       } catch { /* cancelled or PDF error */ }
     })();
   }, [visible, vp, document.url, containerWidth, zoom]);
@@ -385,6 +404,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
         </div>
       )}
       <canvas ref={canvasRef} style={{ display: 'block' }} />
+      <div ref={textLayerRef} className="pdf-text-layer" />
       {/* Drawing canvas overlay — mounted once PDF renders */}
       {cssDims && (
         <canvas
@@ -392,6 +412,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
           style={{
             position: 'absolute', top: 0, left: 0,
             display: 'block',
+            zIndex: 3,
             pointerEvents: canDrawNow ? 'auto' : 'none',
             cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
             touchAction: canDrawNow ? 'none' : 'pan-y',
