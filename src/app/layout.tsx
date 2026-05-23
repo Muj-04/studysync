@@ -55,6 +55,7 @@ export default function RootLayout({
             backgroundPosition: "center",
             backgroundRepeat: "no-repeat",
             zIndex: -2,
+            pointerEvents: "none",
           }}
         />
         {/* Dark overlay — helps login glassmorphism pop */}
@@ -65,6 +66,7 @@ export default function RootLayout({
             inset: 0,
             background: "rgba(0,0,0,0.52)",
             zIndex: -1,
+            pointerEvents: "none",
           }}
         />
         {children}
