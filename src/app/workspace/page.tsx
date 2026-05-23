@@ -709,6 +709,7 @@ export default function WorkspacePage() {
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
   const [viewMode, setViewMode]             = useState<'page' | 'scroll'>('page');
+  const [selectedText, setSelectedText]     = useState('');
 
   // ── Resizable panels ──────────────────────────────────────────────────────
   const SIDEBAR_MIN = 150;
@@ -780,6 +781,16 @@ export default function WorkspacePage() {
   }, [isDraggingLeft, isDraggingRight]);
 
   useEffect(() => { if (isRecording) setVoiceSheetOpen(true); }, [isRecording]);
+
+  // Track text selected anywhere on the page for the Translate feature
+  useEffect(() => {
+    const onSel = () => {
+      const text = window.getSelection()?.toString().trim() ?? '';
+      if (text) setSelectedText(text);
+    };
+    document.addEventListener('selectionchange', onSel);
+    return () => document.removeEventListener('selectionchange', onSel);
+  }, []);
 
   // ── Voice notes ───────────────────────────────────────────────────────────
   const activePdfPage = activeDocument?.currentPage ?? 1;
@@ -1519,6 +1530,9 @@ export default function WorkspacePage() {
               }
               onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
               isRecording={isRecording}
+              documentUrl={activeDocument?.url}
+              currentPdfPage={currentPdfPage}
+              selectedText={selectedText}
             />
           </div>
 
