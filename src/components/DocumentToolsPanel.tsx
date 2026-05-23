@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
 import { ImagePlus, Trash2, FileOutput, Mic, Sparkles, Languages, Table2, Quote, FunctionSquare, BookMarked, Loader2 } from 'lucide-react';
-import { callGemini } from '@/lib/gemini';
+import { callAI } from '@/lib/gemini';
 
 // ── PDF text extraction ───────────────────────────────────────────────────────
 
@@ -183,11 +183,7 @@ export default function DocumentToolsPanel({
         setSummaryError('No extractable text found on this page (may be image-based).');
         return;
       }
-      const prompt =
-        'Summarize the following text in 3–5 concise bullet points. ' +
-        'Return ONLY the bullet points, one per line, each starting with "• ". No headers or extra text.\n\n' +
-        text.slice(0, 8000);
-      const raw = await callGemini(prompt);
+      const raw = await callAI('summary', text);
       const bullets = raw
         .split('\n')
         .map(l => l.trim())
@@ -214,11 +210,7 @@ export default function DocumentToolsPanel({
     setTranslateResult('');
     setTranslateError('');
     try {
-      const prompt =
-        `Translate the following text to ${translateLang}. ` +
-        'Return ONLY the translation, no explanations or notes.\n\n' +
-        selectedText.slice(0, 2000);
-      const result = await callGemini(prompt);
+      const result = await callAI('translate', selectedText, translateLang);
       setTranslateResult(result.trim());
       setTranslateState('done');
     } catch (e) {
