@@ -1,5 +1,5 @@
 'use client';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { BookOpen } from 'lucide-react';
 
 const HERO_IMG =
@@ -517,8 +517,6 @@ function FeatureCard({
 // ── Main landing page ─────────────────────────────────────────────────────────
 
 export default function LandingPage() {
-  const router = useRouter();
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -572,9 +570,10 @@ export default function LandingPage() {
           </div>
 
           {/* Get Started — with warm amber glow matching the brick wall light */}
-          <button
-            onClick={() => router.push('/login')}
+          <Link
+            href="/login"
             style={{
+              display: 'inline-flex', alignItems: 'center',
               height: 42, padding: '0 26px',
               borderRadius: 10,
               background: 'rgba(20,16,10,0.75)',
@@ -582,6 +581,7 @@ export default function LandingPage() {
               color: '#fff',
               fontSize: 14, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit',
+              textDecoration: 'none',
               boxShadow: [
                 '0 0 24px rgba(230,150,40,0.35)',
                 '0 0 60px rgba(200,120,20,0.18)',
@@ -590,17 +590,9 @@ export default function LandingPage() {
               transition: 'box-shadow 0.2s, background 0.2s',
               letterSpacing: '-0.01em',
             }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-              background: 'rgba(30,22,12,0.85)',
-              boxShadow: '0 0 36px rgba(230,150,40,0.5), 0 0 80px rgba(200,120,20,0.28), inset 0 1px 0 rgba(255,200,80,0.18)',
-            })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-              background: 'rgba(20,16,10,0.75)',
-              boxShadow: '0 0 24px rgba(230,150,40,0.35), 0 0 60px rgba(200,120,20,0.18), inset 0 1px 0 rgba(255,200,80,0.12)',
-            })}
           >
             Get Started
-          </button>
+          </Link>
         </header>
 
         {/* ── Hero text ── */}
@@ -639,9 +631,10 @@ export default function LandingPage() {
 
           {/* CTA buttons */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 52 }}>
-            <button
-              onClick={() => router.push('/login')}
+            <Link
+              href="/login"
               style={{
+                display: 'inline-flex', alignItems: 'center',
                 height: 50, padding: '0 32px',
                 borderRadius: 9999,
                 background: 'rgba(255,255,255,0.10)',
@@ -651,20 +644,12 @@ export default function LandingPage() {
                 color: '#ffffff',
                 fontSize: 15, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
+                textDecoration: 'none',
                 letterSpacing: '-0.01em',
-                transition: 'background 0.18s, border-color 0.18s',
               }}
-              onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                background: 'rgba(255,255,255,0.16)',
-                borderColor: 'rgba(255,255,255,0.6)',
-              })}
-              onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                background: 'rgba(255,255,255,0.10)',
-                borderColor: 'rgba(255,255,255,0.40)',
-              })}
             >
-              Create Your Free Workspace
-            </button>
+              Start for Free
+            </Link>
 
             <button
               style={{
@@ -676,18 +661,7 @@ export default function LandingPage() {
                 fontSize: 15, fontWeight: 500,
                 cursor: 'pointer', fontFamily: 'inherit',
                 letterSpacing: '-0.01em',
-                transition: 'background 0.18s, border-color 0.18s, color 0.18s',
               }}
-              onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                background: 'rgba(255,255,255,0.06)',
-                borderColor: 'rgba(255,255,255,0.45)',
-                color: '#fff',
-              })}
-              onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                background: 'transparent',
-                borderColor: 'rgba(255,255,255,0.28)',
-                color: 'rgba(255,255,255,0.75)',
-              })}
             >
               Watch a Video Demo 🎯
             </button>
