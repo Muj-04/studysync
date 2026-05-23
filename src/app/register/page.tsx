@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
-// Glassmorphism constants shared across inputs
 const glassInput: React.CSSProperties = {
   width: '100%',
   padding: '0.75rem 2.8rem 0.75rem 1rem',
@@ -16,24 +15,23 @@ const glassInput: React.CSSProperties = {
   fontFamily: 'inherit',
 };
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
   useEffect(() => {
     if (localStorage.getItem('isLoggedIn')) window.location.replace('/workspace');
   }, []);
 
-  const handleLogin = () => {
+  const handleRegister = () => {
     localStorage.setItem('isLoggedIn', 'true');
     window.location.href = '/workspace';
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {/* Glassmorphism card */}
       <div
         style={{
           width: '100%',
@@ -47,12 +45,11 @@ export default function LoginPage() {
           color: '#fff',
         }}
       >
-        {/* Heading */}
         <h1 style={{ textAlign: 'center', fontSize: '2rem', fontWeight: 600, marginBottom: 4 }}>
-          Login
+          Register
         </h1>
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>
-          Welcome back — sign in to continue
+          Create your account to get started
         </p>
 
         {/* Username */}
@@ -63,21 +60,32 @@ export default function LoginPage() {
             autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="glass-input"
             style={glassInput}
           />
           <i className="bx bx-user" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
         </div>
 
+        {/* Email */}
+        <div style={{ position: 'relative', marginBottom: '1rem' }}>
+          <input
+            type="email"
+            placeholder="Email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={glassInput}
+          />
+          <i className="bx bx-envelope" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
+        </div>
+
         {/* Password */}
-        <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+        <div style={{ position: 'relative', marginBottom: '1.75rem' }}>
           <input
             type={showPass ? 'text' : 'password'}
             placeholder="Password"
-            autoComplete="current-password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="glass-input"
             style={glassInput}
           />
           <button
@@ -90,32 +98,19 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Remember me + Forgot password */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.75rem', fontSize: '0.85rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ accentColor: '#fff', width: 14, height: 14 }} />
-            <span style={{ color: 'rgba(255,255,255,0.85)' }}>Remember me</span>
-          </label>
-          <a href="#" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none' }}
-            onMouseOver={(e) => (e.currentTarget.style.color = '#fff')}
-            onMouseOut={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}>
-            Forgot password?
-          </a>
-        </div>
-
-        {/* Login button */}
+        {/* Register button */}
         <button
-          onClick={handleLogin}
+          onClick={handleRegister}
           style={{ display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px', background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box' }}
         >
-          Login
+          Create Account
         </button>
 
-        {/* Register link */}
+        {/* Login link */}
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
-          Don&apos;t have an account?{' '}
-          <Link href="/register" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}>
-            Register
+          Already have an account?{' '}
+          <Link href="/login" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}>
+            Login
           </Link>
         </p>
       </div>
