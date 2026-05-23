@@ -1,4 +1,4 @@
-const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const BASE = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 export async function callGemini(prompt: string): Promise<string> {
   const key = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
