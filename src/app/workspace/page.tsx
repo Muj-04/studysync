@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   BookOpen, X, LogOut, PanelLeft, PanelRight,
   ChevronUp, FilePlus, Search, CheckCircle,
@@ -424,16 +423,14 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
-  const router = useRouter();
-
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!localStorage.getItem('isLoggedIn')) router.replace('/login');
-  }, [router]);
+    if (!localStorage.getItem('isLoggedIn')) window.location.replace('/login');
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn');
-    router.push('/login');
+    window.location.href = '/login';
   };
 
   // ── Theme ─────────────────────────────────────────────────────────────────
