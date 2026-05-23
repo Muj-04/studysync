@@ -392,7 +392,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
       {/* Spinner while page is loading */}
       {visible && !cssDims && (
         <div style={{
-          position: 'absolute', inset: 0,
+          position: 'absolute', inset: 0, pointerEvents: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(255,255,255,0.9)',
         }}>

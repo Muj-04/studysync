@@ -957,7 +957,7 @@ export default function WorkspacePage() {
         padding: '0 12px 0 8px',
         background: 'var(--bg-app)',
         borderBottom: '1px solid var(--border-subtle)',
-        zIndex: 20,
+        position: 'relative', zIndex: 20,
         gap: 8,
       }}>
 
