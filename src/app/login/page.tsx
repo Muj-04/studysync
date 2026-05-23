@@ -26,17 +26,14 @@ export default function LoginPage() {
     if (localStorage.getItem('isLoggedIn')) window.location.replace('/workspace');
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = () => {
     localStorage.setItem('isLoggedIn', 'true');
-    window.location.href = '/workspace';
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       {/* Glassmorphism card */}
-      <form
-        onSubmit={handleLogin}
+      <div
         style={{
           width: '100%',
           maxWidth: 360,
@@ -106,14 +103,13 @@ export default function LoginPage() {
         </div>
 
         {/* Login button */}
-        <button
-          type="submit"
-          style={{ width: '100%', padding: '0.8rem', borderRadius: '9999px', background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', transition: 'opacity 0.2s', fontFamily: 'inherit' }}
-          onMouseOver={(e) => (e.currentTarget.style.opacity = '0.88')}
-          onMouseOut={(e) => (e.currentTarget.style.opacity = '1')}
+        <Link
+          href="/workspace"
+          onClick={handleLogin}
+          style={{ display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px', background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', fontFamily: 'inherit', textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box' }}
         >
           Login
-        </button>
+        </Link>
 
         {/* Register link */}
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
@@ -122,7 +118,7 @@ export default function LoginPage() {
             Register
           </Link>
         </p>
-      </form>
+      </div>
     </div>
   );
 }
