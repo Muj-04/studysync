@@ -68,3 +68,11 @@ export interface TextNote {
   fontSize: number; // px
   color: string;    // hex
 }
+
+export interface KeyTerm {
+  id: string;
+  documentId: string;
+  term: string;
+  definition: string;
+  createdAt: number;
+}
