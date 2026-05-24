@@ -76,3 +76,11 @@ export interface KeyTerm {
   definition: string;
   createdAt: number;
 }
+
+export interface Bookmark {
+  id: string;
+  documentId: string;
+  virtualIndex: number;
+  label: string;
+  createdAt: number;
+}
