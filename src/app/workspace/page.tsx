@@ -933,6 +933,48 @@ export default function WorkspacePage() {
     setPageTextNotes(prev => ({ ...prev, [leftNotesKey]: notes }));
   }, [leftNotesKey]);
 
+  const handleInsertTextNote = useCallback((note: Omit<TextNote, 'id'>) => {
+    if (!leftNotesKey) return;
+    const newNote: TextNote = { ...note, id: `note_${Date.now()}_${Math.random().toString(36).slice(2)}` };
+    setPageTextNotes(prev => ({ ...prev, [leftNotesKey]: [...(prev[leftNotesKey] ?? []), newNote] }));
+  }, [leftNotesKey]);
+
+  const handleInsertBlankPageWithGrid = useCallback((rows: number, cols: number) => {
+    if (!activeDocument) return;
+    const afterPage = currentVP?.type === 'pdf'
+      ? currentVP.pdfPage
+      : currentVP?.type === 'blank'
+        ? currentVP.blankPage.insertAfterPage
+        : activeDocument.currentPage;
+    const newPage = insertBlankPage(activeDocument.id, afterPage, defaultBgTheme);
+
+    // Draw grid on offscreen canvas and pre-load it as canvasData
+    const W = 816, H = 1056;
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      const isDark = defaultBgTheme === 'dark';
+      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.28)';
+      ctx.lineWidth = 1.5;
+      const pad = 60, tableW = W - pad * 2, tableH = H - pad * 2;
+      const cellW = tableW / cols, cellH = tableH / rows;
+      for (let r = 0; r <= rows; r++) {
+        const y = pad + r * cellH;
+        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad + tableW, y); ctx.stroke();
+      }
+      for (let c = 0; c <= cols; c++) {
+        const x = pad + c * cellW;
+        ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, pad + tableH); ctx.stroke();
+      }
+      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+      ctx.fillRect(pad, pad, tableW, cellH);
+    }
+    updateCanvasData(newPage.id, canvas.toDataURL('image/png'));
+    setVirtualIndex((i) => i + 1);
+  }, [activeDocument, currentVP, insertBlankPage, updateCanvasData, defaultBgTheme]);
+
   const handleRightBlankNotesChange = useCallback((notes: TextNote[]) => {
     if (!rightBlankNotesKey) return;
     setPageTextNotes(prev => ({ ...prev, [rightBlankNotesKey]: notes }));
@@ -1571,6 +1613,9 @@ export default function WorkspacePage() {
               documentUrl={activeDocument?.url}
               currentPdfPage={currentPdfPage}
               selectedText={selectedText}
+              activeDocumentId={activeDocumentId ?? undefined}
+              onInsertTextNote={hasDocument ? handleInsertTextNote : undefined}
+              onInsertBlankPageWithGrid={hasDocument ? handleInsertBlankPageWithGrid : undefined}
             />
           </div>
 
