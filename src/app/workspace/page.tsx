@@ -1332,7 +1332,20 @@ export default function WorkspacePage() {
                         <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                           {/* Close split-view button */}
                           <button
-                            onClick={() => setSplitMode(false)}
+                            onClick={() => {
+                              // If the virtual index is currently on a blank page,
+                              // navigate to its associated PDF page before exiting
+                              // split mode — otherwise the left pane would render
+                              // BlankPageCanvas instead of the document.
+                              if (currentVP?.type === 'blank') {
+                                const afterPage = currentVP.blankPage.insertAfterPage;
+                                const pdfIdx = afterPage > 0
+                                  ? virtualSequence.findIndex((vp) => vp.type === 'pdf' && vp.pdfPage === afterPage)
+                                  : virtualSequence.findIndex((vp) => vp.type === 'pdf');
+                                if (pdfIdx >= 0) setVirtualIndex(pdfIdx);
+                              }
+                              setSplitMode(false);
+                            }}
                             title="Close split view"
                             aria-label="Close split view"
                             style={{
