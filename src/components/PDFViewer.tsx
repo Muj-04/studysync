@@ -54,6 +54,9 @@ export default function PDFViewer({
   const pdfRef      = useRef<PDFDocumentProxy | null>(null);
   const pdfUrlRef   = useRef<string>('');
   const renderTaskRef = useRef<RenderTask | null>(null);
+  // Holds a cancel fn for any in-progress TextLayer render so we can abort it
+  // before starting a new one (avoids stale spans from a previous page appearing).
+  const textLayerInstanceRef = useRef<{ cancel: () => void } | null>(null);
   const onDimsRef       = useRef(onCanvasDimensions);
   const onZoomChangeRef = useRef(onZoomChange);
   const onPageReadyRef  = useRef(onPageReady);
@@ -62,6 +65,8 @@ export default function PDFViewer({
   const lastPinchDistRef = useRef<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // null = not yet checked; true = has text; false = no text (scanned/image page)
+  const [hasText, setHasText] = useState<boolean | null>(null);
   // CSS canvas dimensions — used to size the wrapper div for highlight positioning
   const [cssDims, setCssDims] = useState<{ w: number; h: number } | null>(null);
   // Ref map for scrolling active highlight into view
@@ -90,6 +95,7 @@ export default function PDFViewer({
     let cancelled = false;
     setIsLoading(true);
     setError(null);
+    setHasText(null); // reset per-page text status immediately
 
     async function render() {
       try {
@@ -127,26 +133,66 @@ export default function PDFViewer({
         renderTaskRef.current = page.render({ canvas: canvas!, viewport });
         await renderTaskRef.current.promise;
 
-        if (!cancelled) {
-          setIsLoading(false);
-          setCssDims({ w: cssVp.width, h: cssVp.height });
-          onDimsRef.current?.(cssVp.width, cssVp.height);
-          onPageReadyRef.current?.(page, cssVp);
+        if (cancelled) return;
 
-          // Render text layer so text is selectable
-          const tlContainer = textLayerRef.current;
-          if (tlContainer) {
-            tlContainer.innerHTML = '';
-            tlContainer.style.setProperty('--total-scale-factor', String(cssScale));
-            try {
-              const layer = new pdfjs.TextLayer({
-                textContentSource: page.streamTextContent(),
-                container: tlContainer,
-                viewport: cssVp,
-              });
-              await layer.render();
-            } catch { /* text layer is non-critical */ }
+        setIsLoading(false);
+        setCssDims({ w: cssVp.width, h: cssVp.height });
+        onDimsRef.current?.(cssVp.width, cssVp.height);
+        onPageReadyRef.current?.(page, cssVp);
+
+        // ── Text layer ──────────────────────────────────────────────────────
+        // Cancel any in-progress text layer from the previous page to prevent
+        // its spans from appearing after we've already cleared the container.
+        textLayerInstanceRef.current?.cancel();
+        textLayerInstanceRef.current = null;
+
+        const tlContainer = textLayerRef.current;
+        if (!tlContainer) return;
+
+        tlContainer.innerHTML = '';
+        tlContainer.style.setProperty('--total-scale-factor', String(cssScale));
+
+        try {
+          // Use getTextContent (promise-based) rather than streamTextContent so
+          // we can inspect the result before rendering and catch encoding errors
+          // that silently produce no items on some PDFs.
+          const textContent = await page.getTextContent({ includeMarkedContent: true });
+          if (cancelled) return;
+
+          // Count text items that actually contain non-whitespace characters.
+          // TextMarkedContent items don't have a `str` field — skip them.
+          const nonEmptyCount = textContent.items.filter(
+            (item) => 'str' in item && (item as { str: string }).str.trim().length > 0,
+          ).length;
+          const totalTextItems = textContent.items.filter((item) => 'str' in item).length;
+
+          console.log(
+            `[TextLayer] Page ${document.currentPage}: ` +
+            `${totalTextItems} text item(s), ${nonEmptyCount} non-empty — ` +
+            (nonEmptyCount > 0 ? 'text layer enabled' : 'no extractable text (image/scanned page)'),
+          );
+
+          if (nonEmptyCount === 0) {
+            setHasText(false);
+            return;
           }
+
+          setHasText(true);
+
+          const layer = new pdfjs.TextLayer({
+            textContentSource: textContent,
+            container: tlContainer,
+            viewport: cssVp,
+          });
+          textLayerInstanceRef.current = { cancel: () => layer.cancel() };
+          await layer.render();
+          if (!cancelled) textLayerInstanceRef.current = null;
+        } catch (err) {
+          console.warn(
+            `[TextLayer] Page ${document.currentPage} failed to render:`,
+            err,
+          );
+          if (!cancelled) setHasText(false);
         }
       } catch (err) {
         if (cancelled) return;
@@ -157,7 +203,12 @@ export default function PDFViewer({
     }
 
     render();
-    return () => { cancelled = true; renderTaskRef.current?.cancel(); };
+    return () => {
+      cancelled = true;
+      renderTaskRef.current?.cancel();
+      textLayerInstanceRef.current?.cancel();
+      textLayerInstanceRef.current = null;
+    };
   }, [document.url, document.currentPage, zoom]);
 
   // Ctrl / Cmd + scroll zoom
@@ -307,6 +358,39 @@ export default function PDFViewer({
           />
 
           <div ref={textLayerRef} className="pdf-text-layer" />
+
+          {/* Scanned-page notice */}
+          {!isLoading && hasText === false && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 14,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 3,
+                pointerEvents: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 13px',
+                borderRadius: 20,
+                background: 'rgba(0,0,0,0.55)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                stroke="rgba(255,255,255,0.55)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M3 9h18M9 21V9" />
+              </svg>
+              <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', fontWeight: 500 }}>
+                This page has no selectable text
+              </span>
+            </div>
+          )}
 
           {/* Search highlights */}
           {cssDims && searchHighlights && searchHighlights.length > 0 && searchHighlights.map((h, i) => {
