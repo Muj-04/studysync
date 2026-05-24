@@ -408,7 +408,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
 
     useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas }), [clearCanvas, undoCanvas]);
 
-    const canDrawNow = interactive && tool !== 'text';
+    const canDrawNow = interactive && tool !== 'text' && tool !== 'cursor';
 
     const overlay = canvasDims ? (
       <div style={{
