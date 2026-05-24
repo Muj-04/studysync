@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Pencil, Eraser, Trash2, X, Type, Undo2 } from 'lucide-react';
+import { Pencil, Eraser, Trash2, X, Type, Undo2, MousePointer } from 'lucide-react';
 import type { Tool, PenType } from '@/lib/drawing';
 import { PRESET_COLORS, SIZES } from '@/lib/drawing';
 
@@ -371,6 +371,13 @@ export default function FloatingAnnotationToolbar({
           {/* Tool rows */}
           <div style={{ padding: '6px 8px' }}>
             <ToolRow
+              active={tool === 'cursor'}
+              onClick={() => setTool('cursor')}
+              icon={<MousePointer size={13} />}
+              label="Cursor"
+            />
+            <Hr />
+            <ToolRow
               active={tool === 'pen' && penType === 'normal'}
               onClick={() => { setTool('pen'); setPenType('normal'); }}
               icon={<div style={{ width: 14, height: 2.5, borderRadius: 9999, background: 'currentColor' }} />}
@@ -598,6 +605,59 @@ export default function FloatingAnnotationToolbar({
         </div>
       )}
 
+      {/* ── Tool mode indicator (visible when toolbar is closed) ── */}
+      {!isOpen && !isDragging && !showHint && (
+        <div
+          style={{
+            position: 'absolute',
+            right: BTN + 8,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            background: tool === 'cursor' ? 'var(--bg-elevated)' : 'rgba(10,10,10,0.82)',
+            border: `1px solid ${tool === 'cursor' ? 'var(--border-strong)' : 'rgba(255,255,255,0.12)'}`,
+            borderRadius: 20,
+            padding: '4px 9px 4px 7px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {tool === 'cursor' ? (
+            <MousePointer size={11} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          ) : tool === 'eraser' ? (
+            <Eraser size={11} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          ) : tool === 'text' ? (
+            <Type size={11} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          ) : tool === 'line' ? (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
+              stroke={color} strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
+              <line x1="4" y1="20" x2="20" y2="4" />
+            </svg>
+          ) : (
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: color, flexShrink: 0,
+              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.18)',
+            }} />
+          )}
+          <span style={{
+            fontSize: 11, fontWeight: 500,
+            color: tool === 'cursor' ? 'var(--text-3)' : 'rgba(226,226,226,0.9)',
+          }}>
+            {tool === 'cursor' ? 'Cursor'
+              : tool === 'eraser' ? 'Eraser'
+              : tool === 'text' ? 'Text'
+              : tool === 'line' ? 'Line'
+              : penType === 'normal' ? 'Pen'
+              : penType === 'marker' ? 'Marker'
+              : 'Highlight'}
+          </span>
+        </div>
+      )}
+
       {/* ── Circular trigger / drag handle ── */}
       <button
         onPointerDown={handlePointerDown}
@@ -626,7 +686,10 @@ export default function FloatingAnnotationToolbar({
             : 'background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s',
         }}
       >
-        <Pencil size={22} strokeWidth={1.75} />
+        {tool === 'cursor'
+          ? <MousePointer size={20} strokeWidth={1.75} />
+          : <Pencil size={22} strokeWidth={1.75} />
+        }
       </button>
     </div>
   );

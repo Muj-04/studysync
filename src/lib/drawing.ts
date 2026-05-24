@@ -1,4 +1,4 @@
-export type Tool = 'pen' | 'line' | 'eraser' | 'text';
+export type Tool = 'pen' | 'line' | 'eraser' | 'text' | 'cursor';
 export type PenType = 'normal' | 'marker' | 'highlighter';
 
 const CUR_PEN =
@@ -15,6 +15,7 @@ const CUR_MARKER =
 
 /** Returns the CSS cursor value for a given drawing tool + pen type. */
 export function getDrawingCursor(tool: Tool, penType: PenType): string {
+  if (tool === 'cursor') return 'default';
   if (tool === 'text')   return 'text';
   if (tool === 'eraser') return CUR_ERASER;
   // pen or line

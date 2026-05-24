@@ -562,14 +562,14 @@ export default function WorkspacePage() {
   }, [removeBlankPage]);
 
   // ── Left-side drawing state ───────────────────────────────────────────────
-  const [leftTool, setLeftTool]             = useState<Tool>('pen');
+  const [leftTool, setLeftTool]             = useState<Tool>('cursor');
   const [leftPenType, setLeftPenType]       = useState<PenType>('normal');
   const [leftColor, setLeftColor]           = useState('#ededf0');
   const [leftStrokeSize, setLeftStrokeSize] = useState(5);
   const [leftZoom, setLeftZoom]             = useState(1.0);
 
   // ── Right-side drawing state ──────────────────────────────────────────────
-  const [rightTool, setRightTool]             = useState<Tool>('pen');
+  const [rightTool, setRightTool]             = useState<Tool>('cursor');
   const [rightPenType, setRightPenType]       = useState<PenType>('normal');
   const [rightColor, setRightColor]           = useState('#ededf0');
   const [rightStrokeSize, setRightStrokeSize] = useState(5);
@@ -1258,7 +1258,7 @@ export default function WorkspacePage() {
                         penType={leftPenType}
                         color={leftColor}
                         strokeSize={leftStrokeSize}
-                        annotationActive={annotationBarOpen}
+                        annotationActive={leftTool !== 'cursor'}
                         getDrawing={getDrawing}
                         saveDrawing={saveDrawing}
                       />
@@ -1293,7 +1293,7 @@ export default function WorkspacePage() {
                         onSave={handleSaveDrawing}
                         zoom={leftZoom}
                         onZoomChange={handleLeftZoomChange}
-                        interactive={annotationBarOpen && (!showSplit || activeSide === 'left')}
+                        interactive={atTool !== 'cursor' && (!showSplit || activeSide === 'left')}
                         notes={pageTextNotes[leftNotesKey] ?? []}
                         onNotesChange={handleLeftNotesChange}
                         onActivateTextTool={() => setLeftTool('text')}
@@ -1361,7 +1361,7 @@ export default function WorkspacePage() {
                           onSave={handleSaveRightDocDrawing}
                           zoom={rightZoom}
                           onZoomChange={handleRightZoomChange}
-                          interactive={annotationBarOpen && activeSide === 'right'}
+                          interactive={rightTool !== 'cursor' && activeSide === 'right'}
                           notes={pageTextNotes[rightDocNotesKey] ?? []}
                           onNotesChange={handleRightDocNotesChange}
                           onActivateTextTool={() => setRightTool('text')}

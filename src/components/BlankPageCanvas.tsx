@@ -217,8 +217,8 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       if (!el) return;
 
       const onTouchStart = (e: TouchEvent) => {
-        // Suppress pinch zoom while a drawing tool is active
-        if (toolRef.current !== 'text') { lastPinchDistRef.current = null; return; }
+        // Suppress pinch zoom while a drawing tool is active (but allow in cursor/text modes)
+        if (toolRef.current !== 'text' && toolRef.current !== 'cursor') { lastPinchDistRef.current = null; return; }
         if (e.touches.length === 2) {
           lastPinchDistRef.current = Math.hypot(
             e.touches[0].clientX - e.touches[1].clientX,
@@ -227,7 +227,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
         }
       };
       const onTouchMove = (e: TouchEvent) => {
-        if (toolRef.current !== 'text') { lastPinchDistRef.current = null; return; }
+        if (toolRef.current !== 'text' && toolRef.current !== 'cursor') { lastPinchDistRef.current = null; return; }
         if (e.touches.length !== 2 || lastPinchDistRef.current === null) return;
         e.preventDefault();
         const dist = Math.hypot(
@@ -581,32 +581,32 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
             {/* ── Layer 2: stroke canvas ── */}
             <canvas
               ref={canvasRef}
-              onMouseDown={(e) => { if (tool === 'text') return; startDraw(evToLogical(e.nativeEvent)); }}
+              onMouseDown={(e) => { if (tool === 'text' || tool === 'cursor') return; startDraw(evToLogical(e.nativeEvent)); }}
               onMouseMove={(e) => {
-                if (tool === 'text') return;
+                if (tool === 'text' || tool === 'cursor') return;
                 const pos = evToLogical(e.nativeEvent);
                 updateCursor(pos);
                 continueDraw(pos);
               }}
-              onMouseUp={() => { if (tool !== 'text') stopDraw(); }}
-              onMouseLeave={() => { if (tool !== 'text') stopDraw(); }}
+              onMouseUp={() => { if (tool !== 'text' && tool !== 'cursor') stopDraw(); }}
+              onMouseLeave={() => { if (tool !== 'text' && tool !== 'cursor') stopDraw(); }}
               onTouchStart={(e) => {
-                if (tool === 'text') return;
+                if (tool === 'text' || tool === 'cursor') return;
                 e.preventDefault();
                 if (e.touches.length === 1) startDraw(evToLogical(e.touches[0]));
               }}
               onTouchMove={(e) => {
-                if (tool === 'text') return;
+                if (tool === 'text' || tool === 'cursor') return;
                 e.preventDefault();
                 if (e.touches.length === 1) continueDraw(evToLogical(e.touches[0]));
               }}
-              onTouchEnd={() => { if (tool !== 'text') stopDraw(); }}
+              onTouchEnd={() => { if (tool !== 'text' && tool !== 'cursor') stopDraw(); }}
               style={{
                 display: 'block',
                 position: 'relative',
-                cursor: tool === 'text' ? 'default' : getDrawingCursor(tool, penType),
-                touchAction: tool !== 'text' ? 'none' : 'pan-y',
-                pointerEvents: tool === 'text' ? 'none' : 'auto',
+                cursor: (tool === 'text' || tool === 'cursor') ? 'default' : getDrawingCursor(tool, penType),
+                touchAction: (tool !== 'text' && tool !== 'cursor') ? 'none' : 'pan-y',
+                pointerEvents: (tool === 'text' || tool === 'cursor') ? 'none' : 'auto',
               }}
             />
 
