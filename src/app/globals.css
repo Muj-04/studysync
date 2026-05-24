@@ -261,12 +261,12 @@ button:active:not(:disabled) {
 }
 
 .pdf-text-layer ::selection {
-  background: rgba(37, 99, 235, 0.35);
+  background: rgba(59, 130, 246, 0.4);
   color: transparent;
 }
 
 .pdf-text-layer ::-moz-selection {
-  background: rgba(37, 99, 235, 0.35);
+  background: rgba(59, 130, 246, 0.4);
   color: transparent;
 }
 
