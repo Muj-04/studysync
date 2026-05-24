@@ -21,7 +21,7 @@ import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
-import type { BlankPage, PDFDocument, TextNote } from '@/types';
+import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
 import type { Tool, PenType } from '@/lib/drawing';
 
@@ -582,6 +582,53 @@ export default function WorkspacePage() {
   const blankDrawingRef    = useRef<DrawingCanvasHandle | null>(null);
   const rightDocDrawingRef = useRef<DrawingCanvasHandle | null>(null);
   const mainRef            = useRef<HTMLElement>(null);
+
+  // ── Bookmarks ─────────────────────────────────────────────────────────────
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+
+  useEffect(() => {
+    if (!activeDocumentId) { setBookmarks([]); return; }
+    const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS);
+    setBookmarks(stored?.[activeDocumentId] ?? []);
+  }, [activeDocumentId]);
+
+  const persistBookmarks = useCallback((docId: string, marks: Bookmark[]) => {
+    const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
+    stored[docId] = marks;
+    storageSet(KEYS.BOOKMARKS, stored);
+  }, []);
+
+  const isCurrentPageBookmarked = bookmarks.some((b) => b.virtualIndex === virtualIndex);
+
+  const handleToggleBookmark = useCallback(() => {
+    if (!activeDocument) return;
+    const existing = bookmarks.find((b) => b.virtualIndex === virtualIndex);
+    if (existing) {
+      const next = bookmarks.filter((b) => b.id !== existing.id);
+      setBookmarks(next);
+      persistBookmarks(activeDocument.id, next);
+    } else {
+      const label = currentVP?.type === 'pdf'
+        ? `Page ${currentVP.pdfPage}`
+        : 'Blank Page';
+      const newBm: Bookmark = { id: `bm_${Date.now()}`, documentId: activeDocument.id, virtualIndex, label, createdAt: Date.now() };
+      const next = [...bookmarks, newBm];
+      setBookmarks(next);
+      persistBookmarks(activeDocument.id, next);
+    }
+  }, [activeDocument, bookmarks, virtualIndex, currentVP, persistBookmarks]);
+
+  const handleRemoveBookmark = useCallback((id: string) => {
+    if (!activeDocument) return;
+    const next = bookmarks.filter((b) => b.id !== id);
+    setBookmarks(next);
+    persistBookmarks(activeDocument.id, next);
+  }, [activeDocument, bookmarks, persistBookmarks]);
+
+  const handleNavigateToPdfPage = useCallback((pdfPage: number) => {
+    const idx = virtualSequence.findIndex((vp) => vp.type === 'pdf' && vp.pdfPage === pdfPage);
+    if (idx >= 0) setVirtualIndex(idx);
+  }, [virtualSequence]);
 
   // ── Text notes (persisted per doc+page) ──────────────────────────────────
   const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
@@ -1225,6 +1272,10 @@ export default function WorkspacePage() {
               onSelectDocument={setActiveDocument}
               onRemoveDocument={removeDocument}
               onNavigate={setVirtualIndex}
+              bookmarks={bookmarks}
+              onRemoveBookmark={handleRemoveBookmark}
+              onNavigateToPdfPage={handleNavigateToPdfPage}
+              isPPTX={isPPTX}
             />
           </div>
 
@@ -1502,6 +1553,8 @@ export default function WorkspacePage() {
                     onHideBar={() => setNavBarVisible(false)}
                     viewMode={isPPTX ? undefined : viewMode}
                     onViewModeChange={isPPTX || showSplit ? undefined : setViewMode}
+                    onToggleBookmark={hasDocument ? handleToggleBookmark : undefined}
+                    isBookmarked={isCurrentPageBookmarked}
                   />
                 </div>
 

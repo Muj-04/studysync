@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Presentation, X, FileImage } from 'lucide-react';
-import type { PDFDocument, BlankPage } from '@/types';
+import { FileText, Presentation, X, FileImage, Bookmark, ChevronRight, Loader2 } from 'lucide-react';
+import type { PDFDocument, BlankPage, Bookmark as BookmarkType } from '@/types';
 
 // ── Module-level thumbnail caches ─────────────────────────────────────────────
 
 const docPromises = new Map<string, Promise<unknown>>();
 const thumbCache  = new Map<string, string>(); // "url:page" → jpeg dataURL
+const outlineCache = new Map<string, OutlineItem[]>(); // url → resolved outline
 
 function getPdfDocPromise(url: string): Promise<unknown> {
   if (!docPromises.has(url)) {
@@ -40,6 +41,50 @@ async function getThumb(url: string, page: number): Promise<string> {
   const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
   thumbCache.set(key, dataUrl);
   return dataUrl;
+}
+
+// ── Outline types + loader ────────────────────────────────────────────────────
+
+interface OutlineItem {
+  title: string;
+  page: number | null;
+  bold?: boolean;
+  italic?: boolean;
+  items: OutlineItem[];
+}
+
+async function resolveDestToPage(doc: any, dest: string | any[] | null): Promise<number | null> {
+  if (!dest) return null;
+  try {
+    const d: any[] | null = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
+    if (!d || !d[0]) return null;
+    const idx = await doc.getPageIndex(d[0]);
+    return idx + 1;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveOutlineItems(doc: any, rawItems: any[]): Promise<OutlineItem[]> {
+  return Promise.all(
+    rawItems.map(async (item) => ({
+      title: item.title || '(untitled)',
+      bold: item.bold,
+      italic: item.italic,
+      page: await resolveDestToPage(doc, item.dest),
+      items: item.items?.length > 0 ? await resolveOutlineItems(doc, item.items) : [],
+    })),
+  );
+}
+
+async function loadOutlineForUrl(url: string): Promise<OutlineItem[]> {
+  if (outlineCache.has(url)) return outlineCache.get(url)!;
+  const doc = await getPdfDocPromise(url) as any;
+  const raw = await doc.getOutline();
+  if (!raw) { outlineCache.set(url, []); return []; }
+  const items = await resolveOutlineItems(doc, raw);
+  outlineCache.set(url, items);
+  return items;
 }
 
 // ── PDF thumbnail (lazy via IntersectionObserver) ─────────────────────────────
@@ -104,6 +149,78 @@ function PDFThumb({ url, page }: { url: string; page: number }) {
   );
 }
 
+// ── Outline tree node ─────────────────────────────────────────────────────────
+
+function OutlineNode({
+  item, depth, onNavigate,
+}: {
+  item: OutlineItem;
+  depth: number;
+  onNavigate: (page: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const hasChildren = item.items.length > 0;
+
+  return (
+    <div>
+      <button
+        onClick={() => {
+          if (item.page != null) onNavigate(item.page);
+          if (hasChildren) setExpanded((e) => !e);
+        }}
+        title={item.page != null ? `Go to page ${item.page}` : item.title}
+        style={{
+          width: '100%',
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: `5px 8px 5px ${depth * 12 + 6}px`,
+          background: 'transparent', border: 'none',
+          color: 'var(--text-2)', cursor: item.page != null ? 'pointer' : 'default',
+          fontFamily: 'inherit', textAlign: 'left',
+          borderRadius: 4,
+          transition: 'background 0.1s, color 0.1s',
+        }}
+        onMouseOver={(e) => {
+          if (item.page != null) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' });
+        }}
+        onMouseOut={(e) => {
+          Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' });
+        }}
+      >
+        {hasChildren ? (
+          <span style={{ flexShrink: 0, transition: 'transform 0.15s', display: 'flex', transform: expanded ? 'rotate(90deg)' : 'none' }}>
+            <ChevronRight size={9} strokeWidth={2.5} style={{ color: 'var(--text-3)' }} />
+          </span>
+        ) : (
+          <span style={{ width: 9, flexShrink: 0 }} />
+        )}
+        <span style={{
+          flex: 1, fontSize: 11.5, lineHeight: 1.4,
+          fontWeight: item.bold ? 600 : 400,
+          fontStyle: item.italic ? 'italic' : 'normal',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {item.title}
+        </span>
+        {item.page != null && (
+          <span style={{
+            fontSize: 10, color: 'var(--text-3)',
+            flexShrink: 0, fontVariantNumeric: 'tabular-nums',
+          }}>
+            {item.page}
+          </span>
+        )}
+      </button>
+      {hasChildren && expanded && (
+        <div>
+          {item.items.map((child, i) => (
+            <OutlineNode key={i} item={child} depth={depth + 1} onNavigate={onNavigate} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type VirtualPage =
@@ -111,24 +228,27 @@ type VirtualPage =
   | { type: 'blank'; blankPage: BlankPage };
 
 interface Props {
-  isOpen:             boolean;
-  documents:          PDFDocument[];
-  activeDocumentId:   string | null;
-  activeDocument:     PDFDocument | null;
-  virtualPages:       VirtualPage[];
+  isOpen:              boolean;
+  documents:           PDFDocument[];
+  activeDocumentId:    string | null;
+  activeDocument:      PDFDocument | null;
+  virtualPages:        VirtualPage[];
   currentVirtualIndex: number;
-  onSelectDocument:   (id: string) => void;
-  onRemoveDocument:   (id: string) => void;
-  onNavigate:         (index: number) => void;
+  onSelectDocument:    (id: string) => void;
+  onRemoveDocument:    (id: string) => void;
+  onNavigate:          (index: number) => void;
+  bookmarks?:          BookmarkType[];
+  onRemoveBookmark?:   (id: string) => void;
+  onNavigateToPdfPage?: (page: number) => void;
+  isPPTX?:             boolean;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 const SIDEBAR_TABS = [
-  { id: 'thumbnails',  label: 'Thumbnails' },
+  { id: 'pages',       label: 'Pages' },
   { id: 'outlines',    label: 'Outlines' },
-  { id: 'annotations', label: 'Annotations' },
-  { id: 'templates',   label: 'Templates' },
+  { id: 'annotations', label: 'Notes' },
 ] as const;
 
 type SidebarTab = typeof SIDEBAR_TABS[number]['id'];
@@ -137,15 +257,36 @@ export default function SidebarThumbnails({
   isOpen, documents, activeDocumentId, activeDocument,
   virtualPages, currentVirtualIndex,
   onSelectDocument, onRemoveDocument, onNavigate,
+  bookmarks = [], onRemoveBookmark, onNavigateToPdfPage,
+  isPPTX = false,
 }: Props) {
   const thumbListRef = useRef<HTMLDivElement>(null);
-  const [activeTab, setActiveTab] = useState<SidebarTab>('thumbnails');
+  const [activeTab, setActiveTab] = useState<SidebarTab>('pages');
+
+  // Outline state
+  const [outlineItems, setOutlineItems] = useState<OutlineItem[] | null>(null);
+  const [outlineLoading, setOutlineLoading] = useState(false);
+  const [outlineError, setOutlineError] = useState('');
 
   // Scroll active thumbnail into view whenever the page changes
   useEffect(() => {
     const el = thumbListRef.current?.querySelector('[data-active="true"]') as HTMLElement | null;
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [currentVirtualIndex]);
+
+  // Load outline when tab becomes active or document changes
+  useEffect(() => {
+    if (activeTab !== 'outlines') return;
+    if (!activeDocument || isPPTX) { setOutlineItems(null); return; }
+
+    setOutlineLoading(true);
+    setOutlineItems(null);
+    setOutlineError('');
+
+    loadOutlineForUrl(activeDocument.url)
+      .then((items) => { setOutlineItems(items); setOutlineLoading(false); })
+      .catch((e) => { setOutlineError((e as Error).message.slice(0, 120)); setOutlineLoading(false); });
+  }, [activeTab, activeDocument, isPPTX]);
 
   return (
     <aside
@@ -190,6 +331,7 @@ export default function SidebarThumbnails({
                   fontFamily: 'inherit',
                   transition: 'color 0.13s, border-color 0.13s',
                   whiteSpace: 'nowrap',
+                  position: 'relative',
                 }}
                 onMouseOver={(e) => {
                   if (activeTab !== id) (e.currentTarget as HTMLElement).style.color = 'var(--text-2)';
@@ -199,228 +341,340 @@ export default function SidebarThumbnails({
                 }}
               >
                 {label}
+                {id === 'pages' && bookmarks.length > 0 && (
+                  <span style={{
+                    position: 'absolute', top: 4, right: 2,
+                    width: 5, height: 5, borderRadius: '50%',
+                    background: '#f59e0b',
+                  }} />
+                )}
               </button>
             ))}
           </div>
         </div>
 
-        {/* ── Non-thumbnail placeholder tabs ── */}
-        {activeTab !== 'thumbnails' && (
+        {/* ══ OUTLINES tab ══ */}
+        {activeTab === 'outlines' && (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 4px 10px' }}>
+            {!activeDocument && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8, padding: 16 }}>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>Open a PDF document to view its outline.</p>
+              </div>
+            )}
+            {activeDocument && isPPTX && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8, padding: 16 }}>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>Outline not available for PPTX files.</p>
+              </div>
+            )}
+            {activeDocument && !isPPTX && outlineLoading && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80, gap: 8 }}>
+                <Loader2 size={14} style={{ color: 'var(--text-3)', animation: 'spin 0.9s linear infinite' }} />
+                <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Loading outline…</span>
+              </div>
+            )}
+            {activeDocument && !isPPTX && !outlineLoading && outlineError && (
+              <div style={{ padding: '12px 14px' }}>
+                <p style={{ fontSize: 11.5, color: 'var(--red)', lineHeight: 1.5 }}>{outlineError}</p>
+              </div>
+            )}
+            {activeDocument && !isPPTX && !outlineLoading && !outlineError && outlineItems !== null && (
+              outlineItems.length === 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, gap: 6, padding: 20 }}>
+                  <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', textAlign: 'center' }}>No outline available</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>This PDF has no table of contents.</p>
+                </div>
+              ) : (
+                <div style={{ padding: '4px 0' }}>
+                  {outlineItems.map((item, i) => (
+                    <OutlineNode
+                      key={i}
+                      item={item}
+                      depth={0}
+                      onNavigate={onNavigateToPdfPage ?? (() => {})}
+                    />
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+        )}
+
+        {/* ══ NOTES placeholder tab ══ */}
+        {activeTab === 'annotations' && (
           <div style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
             padding: 24, gap: 8,
           }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 8,
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 4,
-            }}>
-              <FileImage size={16} style={{ color: 'var(--text-3)' }} />
-            </div>
-            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', textAlign: 'center' }}>
-              {activeTab === 'outlines' ? 'Outlines' : activeTab === 'annotations' ? 'Annotations' : 'Templates'}
-            </p>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
-              Coming soon
-            </p>
+            <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', textAlign: 'center' }}>Annotations</p>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>Coming soon</p>
           </div>
         )}
 
-        {/* ── Thumbnails tab content ── */}
-        {activeTab === 'thumbnails' && (
+        {/* ══ PAGES tab ══ */}
+        {activeTab === 'pages' && (
           <>
-        {/* ── Documents ── */}
-        <div style={{ padding: '8px 10px 4px', flexShrink: 0 }}>
-          <span style={{
-            fontSize: 9.5, fontWeight: 700,
-            letterSpacing: '0.1em', textTransform: 'uppercase',
-            color: 'var(--text-3)',
-          }}>
-            Documents
-          </span>
-        </div>
+            {/* ── Documents ── */}
+            <div style={{ padding: '8px 10px 4px', flexShrink: 0 }}>
+              <span style={{
+                fontSize: 9.5, fontWeight: 700,
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+                color: 'var(--text-3)',
+              }}>
+                Documents
+              </span>
+            </div>
 
-        <div style={{
-          padding: '0 5px 4px',
-          flexShrink: 0,
-          maxHeight: 120,
-          overflowY: 'auto',
-        }}>
-          {documents.map((doc) => {
-            const active = doc.id === activeDocumentId;
-            return (
-              <button
-                key={doc.id}
-                onClick={() => onSelectDocument(doc.id)}
-                className="group"
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '4px 6px', borderRadius: 5, marginBottom: 1,
-                  background: active ? 'var(--bg-active)' : 'transparent',
-                  border: '1px solid transparent',
-                  color: active ? 'var(--text-1)' : 'var(--text-2)',
-                  cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                  transition: 'background 0.12s, color 0.12s',
-                }}
-                onMouseOver={(e) => {
-                  if (!active) Object.assign(e.currentTarget.style, {
-                    background: 'var(--bg-hover)', color: 'var(--text-1)',
-                  });
-                }}
-                onMouseOut={(e) => {
-                  if (!active) Object.assign(e.currentTarget.style, {
-                    background: 'transparent',
-                    color: 'var(--text-2)',
-                  });
-                }}
-              >
-                {doc.type === 'pptx'
-                  ? <Presentation size={11} style={{ flexShrink: 0, color: active ? 'var(--accent-hover)' : 'var(--text-3)' }} />
-                  : <FileText     size={11} style={{ flexShrink: 0, color: active ? 'var(--accent-hover)' : 'var(--text-3)' }} />}
-                <span style={{
-                  flex: 1, fontSize: 11,
-                  fontWeight: active ? 500 : 400,
-                  overflow: 'hidden', textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap', lineHeight: 1.3,
-                }}>
-                  {doc.name}
-                </span>
-                <span
-                  role="button"
-                  onClick={(e) => { e.stopPropagation(); onRemoveDocument(doc.id); }}
-                  className="opacity-0 group-hover:opacity-100"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: 15, height: 15, borderRadius: 3,
-                    color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0,
-                    transition: 'opacity 0.12s, color 0.12s',
-                  }}
-                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)' })}
-                  onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)' })}
-                >
-                  <X size={9} />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* ── Divider ── */}
-        <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
-
-        {/* ── Pages ── */}
-        <div style={{ padding: '6px 10px 3px', flexShrink: 0 }}>
-          <span style={{
-            fontSize: 9.5, fontWeight: 700,
-            letterSpacing: '0.1em', textTransform: 'uppercase',
-            color: 'var(--text-3)',
-          }}>
-            Pages
-          </span>
-        </div>
-
-        <div
-          ref={thumbListRef}
-          style={{ flex: 1, overflowY: 'auto', padding: '3px 6px 10px' }}
-        >
-          {activeDocument
-            ? virtualPages.map((vp, idx) => {
-                const isActive = idx === currentVirtualIndex;
-                const key = vp.type === 'pdf'
-                  ? `pdf-${vp.pdfPage}`
-                  : `blank-${vp.blankPage.id}`;
-                const label = vp.type === 'pdf'
-                  ? `Page ${vp.pdfPage}`
-                  : 'Blank';
-
+            <div style={{
+              padding: '0 5px 4px',
+              flexShrink: 0,
+              maxHeight: 120,
+              overflowY: 'auto',
+            }}>
+              {documents.map((doc) => {
+                const active = doc.id === activeDocumentId;
                 return (
                   <button
-                    key={key}
-                    data-active={isActive ? 'true' : undefined}
-                    onClick={() => onNavigate(idx)}
+                    key={doc.id}
+                    onClick={() => onSelectDocument(doc.id)}
+                    className="group"
                     style={{
-                      width: '100%',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center',
-                      gap: 4, padding: '4px 3px',
-                      borderRadius: 6, marginBottom: 2,
-                      border: `1px solid ${isActive ? 'rgba(89,101,217,.45)' : 'transparent'}`,
-                      background: isActive ? 'var(--accent-muted)' : 'transparent',
-                      cursor: 'pointer', fontFamily: 'inherit',
-                      transition: 'background 0.12s, border-color 0.12s',
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '4px 6px', borderRadius: 5, marginBottom: 1,
+                      background: active ? 'var(--bg-active)' : 'transparent',
+                      border: '1px solid transparent',
+                      color: active ? 'var(--text-1)' : 'var(--text-2)',
+                      cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                      transition: 'background 0.12s, color 0.12s',
                     }}
                     onMouseOver={(e) => {
-                      if (!isActive) Object.assign(e.currentTarget.style, {
-                        background: 'var(--bg-hover)', borderColor: 'var(--border)',
+                      if (!active) Object.assign(e.currentTarget.style, {
+                        background: 'var(--bg-hover)', color: 'var(--text-1)',
                       });
                     }}
                     onMouseOut={(e) => {
-                      if (!isActive) Object.assign(e.currentTarget.style, {
-                        background: 'transparent', borderColor: 'transparent',
+                      if (!active) Object.assign(e.currentTarget.style, {
+                        background: 'transparent',
+                        color: 'var(--text-2)',
                       });
                     }}
                   >
-                    {/* Thumbnail image */}
-                    <div style={{ width: '100%', position: 'relative' }}>
-                      {vp.type === 'pdf' ? (
-                        activeDocument.type === 'pptx' && activeDocument.slides?.[vp.pdfPage - 1] ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={activeDocument.slides[vp.pdfPage - 1]}
-                            alt={`Slide ${vp.pdfPage}`}
-                            draggable={false}
-                            style={{ width: '100%', borderRadius: 2, display: 'block' }}
-                          />
-                        ) : (
-                          <PDFThumb url={activeDocument.url} page={vp.pdfPage} />
-                        )
-                      ) : (
-                        <div style={{
-                          width: '100%', aspectRatio: '1 / 1.294',
-                          background: '#ffffff',
-                          border: '1px solid var(--border)',
-                          borderRadius: 2,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          <FileImage size={14} style={{ color: 'var(--border-strong)' }} />
-                        </div>
-                      )}
-
-                      {/* Active border overlay */}
-                      {isActive && (
-                        <div style={{
-                          position: 'absolute', inset: -1,
-                          borderRadius: 3,
-                          border: '2px solid var(--accent)',
-                          pointerEvents: 'none',
-                        }} />
-                      )}
-                    </div>
-
-                    {/* Page label */}
+                    {doc.type === 'pptx'
+                      ? <Presentation size={11} style={{ flexShrink: 0, color: active ? 'var(--accent-hover)' : 'var(--text-3)' }} />
+                      : <FileText     size={11} style={{ flexShrink: 0, color: active ? 'var(--accent-hover)' : 'var(--text-3)' }} />}
                     <span style={{
-                      fontSize: 9.5,
-                      fontWeight: isActive ? 600 : 400,
-                      color: isActive ? 'var(--accent-hover)' : 'var(--text-3)',
-                      letterSpacing: '0.02em',
-                      lineHeight: 1,
+                      flex: 1, fontSize: 11,
+                      fontWeight: active ? 500 : 400,
+                      overflow: 'hidden', textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap', lineHeight: 1.3,
                     }}>
-                      {label}
+                      {doc.name}
+                    </span>
+                    <span
+                      role="button"
+                      onClick={(e) => { e.stopPropagation(); onRemoveDocument(doc.id); }}
+                      className="opacity-0 group-hover:opacity-100"
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: 15, height: 15, borderRadius: 3,
+                        color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0,
+                        transition: 'opacity 0.12s, color 0.12s',
+                      }}
+                      onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)' })}
+                      onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)' })}
+                    >
+                      <X size={9} />
                     </span>
                   </button>
                 );
-              })
-            : (
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: 64,
-              }}>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>No document</span>
-              </div>
+              })}
+            </div>
+
+            {/* ── Divider ── */}
+            <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
+
+            {/* ── Bookmarks section ── */}
+            {bookmarks.length > 0 && (
+              <>
+                <div style={{ padding: '6px 10px 3px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Bookmark size={9} fill="#f59e0b" style={{ color: '#f59e0b', flexShrink: 0 }} />
+                  <span style={{
+                    fontSize: 9.5, fontWeight: 700,
+                    letterSpacing: '0.1em', textTransform: 'uppercase',
+                    color: 'var(--text-3)',
+                  }}>
+                    Bookmarks
+                  </span>
+                </div>
+                <div style={{ padding: '0 5px 4px', flexShrink: 0, maxHeight: 130, overflowY: 'auto' }}>
+                  {bookmarks.map((bm) => (
+                    <button
+                      key={bm.id}
+                      onClick={() => onNavigate(bm.virtualIndex)}
+                      className="group"
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '4px 6px', borderRadius: 5, marginBottom: 1,
+                        background: bm.virtualIndex === currentVirtualIndex ? 'rgba(251,191,36,0.1)' : 'transparent',
+                        border: `1px solid ${bm.virtualIndex === currentVirtualIndex ? 'rgba(251,191,36,0.3)' : 'transparent'}`,
+                        color: 'var(--text-2)',
+                        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                        transition: 'background 0.12s',
+                      }}
+                      onMouseOver={(e) => {
+                        if (bm.virtualIndex !== currentVirtualIndex) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' });
+                      }}
+                      onMouseOut={(e) => {
+                        if (bm.virtualIndex !== currentVirtualIndex) Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' });
+                      }}
+                    >
+                      <Bookmark size={10} fill="#f59e0b" style={{ color: '#f59e0b', flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.3 }}>
+                        {bm.label}
+                      </span>
+                      <span
+                        role="button"
+                        onClick={(e) => { e.stopPropagation(); onRemoveBookmark?.(bm.id); }}
+                        className="opacity-0 group-hover:opacity-100"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: 14, height: 14, borderRadius: 3,
+                          color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0,
+                          transition: 'opacity 0.12s, color 0.12s',
+                        }}
+                        onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)' })}
+                        onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)' })}
+                      >
+                        <X size={9} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
+              </>
             )}
-        </div>
+
+            {/* ── Pages ── */}
+            <div style={{ padding: '6px 10px 3px', flexShrink: 0 }}>
+              <span style={{
+                fontSize: 9.5, fontWeight: 700,
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+                color: 'var(--text-3)',
+              }}>
+                Pages
+              </span>
+            </div>
+
+            <div
+              ref={thumbListRef}
+              style={{ flex: 1, overflowY: 'auto', padding: '3px 6px 10px' }}
+            >
+              {activeDocument
+                ? virtualPages.map((vp, idx) => {
+                    const isActive = idx === currentVirtualIndex;
+                    const isBookmarked = bookmarks.some((b) => b.virtualIndex === idx);
+                    const key = vp.type === 'pdf'
+                      ? `pdf-${vp.pdfPage}`
+                      : `blank-${vp.blankPage.id}`;
+                    const label = vp.type === 'pdf'
+                      ? `Page ${vp.pdfPage}`
+                      : 'Blank';
+
+                    return (
+                      <button
+                        key={key}
+                        data-active={isActive ? 'true' : undefined}
+                        onClick={() => onNavigate(idx)}
+                        style={{
+                          width: '100%',
+                          display: 'flex', flexDirection: 'column', alignItems: 'center',
+                          gap: 4, padding: '4px 3px',
+                          borderRadius: 6, marginBottom: 2,
+                          border: `1px solid ${isActive ? 'rgba(89,101,217,.45)' : 'transparent'}`,
+                          background: isActive ? 'var(--accent-muted)' : 'transparent',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                          transition: 'background 0.12s, border-color 0.12s',
+                          position: 'relative',
+                        }}
+                        onMouseOver={(e) => {
+                          if (!isActive) Object.assign(e.currentTarget.style, {
+                            background: 'var(--bg-hover)', borderColor: 'var(--border)',
+                          });
+                        }}
+                        onMouseOut={(e) => {
+                          if (!isActive) Object.assign(e.currentTarget.style, {
+                            background: 'transparent', borderColor: 'transparent',
+                          });
+                        }}
+                      >
+                        {/* Bookmark indicator */}
+                        {isBookmarked && (
+                          <div style={{
+                            position: 'absolute', top: 5, right: 5, zIndex: 1,
+                          }}>
+                            <Bookmark size={9} fill="#f59e0b" style={{ color: '#f59e0b' }} />
+                          </div>
+                        )}
+
+                        {/* Thumbnail image */}
+                        <div style={{ width: '100%', position: 'relative' }}>
+                          {vp.type === 'pdf' ? (
+                            activeDocument.type === 'pptx' && activeDocument.slides?.[vp.pdfPage - 1] ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={activeDocument.slides[vp.pdfPage - 1]}
+                                alt={`Slide ${vp.pdfPage}`}
+                                draggable={false}
+                                style={{ width: '100%', borderRadius: 2, display: 'block' }}
+                              />
+                            ) : (
+                              <PDFThumb url={activeDocument.url} page={vp.pdfPage} />
+                            )
+                          ) : (
+                            <div style={{
+                              width: '100%', aspectRatio: '1 / 1.294',
+                              background: '#ffffff',
+                              border: '1px solid var(--border)',
+                              borderRadius: 2,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <FileImage size={14} style={{ color: 'var(--border-strong)' }} />
+                            </div>
+                          )}
+
+                          {/* Active border overlay */}
+                          {isActive && (
+                            <div style={{
+                              position: 'absolute', inset: -1,
+                              borderRadius: 3,
+                              border: '2px solid var(--accent)',
+                              pointerEvents: 'none',
+                            }} />
+                          )}
+                        </div>
+
+                        {/* Page label */}
+                        <span style={{
+                          fontSize: 9.5,
+                          fontWeight: isActive ? 600 : 400,
+                          color: isActive ? 'var(--accent-hover)' : 'var(--text-3)',
+                          letterSpacing: '0.02em',
+                          lineHeight: 1,
+                        }}>
+                          {label}
+                        </span>
+                      </button>
+                    );
+                  })
+                : (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    height: 64,
+                  }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>No document</span>
+                  </div>
+                )}
+            </div>
           </>
         )}
       </div>
