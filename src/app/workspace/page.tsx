@@ -1329,26 +1329,54 @@ export default function WorkspacePage() {
 
                       {/* Right pane content */}
                       {rightSideMode === 'blank' ? (
-                        splitRightBlankPage ? (
-                          <BlankPageCanvas
-                            ref={blankDrawingRef}
-                            blankPage={splitRightBlankPage}
-                            onSaveData={updateCanvasData}
-                            onSaveImages={updateImages}
-                            tool={rightTool}
-                            penType={rightPenType}
-                            color={rightColor}
-                            strokeSize={rightStrokeSize}
-                            zoom={rightZoom}
-                            onZoomChange={handleRightZoomChange}
-                            notes={pageTextNotes[rightBlankNotesKey] ?? []}
-                            onNotesChange={handleRightBlankNotesChange}
-                            onActivateTextTool={() => setRightTool('text')}
-                            onExitTextTool={() => setRightTool('pen')}
-                          />
-                        ) : (
-                          <BlankPaneEmpty onAdd={() => handleInsertSplitBlankPage()} />
-                        )
+                        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                          {/* Close split-view button */}
+                          <button
+                            onClick={() => setSplitMode(false)}
+                            title="Close split view"
+                            aria-label="Close split view"
+                            style={{
+                              position: 'absolute', top: 10, right: 10, zIndex: 10,
+                              width: 28, height: 28,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              borderRadius: 7,
+                              background: 'var(--bg-elevated)',
+                              border: '1px solid var(--border)',
+                              color: 'var(--text-2)',
+                              cursor: 'pointer',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+                              transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                            }}
+                            onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                              background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'rgba(229,72,77,.25)',
+                            })}
+                            onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                              background: 'var(--bg-elevated)', color: 'var(--text-2)', borderColor: 'var(--border)',
+                            })}
+                          >
+                            <X size={14} />
+                          </button>
+                          {splitRightBlankPage ? (
+                            <BlankPageCanvas
+                              ref={blankDrawingRef}
+                              blankPage={splitRightBlankPage}
+                              onSaveData={updateCanvasData}
+                              onSaveImages={updateImages}
+                              tool={rightTool}
+                              penType={rightPenType}
+                              color={rightColor}
+                              strokeSize={rightStrokeSize}
+                              zoom={rightZoom}
+                              onZoomChange={handleRightZoomChange}
+                              notes={pageTextNotes[rightBlankNotesKey] ?? []}
+                              onNotesChange={handleRightBlankNotesChange}
+                              onActivateTextTool={() => setRightTool('text')}
+                              onExitTextTool={() => setRightTool('pen')}
+                            />
+                          ) : (
+                            <BlankPaneEmpty onAdd={() => handleInsertSplitBlankPage()} />
+                          )}
+                        </div>
                       ) : rightDocForViewer ? (
                         <PDFWithDrawing
                           ref={rightDocDrawingRef}
