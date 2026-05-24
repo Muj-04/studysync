@@ -7,6 +7,7 @@ export const KEYS = {
   ZOOM:        'studysync_zoom',
   THEME:       'studysync_theme',
   DOC_MAP:     'studysync_docmap',
+  KEY_TERMS:   'studysync_keyterms',
 } as const;
 
 export function storageGet<T>(key: string): T | null {
