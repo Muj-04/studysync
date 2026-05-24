@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
-import { ImagePlus, Trash2, FileOutput, Mic, Sparkles, Languages, Table2, Quote, FunctionSquare, BookMarked, Loader2 } from 'lucide-react';
+import { ImagePlus, Trash2, FileOutput, Mic, Sparkles, Languages, Lightbulb, Table2, Quote, FunctionSquare, BookMarked, Loader2 } from 'lucide-react';
 import { callAI } from '@/lib/gemini';
 
 // ── PDF text extraction ───────────────────────────────────────────────────────
@@ -219,8 +219,43 @@ export default function DocumentToolsPanel({
     }
   }
 
+  // ── Explain state ─────────────────────────────────────────────────────────
+  const [explainState, setExplainState]   = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [explainText, setExplainText]     = useState('');
+  const [explainExamples, setExplainExamples] = useState<string[]>([]);
+  const [explainError, setExplainError]   = useState('');
+  const [explainSource, setExplainSource] = useState('');
+
+  async function handleExplain() {
+    if (!selectedText.trim()) return;
+    setExplainState('loading');
+    setExplainText('');
+    setExplainExamples([]);
+    setExplainError('');
+    setExplainSource(selectedText.slice(0, 80) + (selectedText.length > 80 ? '…' : ''));
+    try {
+      const raw = await callAI('explain', selectedText);
+      const explanationMatch = raw.match(/EXPLANATION\s*\n([\s\S]*?)(?=\nEXAMPLES|\s*$)/i);
+      const examplesMatch    = raw.match(/EXAMPLES\s*\n([\s\S]*)/i);
+      const explanation = explanationMatch ? explanationMatch[1].trim() : raw.trim();
+      const examples = examplesMatch
+        ? examplesMatch[1]
+            .split('\n')
+            .map(l => l.replace(/^\s*[\d]+[.)]\s*/, '').replace(/^\s*[-•]\s*/, '').trim())
+            .filter(Boolean)
+        : [];
+      setExplainText(explanation);
+      setExplainExamples(examples);
+      setExplainState('done');
+    } catch (e) {
+      setExplainState('error');
+      setExplainError((e as Error).message.slice(0, 120));
+    }
+  }
+
   const canSummarize = !!documentUrl && !!currentPdfPage && !isBlankPage;
   const canTranslate = !!selectedText.trim() && translateState !== 'loading';
+  const canExplain   = !!selectedText.trim() && explainState !== 'loading';
 
   return (
     <aside style={{ width: '100%', flexShrink: 0, height: '100%', overflow: 'hidden' }}>
@@ -470,6 +505,138 @@ export default function DocumentToolsPanel({
                   </p>
                 )}
               </div>
+
+              {/* Explain card — only shown when text is selected */}
+              {(selectedText.trim() || explainState !== 'idle') && (
+                <div style={{
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '10px 11px',
+                }}>
+                  {/* Header row */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center',
+                    justifyContent: 'space-between', marginBottom: 6,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Lightbulb size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
+                        Explain Concept
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleExplain}
+                      disabled={!canExplain}
+                      style={{
+                        height: 22, padding: '0 9px',
+                        borderRadius: 5, fontSize: 10.5, fontWeight: 500,
+                        background: canExplain ? 'var(--accent)' : 'var(--bg-active)',
+                        border: 'none',
+                        color: canExplain ? '#fff' : 'var(--text-3)',
+                        cursor: canExplain ? 'pointer' : 'not-allowed',
+                        fontFamily: 'inherit', flexShrink: 0,
+                        transition: 'background 0.13s',
+                      }}
+                      onMouseOver={(e) => {
+                        if (canExplain) e.currentTarget.style.background = 'var(--accent-hover)';
+                      }}
+                      onMouseOut={(e) => {
+                        if (canExplain) e.currentTarget.style.background = 'var(--accent)';
+                      }}
+                    >
+                      {explainState === 'done' ? 'Re-explain' : 'Explain'}
+                    </button>
+                  </div>
+
+                  {/* Selected text preview */}
+                  {explainState === 'idle' && selectedText.trim() && (
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
+                      &ldquo;{selectedText.slice(0, 80)}{selectedText.length > 80 ? '…' : ''}&rdquo;
+                    </p>
+                  )}
+
+                  {/* Loading */}
+                  {explainState === 'loading' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
+                      <Loader2 size={12} style={{
+                        color: 'var(--accent)', flexShrink: 0,
+                        animation: 'spin 0.9s linear infinite',
+                      }} />
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Generating explanation…</span>
+                    </div>
+                  )}
+
+                  {/* Result */}
+                  {explainState === 'done' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {/* Source preview */}
+                      <p style={{
+                        fontSize: 10, color: 'var(--text-3)', fontStyle: 'italic',
+                        lineHeight: 1.3, margin: 0,
+                      }}>
+                        &ldquo;{explainSource}&rdquo;
+                      </p>
+
+                      {/* Explanation section */}
+                      {explainText && (
+                        <div>
+                          <p style={{
+                            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+                            textTransform: 'uppercase', color: 'var(--accent)',
+                            marginBottom: 4,
+                          }}>
+                            Explanation
+                          </p>
+                          <p style={{
+                            fontSize: 11.5, color: 'var(--text-1)',
+                            lineHeight: 1.6, margin: 0,
+                          }}>
+                            {explainText}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Examples section */}
+                      {explainExamples.length > 0 && (
+                        <div>
+                          <p style={{
+                            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+                            textTransform: 'uppercase', color: 'var(--accent)',
+                            marginBottom: 4,
+                          }}>
+                            Examples
+                          </p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            {explainExamples.map((ex, i) => (
+                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700, color: 'var(--accent)',
+                                  flexShrink: 0, lineHeight: 1.7,
+                                }}>
+                                  {i + 1}.
+                                </span>
+                                <p style={{
+                                  fontSize: 11.5, color: 'var(--text-2)',
+                                  lineHeight: 1.55, margin: 0,
+                                }}>
+                                  {ex}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Error */}
+                  {explainState === 'error' && (
+                    <p style={{ fontSize: 11, color: 'var(--red)', lineHeight: 1.4, margin: 0 }}>
+                      {explainError}
+                    </p>
+                  )}
+                </div>
+              )}
 
             </div>
           </div>

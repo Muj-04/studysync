@@ -1,5 +1,6 @@
 export async function callAI(action: 'summary', text: string): Promise<string>;
 export async function callAI(action: 'translate', text: string, language: string): Promise<string>;
+export async function callAI(action: 'explain', text: string): Promise<string>;
 export async function callAI(action: string, text: string, language?: string): Promise<string> {
   const res = await fetch('/api/ai', {
     method: 'POST',

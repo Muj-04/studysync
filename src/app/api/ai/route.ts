@@ -26,6 +26,18 @@ export async function POST(req: NextRequest) {
         `Translate the following text to ${language}. ` +
         'Return ONLY the translation, no explanations or notes.\n\n' +
         text.slice(0, 2000);
+    } else if (action === 'explain') {
+      prompt =
+        'Explain this concept in simple terms with 2-3 practical examples. Be concise and clear.\n' +
+        'Return your response in exactly this format (keep the section headers exactly as shown):\n' +
+        'EXPLANATION\n' +
+        '[a simple 1-3 sentence explanation]\n' +
+        'EXAMPLES\n' +
+        '[example 1]\n' +
+        '[example 2]\n' +
+        '[example 3]\n\n' +
+        'Concept to explain:\n' +
+        text.slice(0, 2000);
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
