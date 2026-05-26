@@ -491,6 +491,7 @@ export default function WorkspacePage() {
     isLoading, addDocument, removeDocument, setActiveDocument, goToPage,
   } = usePDF();
   const {
+    notes: voiceNotes,
     isRecording, recordingDuration, recordingContext,
     startRecording, stopRecording, deleteNote, updateNoteTitle, getNotesForPage,
   } = useVoiceNotes();
@@ -986,6 +987,13 @@ export default function WorkspacePage() {
     setPageTextNotes(prev => ({ ...prev, [leftNotesKey]: [...(prev[leftNotesKey] ?? []), newNote] }));
   }, [leftNotesKey]);
 
+  const handleDeleteTextNote = useCallback((pageKey: string, noteId: string) => {
+    setPageTextNotes((prev) => ({
+      ...prev,
+      [pageKey]: (prev[pageKey] ?? []).filter((n) => n.id !== noteId),
+    }));
+  }, []);
+
   const handleInsertBlankPageWithGrid = useCallback((rows: number, cols: number) => {
     if (!activeDocument) return;
     const afterPage = currentVP?.type === 'pdf'
@@ -1075,15 +1083,15 @@ export default function WorkspacePage() {
             display: 'flex', gap: 2, marginLeft: 16,
           }} className="hidden md:flex">
             {[
-              { label: 'Dashboard', active: false },
-              { label: 'Documents', active: true },
-              { label: 'Library',   active: false },
-              { label: 'Community', active: false },
-            ].map(({ label, active }) => (
+              { label: 'Dashboard', active: false, href: '/dashboard' },
+              { label: 'Documents', active: true,  href: '#' },
+              { label: 'Library',   active: false, href: '#' },
+              { label: 'Community', active: false, href: '#' },
+            ].map(({ label, active, href }) => (
               <a
                 key={label}
-                href="#"
-                onClick={(e) => e.preventDefault()}
+                href={href}
+                onClick={(e) => { if (href === '#') e.preventDefault(); }}
                 style={{
                   fontSize: 13, fontWeight: 400,
                   color: active ? 'var(--accent)' : 'var(--text-2)',
@@ -1276,6 +1284,10 @@ export default function WorkspacePage() {
               onRemoveBookmark={handleRemoveBookmark}
               onNavigateToPdfPage={handleNavigateToPdfPage}
               isPPTX={isPPTX}
+              allTextNotes={pageTextNotes}
+              voiceNotes={voiceNotes}
+              onDeleteTextNote={handleDeleteTextNote}
+              onDeleteVoiceNote={deleteNote}
             />
           </div>
 
