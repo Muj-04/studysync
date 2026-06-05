@@ -79,6 +79,11 @@ export async function fetchVoiceNotes(docId?: string): Promise<Array<{
   }));
 }
 
+export async function updateVoiceNoteTitle(noteId: string, title: string | undefined) {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('voice_notes').update({ title: title ?? null }).eq('id', noteId).eq('user_id', uid);
+}
+
 export async function deleteVoiceNote(noteId: string, docId: string) {
   const uid = await userId(); if (!uid) return;
   const ext = ['webm', 'ogg', 'mp4'];

@@ -1,12 +1,19 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
+import { createClient } from '@/lib/supabase/client';
+import { saveDrawing as dbSaveDrawing } from '@/lib/supabase/db';
 
 export function usePDFDrawings() {
   const [drawings, setDrawings] = useState<Record<string, string>>({});
+  const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const stored = storageGet<Record<string, string>>(KEYS.DRAWINGS);
     if (stored && Object.keys(stored).length > 0) setDrawings(stored);
+
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      userIdRef.current = user?.id ?? null;
+    });
   }, []);
 
   const getDrawing = useCallback(
@@ -21,7 +28,23 @@ export function usePDFDrawings() {
       storageSet(KEYS.DRAWINGS, next);
       return next;
     });
+    if (userIdRef.current) {
+      dbSaveDrawing(documentId, String(page), data);
+    }
   }, []);
 
-  return { getDrawing, saveDrawing };
+  // Workspace page calls this when it loads a document's drawings from Supabase.
+  // Merges remote drawings in; local state always wins on key conflicts.
+  const seedDrawings = useCallback((remoteDrawings: Record<string, string>) => {
+    setDrawings((prev) => {
+      const merged = { ...remoteDrawings };
+      for (const [key, val] of Object.entries(prev)) merged[key] = val;
+      const hasNew = Object.keys(remoteDrawings).some((k) => !(k in prev));
+      if (!hasNew) return prev;
+      storageSet(KEYS.DRAWINGS, merged);
+      return merged;
+    });
+  }, []);
+
+  return { getDrawing, saveDrawing, seedDrawings };
 }
