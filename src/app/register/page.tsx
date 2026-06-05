@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 
 const glassInput: React.CSSProperties = {
   width: '100%',
@@ -20,14 +21,31 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('isLoggedIn')) window.location.replace('/workspace');
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) window.location.replace('/dashboard');
+    });
   }, []);
 
-  const handleRegister = () => {
-    localStorage.setItem('isLoggedIn', 'true');
-    window.location.href = '/workspace';
+  const handleRegister = async () => {
+    if (!username || !email || !password) { setError('Please fill in all fields.'); return; }
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    setError('');
+    setLoading(true);
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { username } },
+    });
+    setLoading(false);
+    if (err) { setError(err.message); return; }
+    setMessage('Account created! Check your email to confirm, then log in.');
   };
 
   return (
@@ -51,6 +69,26 @@ export default function RegisterPage() {
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>
           Create your account to get started
         </p>
+
+        {error && (
+          <div style={{
+            marginBottom: '1rem', padding: '0.6rem 1rem',
+            background: 'rgba(229,72,77,0.18)', border: '1px solid rgba(229,72,77,0.4)',
+            borderRadius: 8, fontSize: '0.8rem', color: '#ff8a8e', textAlign: 'center',
+          }}>
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div style={{
+            marginBottom: '1rem', padding: '0.6rem 1rem',
+            background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.4)',
+            borderRadius: 8, fontSize: '0.8rem', color: '#6ee7b7', textAlign: 'center',
+          }}>
+            {message}
+          </div>
+        )}
 
         {/* Username */}
         <div style={{ position: 'relative', marginBottom: '1rem' }}>
@@ -82,7 +120,7 @@ export default function RegisterPage() {
         <div style={{ position: 'relative', marginBottom: '1.75rem' }}>
           <input
             type={showPass ? 'text' : 'password'}
-            placeholder="Password"
+            placeholder="Password (min 6 chars)"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -98,15 +136,20 @@ export default function RegisterPage() {
           </button>
         </div>
 
-        {/* Register button */}
         <button
           onClick={handleRegister}
-          style={{ display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px', background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box' }}
+          disabled={loading || !!message}
+          style={{
+            display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
+            background: (loading || !!message) ? 'rgba(255,255,255,0.7)' : '#ffffff',
+            color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
+            border: 'none', cursor: (loading || !!message) ? 'not-allowed' : 'pointer',
+            marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
+          }}
         >
-          Create Account
+          {loading ? 'Creating account…' : 'Create Account'}
         </button>
 
-        {/* Login link */}
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
           Already have an account?{' '}
           <Link href="/login" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}>
