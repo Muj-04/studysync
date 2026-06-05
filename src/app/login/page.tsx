@@ -1,8 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 
-// Glassmorphism constants shared across inputs
 const glassInput: React.CSSProperties = {
   width: '100%',
   padding: '0.75rem 2.8rem 0.75rem 1rem',
@@ -17,23 +17,32 @@ const glassInput: React.CSSProperties = {
 };
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(false);
   const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem('isLoggedIn')) window.location.replace('/workspace');
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) window.location.replace('/dashboard');
+    });
   }, []);
 
-  const handleLogin = () => {
-    localStorage.setItem('isLoggedIn', 'true');
-    window.location.href = '/workspace';
+  const handleLogin = async () => {
+    if (!email || !password) { setError('Please fill in all fields.'); return; }
+    setError('');
+    setLoading(true);
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (err) { setError(err.message); return; }
+    window.location.href = '/dashboard';
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {/* Glassmorphism card */}
       <div
         style={{
           width: '100%',
@@ -47,7 +56,6 @@ export default function LoginPage() {
           color: '#fff',
         }}
       >
-        {/* Heading */}
         <h1 style={{ textAlign: 'center', fontSize: '2rem', fontWeight: 600, marginBottom: 4 }}>
           Login
         </h1>
@@ -55,18 +63,28 @@ export default function LoginPage() {
           Welcome back — sign in to continue
         </p>
 
-        {/* Username */}
+        {error && (
+          <div style={{
+            marginBottom: '1rem', padding: '0.6rem 1rem',
+            background: 'rgba(229,72,77,0.18)', border: '1px solid rgba(229,72,77,0.4)',
+            borderRadius: 8, fontSize: '0.8rem', color: '#ff8a8e', textAlign: 'center',
+          }}>
+            {error}
+          </div>
+        )}
+
+        {/* Email */}
         <div style={{ position: 'relative', marginBottom: '1rem' }}>
           <input
-            type="text"
-            placeholder="Username"
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="glass-input"
+            type="email"
+            placeholder="Email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
             style={glassInput}
           />
-          <i className="bx bx-user" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
+          <i className="bx bx-envelope" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
         </div>
 
         {/* Password */}
@@ -77,7 +95,7 @@ export default function LoginPage() {
             autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="glass-input"
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
             style={glassInput}
           />
           <button
@@ -90,28 +108,21 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Remember me + Forgot password */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.75rem', fontSize: '0.85rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}>
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} style={{ accentColor: '#fff', width: 14, height: 14 }} />
-            <span style={{ color: 'rgba(255,255,255,0.85)' }}>Remember me</span>
-          </label>
-          <a href="#" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none' }}
-            onMouseOver={(e) => (e.currentTarget.style.color = '#fff')}
-            onMouseOut={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}>
-            Forgot password?
-          </a>
-        </div>
-
         {/* Login button */}
         <button
           onClick={handleLogin}
-          style={{ display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px', background: '#ffffff', color: '#0f172a', fontWeight: 600, fontSize: '0.9rem', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box' }}
+          disabled={loading}
+          style={{
+            display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
+            background: loading ? 'rgba(255,255,255,0.7)' : '#ffffff',
+            color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
+            border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+            marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
+          }}
         >
-          Login
+          {loading ? 'Signing in…' : 'Login'}
         </button>
 
-        {/* Register link */}
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
           Don&apos;t have an account?{' '}
           <Link href="/register" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}>
