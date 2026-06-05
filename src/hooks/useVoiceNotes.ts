@@ -2,6 +2,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
+import { createClient } from '@/lib/supabase/client';
+import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle } from '@/lib/supabase/db';
 
 interface PersistedNote {
   id: string;
@@ -77,28 +79,54 @@ export function useVoiceNotes() {
     pageNumber: number | string;
   } | null>(null);
   const recordingRef = useRef<RecordingState | null>(null);
+  const userIdRef = useRef<string | null>(null);
 
-  // Load persisted notes on mount
+  // Load from localStorage, then merge Supabase notes on top
   useEffect(() => {
     const persisted = storageGet<PersistedNote[]>(KEYS.VOICE_NOTES);
     if (persisted?.length) {
-      try {
-        setNotes(deserializeNotes(persisted));
-      } catch {
-        // Corrupted storage — start fresh
-      }
+      try { setNotes(deserializeNotes(persisted)); } catch { /* corrupted */ }
     }
+
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      userIdRef.current = user.id;
+      fetchVoiceNotes().then((remote) => {
+        setNotes((prev) => {
+          const prevIds = new Set(prev.map((n) => n.id));
+          const fromSupabase: VoiceNote[] = remote
+            .filter((r) => !prevIds.has(r.id))
+            .map((r) => ({
+              id: r.id,
+              documentId: r.documentId,
+              pageNumber: r.pageNumber,
+              audioBlob: new Blob([], { type: 'audio/webm' }), // placeholder — no local blob
+              audioUrl: r.audioUrl ?? '',
+              duration: r.duration,
+              timestamp: new Date(r.timestamp),
+              title: r.title,
+            }));
+          return fromSupabase.length > 0 ? [...prev, ...fromSupabase] : prev;
+        });
+      });
+    });
   }, []);
 
-  // Persist notes whenever they change (async blob serialization)
+  // Persist notes to localStorage whenever they change
+  // Only serialize notes that have real blob data (size > 0)
   useEffect(() => {
-    if (notes.length === 0) {
+    const withBlob = notes.filter((n) => n.audioBlob.size > 0);
+    if (withBlob.length === 0 && notes.length > 0) {
+      // All notes are from Supabase (no local blobs) — preserve existing localStorage
+      return;
+    }
+    if (withBlob.length === 0) {
       storageSet(KEYS.VOICE_NOTES, []);
       return;
     }
     let cancelled = false;
     Promise.all(
-      notes.map(async (n): Promise<PersistedNote | null> => {
+      withBlob.map(async (n): Promise<PersistedNote | null> => {
         try {
           return {
             id: n.id,
@@ -160,6 +188,11 @@ export function useVoiceNotes() {
       };
 
       setNotes((prev) => [...prev, note]);
+
+      // Upload to Supabase in background
+      if (userIdRef.current) {
+        saveVoiceNote(note);
+      }
     };
 
     const intervalId = setInterval(() => {
@@ -197,13 +230,21 @@ export function useVoiceNotes() {
   const deleteNote = useCallback((id: string) => {
     setNotes((prev) => {
       const note = prev.find((n) => n.id === id);
-      if (note) URL.revokeObjectURL(note.audioUrl);
+      if (note) {
+        URL.revokeObjectURL(note.audioUrl);
+        if (userIdRef.current) {
+          deleteVoiceNote(note.id, note.documentId);
+        }
+      }
       return prev.filter((n) => n.id !== id);
     });
   }, []);
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title: title || undefined } : n)));
+    if (userIdRef.current) {
+      updateVoiceNoteTitle(id, title || undefined);
+    }
   }, []);
 
   const getNotesForPage = useCallback(

@@ -21,6 +21,17 @@ import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
+import { createClient } from '@/lib/supabase/client';
+import {
+  upsertDocument,
+  fetchDrawings,
+  fetchBlankPages,
+  fetchTextNotes,
+  fetchBookmarks,
+  saveBookmarks as dbSaveBookmarks,
+  saveTextNotes as dbSaveTextNotes,
+  saveSessionState as dbSaveSessionState,
+} from '@/lib/supabase/db';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
 import type { Tool, PenType } from '@/lib/drawing';
@@ -425,10 +436,17 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
 export default function WorkspacePage() {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const handleLogout = async () => {
-    const { createClient } = await import('@/lib/supabase/client');
     await createClient().auth.signOut();
     window.location.href = '/login';
   };
+
+  // ── Current user (for Supabase sync) ─────────────────────────────────────
+  const userIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      userIdRef.current = user?.id ?? null;
+    });
+  }, []);
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   const [isDark, setIsDark] = useState(true);
@@ -495,8 +513,9 @@ export default function WorkspacePage() {
   const {
     insertBlankPage, removeBlankPage,
     updateCanvasData, updateImages, updateBgTheme, getBlankPagesForDocument,
+    seedBlankPages,
   } = useBlankPages();
-  const { getDrawing, saveDrawing } = usePDFDrawings();
+  const { getDrawing, saveDrawing, seedDrawings } = usePDFDrawings();
 
   // ── Virtual pages ─────────────────────────────────────────────────────────
   const [virtualIndex, setVirtualIndex] = useState(0);
@@ -522,7 +541,45 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!activeDocumentId) return;
     storageSet(KEYS.SESSION, { docId: activeDocumentId, virtualIndex });
+    if (userIdRef.current) dbSaveSessionState(activeDocumentId, virtualIndex);
   }, [activeDocumentId, virtualIndex]);
+
+  // Load per-document data from Supabase when the active document changes
+  useEffect(() => {
+    if (!activeDocumentId || !activeDocument) return;
+    if (!userIdRef.current) return;
+    // Register document so it appears in the dashboard
+    upsertDocument({
+      id: activeDocument.id,
+      name: activeDocument.name,
+      type: activeDocument.type ?? 'pdf',
+      pageCount: activeDocument.pageCount,
+    });
+    // Fetch all doc-specific data in parallel
+    Promise.all([
+      fetchDrawings(activeDocumentId),
+      fetchBlankPages(activeDocumentId),
+      fetchTextNotes(activeDocumentId),
+    ]).then(([remoteDrawings, remoteBlankPages, remoteTextNotes]) => {
+      // Drawings: prefix keys with docId to match local format, then seed
+      const prefixedDrawings: Record<string, string> = {};
+      for (const [pageKey, data] of Object.entries(remoteDrawings)) {
+        prefixedDrawings[`${activeDocumentId}:${pageKey}`] = data;
+      }
+      seedDrawings(prefixedDrawings);
+      // Blank pages: seed (local wins on ID conflict)
+      seedBlankPages(remoteBlankPages);
+      // Text notes: merge (local wins on key conflict)
+      const prefixedNotes: Record<string, TextNote[]> = {};
+      for (const [subKey, notes] of Object.entries(remoteTextNotes)) {
+        prefixedNotes[`${activeDocumentId}:${subKey}`] = notes;
+      }
+      if (Object.keys(prefixedNotes).length > 0) {
+        setPageTextNotes((prev) => ({ ...prefixedNotes, ...prev }));
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocumentId]);
 
   useEffect(() => {
     if (currentPdfPage !== null) goToPage(currentPdfPage);
@@ -586,14 +643,20 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (!activeDocumentId) { setBookmarks([]); return; }
+    // Optimistic: localStorage first
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS);
     setBookmarks(stored?.[activeDocumentId] ?? []);
+    // Authoritative: Supabase
+    if (userIdRef.current) {
+      fetchBookmarks(activeDocumentId).then(setBookmarks);
+    }
   }, [activeDocumentId]);
 
   const persistBookmarks = useCallback((docId: string, marks: Bookmark[]) => {
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     stored[docId] = marks;
     storageSet(KEYS.BOOKMARKS, stored);
+    if (userIdRef.current) dbSaveBookmarks(docId, marks);
   }, []);
 
   const isCurrentPageBookmarked = bookmarks.some((b) => b.virtualIndex === virtualIndex);
@@ -630,6 +693,7 @@ export default function WorkspacePage() {
 
   // ── Text notes (persisted per doc+page) ──────────────────────────────────
   const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
+  const prevTextNotesRef = useRef<Record<string, TextNote[]>>({});
 
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
@@ -644,6 +708,16 @@ export default function WorkspacePage() {
   // ── Persistence: text notes ───────────────────────────────────────────────
   useEffect(() => {
     storageSet(KEYS.TEXT_NOTES, pageTextNotes);
+    if (userIdRef.current) {
+      // Only sync pages whose notes array reference changed (i.e. were mutated)
+      for (const [fullKey, notes] of Object.entries(pageTextNotes)) {
+        if (prevTextNotesRef.current[fullKey] === notes) continue;
+        const colonIdx = fullKey.indexOf(':');
+        if (colonIdx === -1) continue;
+        dbSaveTextNotes(fullKey.slice(0, colonIdx), fullKey.slice(colonIdx + 1), notes);
+      }
+    }
+    prevTextNotesRef.current = pageTextNotes;
   }, [pageTextNotes]);
 
   // ── Restore text notes from storage on mount ──────────────────────────────
