@@ -424,12 +424,9 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
 
 export default function WorkspacePage() {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!localStorage.getItem('isLoggedIn')) window.location.replace('/login');
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem('isLoggedIn');
+  const handleLogout = async () => {
+    const { createClient } = await import('@/lib/supabase/client');
+    await createClient().auth.signOut();
     window.location.href = '/login';
   };
 
