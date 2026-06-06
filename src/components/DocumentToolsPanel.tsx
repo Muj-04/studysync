@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { callAI } from '@/lib/gemini';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
-import type { TextNote, KeyTerm } from '@/types';
+import type { TextNote, KeyTerm, PDFPageImage } from '@/types';
 
 // ── PDF text extraction ───────────────────────────────────────────────────────
 
@@ -55,6 +55,9 @@ interface Props {
   onClearAllDrawings?: () => void;
   onAddImageToPage?:   (dataUrl: string) => void;
   onAddImageAsNewPage?: (dataUrl: string) => void;
+  docPageImages?: Record<number, PDFPageImage[]>;
+  currentPdfPageForImages?: number | null;
+  onDeletePageImage?: (pageNumber: number, imageId: string) => void;
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────
@@ -356,6 +359,9 @@ export default function DocumentToolsPanel({
   onClearAllDrawings,
   onAddImageToPage,
   onAddImageAsNewPage,
+  docPageImages,
+  currentPdfPageForImages,
+  onDeletePageImage,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -385,6 +391,9 @@ export default function DocumentToolsPanel({
   // ── Add image state ────────────────────────────────────────────────────────
   const [addImageData, setAddImageData] = useState<string | null>(null);
   const addImageInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Remove image modal ─────────────────────────────────────────────────────
+  const [removeImgOpen, setRemoveImgOpen] = useState(false);
 
   // ── Key Term modal ─────────────────────────────────────────────────────────
   const [keyTermOpen, setKeyTermOpen] = useState(false);
@@ -1015,30 +1024,57 @@ export default function DocumentToolsPanel({
             {/* ── Add Image ── */}
             {(onAddImageToPage || onAddImageAsNewPage) && (
               <div>
-                <SectionLabel>Add Image</SectionLabel>
-                <button
-                  onClick={() => addImageInputRef.current?.click()}
-                  style={{
-                    width: '100%',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '9px 11px', borderRadius: 8,
-                    background: 'transparent',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-2)',
-                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                    fontSize: 12.5, fontWeight: 500,
-                    transition: 'background 0.13s, border-color 0.13s',
-                  }}
-                  onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                    background: 'var(--bg-hover)', borderColor: 'var(--border-strong)',
-                  })}
-                  onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                    background: 'transparent', borderColor: 'var(--border)',
-                  })}
-                >
-                  <ImagePlus size={14} />
-                  Choose Image…
-                </button>
+                <SectionLabel>Image</SectionLabel>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <button
+                    onClick={() => addImageInputRef.current?.click()}
+                    style={{
+                      width: '100%',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '9px 11px', borderRadius: 8,
+                      background: 'transparent',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-2)',
+                      cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                      fontSize: 12.5, fontWeight: 500,
+                      transition: 'background 0.13s, border-color 0.13s',
+                    }}
+                    onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'var(--bg-hover)', borderColor: 'var(--border-strong)',
+                    })}
+                    onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'transparent', borderColor: 'var(--border)',
+                    })}
+                  >
+                    <ImagePlus size={14} />
+                    Add Image…
+                  </button>
+                  {onDeletePageImage && docPageImages && Object.values(docPageImages).some((imgs) => imgs.length > 0) && (
+                    <button
+                      onClick={() => setRemoveImgOpen(true)}
+                      style={{
+                        width: '100%',
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '9px 11px', borderRadius: 8,
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        color: 'var(--text-2)',
+                        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                        fontSize: 12.5, fontWeight: 500,
+                        transition: 'background 0.13s, border-color 0.13s',
+                      }}
+                      onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                        background: 'var(--bg-hover)', borderColor: 'var(--border-strong)',
+                      })}
+                      onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                        background: 'transparent', borderColor: 'var(--border)',
+                      })}
+                    >
+                      <Trash2 size={14} />
+                      Remove Image…
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1722,6 +1758,101 @@ export default function DocumentToolsPanel({
                 <Eraser size={13} />
                 Clear All Drawings
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Remove Image modal ── */}
+      {removeImgOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => setRemoveImgOpen(false)}
+        >
+          <div
+            className="animate-scale-in"
+            style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.65)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ImagePlus size={15} style={{ color: 'var(--accent)' }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Page Images</span>
+              </div>
+              <button onClick={() => setRemoveImgOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Image list */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {docPageImages && Object.entries(docPageImages)
+                .flatMap(([pageStr, imgs]) => imgs.map((img) => ({ ...img, pageNumber: Number(pageStr) })))
+                .filter((img) => img.src)
+                .length === 0 ? (
+                <p style={{ fontSize: 12.5, color: 'var(--text-3)', textAlign: 'center', padding: 16 }}>
+                  No images on this document.
+                </p>
+              ) : (
+                docPageImages && Object.entries(docPageImages)
+                  .sort(([a], [b]) => Number(a) - Number(b))
+                  .flatMap(([pageStr, imgs]) =>
+                    imgs.map((img) => ({ img, pageNumber: Number(pageStr) }))
+                  )
+                  .map(({ img, pageNumber }) => {
+                    const isCurrentPage = pageNumber === currentPdfPageForImages;
+                    return (
+                      <div
+                        key={`${pageNumber}:${img.id}`}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          padding: '10px 12px', borderRadius: 9,
+                          background: isCurrentPage ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+                          border: `1px solid ${isCurrentPage ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
+                        }}
+                      >
+                        {/* Thumbnail */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.src}
+                          alt=""
+                          style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 5, flexShrink: 0, border: '1px solid var(--border)' }}
+                        />
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>
+                            Page {pageNumber}
+                            {isCurrentPage && (
+                              <span style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--accent)', fontWeight: 500 }}>
+                                Current
+                              </span>
+                            )}
+                          </p>
+                          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0' }}>
+                            {Math.round(img.width * 100)}% × {Math.round(img.height * 100)}%
+                          </p>
+                        </div>
+                        {/* Delete */}
+                        <button
+                          onClick={() => { onDeletePageImage?.(pageNumber, img.id); }}
+                          style={{
+                            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            borderRadius: 6, border: '1px solid transparent',
+                            background: 'transparent', color: '#ef4444',
+                            cursor: 'pointer', flexShrink: 0,
+                            transition: 'background 0.12s',
+                          }}
+                          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'; }}
+                          onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
+                          title="Delete image"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })
+              )}
             </div>
           </div>
         </div>

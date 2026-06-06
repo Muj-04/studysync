@@ -1,5 +1,5 @@
 import { createClient } from './client';
-import type { VoiceNote, TextNote, Bookmark, KeyTerm, BlankPage } from '@/types';
+import type { VoiceNote, TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -359,6 +359,30 @@ export async function fetchDashboardData() {
       label: b.label, docName: docIdToName[b.document_id] ?? 'Unknown',
     })),
   };
+}
+
+// ── Page Image Annotations ────────────────────────────────────────────────────
+
+export async function savePageImages(docId: string, pageNumber: number, images: PDFPageImage[]): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await ensureDoc(uid, docId);
+  const { error } = await sb().from('page_image_annotations').upsert(
+    { user_id: uid, document_id: docId, page_number: pageNumber, images: images as unknown as object[], updated_at: new Date().toISOString() },
+    { onConflict: 'user_id,document_id,page_number' },
+  );
+  if (error) console.error('[DB] savePageImages error:', error.message, 'docId:', docId, 'page:', pageNumber);
+}
+
+export async function fetchAllPageImages(docId: string): Promise<Record<number, PDFPageImage[]>> {
+  const uid = await userId(); if (!uid) return {};
+  const { data, error } = await sb()
+    .from('page_image_annotations')
+    .select('page_number, images')
+    .match({ user_id: uid, document_id: docId });
+  if (error) { console.error('[DB] fetchAllPageImages error:', error.message); return {}; }
+  const map: Record<number, PDFPageImage[]> = {};
+  for (const r of data ?? []) map[r.page_number] = r.images as PDFPageImage[];
+  return map;
 }
 
 // ── Study Rooms ───────────────────────────────────────────────────────────────
