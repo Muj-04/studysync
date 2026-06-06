@@ -92,6 +92,19 @@ export function usePDF() {
     }
   }, []);
 
+  // Called when Supabase returns a canonical ID different from the locally-generated one.
+  // Updates in-memory state and localStorage so all subsequent operations use the canonical ID.
+  const updateDocumentId = useCallback((oldId: string, newId: string) => {
+    setDocuments((prev) => prev.map((d) => d.id === oldId ? { ...d, id: newId } : d));
+    setActiveDocumentId((prev) => prev === oldId ? newId : prev);
+    const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
+    const filename = Object.keys(docMap).find((k) => docMap[k] === oldId);
+    if (filename) {
+      docMap[filename] = newId;
+      storageSet(KEYS.DOC_MAP, docMap);
+    }
+  }, []);
+
   const removeDocument = useCallback(
     (id: string) => {
       setDocuments((prev) => {
@@ -136,6 +149,7 @@ export function usePDF() {
     isLoading,
     addDocument,
     removeDocument,
+    updateDocumentId,
     setActiveDocument: setActiveDocumentId,
     goToPage,
     nextPage,

@@ -509,7 +509,7 @@ export default function WorkspacePage() {
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const {
     documents, activeDocument, activeDocumentId,
-    isLoading, addDocument, removeDocument, setActiveDocument, goToPage,
+    isLoading, addDocument, removeDocument, updateDocumentId, setActiveDocument, goToPage,
   } = usePDF();
   const {
     notes: voiceNotes,
@@ -550,48 +550,59 @@ export default function WorkspacePage() {
     if (userIdRef.current) dbSaveSessionState(activeDocumentId, virtualIndex);
   }, [activeDocumentId, virtualIndex]);
 
-  // Load per-document data from Supabase when the active document changes
+  // Load per-document data from Supabase when the active document changes.
+  // upsertDocument returns the canonical ID (cross-device stable). If it differs
+  // from the locally-generated UUID, we remap state/localStorage and let the
+  // effect re-run with the canonical ID before fetching any data.
   useEffect(() => {
-    console.log('[StudySync] per-doc effect fired — activeDocumentId:', activeDocumentId, 'userId:', userId, 'activeDocument:', !!activeDocument);
     if (!activeDocumentId || !activeDocument || !userId) return;
-    console.log('[StudySync] fetching from Supabase for doc:', activeDocumentId);
-    // Register document so it appears in the dashboard
-    upsertDocument({
-      id: activeDocument.id,
-      name: activeDocument.name,
-      type: activeDocument.type ?? 'pdf',
-      pageCount: activeDocument.pageCount,
-    });
-    // Fetch all doc-specific data in parallel
-    Promise.all([
-      fetchDrawings(activeDocumentId),
-      fetchBlankPages(activeDocumentId),
-      fetchTextNotes(activeDocumentId),
-    ]).then(([remoteDrawings, remoteBlankPages, remoteTextNotes]) => {
-      console.log('[StudySync] fetchDrawings result:', remoteDrawings);
-      console.log('[StudySync] fetchBlankPages result:', remoteBlankPages);
-      console.log('[StudySync] fetchTextNotes result:', remoteTextNotes);
-      // Drawings: prefix keys with docId to match local format, then seed
+
+    const syncDoc = async () => {
+      const canonicalId = await upsertDocument({
+        id: activeDocument.id,
+        name: activeDocument.name,
+        type: activeDocument.type ?? 'pdf',
+        pageCount: activeDocument.pageCount,
+      });
+
+      if (canonicalId !== activeDocumentId) {
+        // Another device registered this doc first — adopt its ID everywhere.
+        // updateDocumentId updates React state + localStorage docMap; the effect
+        // will re-run once with the canonical activeDocumentId.
+        console.log('[StudySync] adopting canonical ID:', canonicalId, '(local was:', activeDocumentId + ')');
+        updateDocumentId(activeDocumentId, canonicalId);
+        return;
+      }
+
+      const [remoteDrawings, remoteBlankPages, remoteTextNotes] = await Promise.all([
+        fetchDrawings(canonicalId),
+        fetchBlankPages(canonicalId),
+        fetchTextNotes(canonicalId),
+      ]);
+
+      console.log('[StudySync] fetchDrawings:', Object.keys(remoteDrawings).length, 'rows');
+      console.log('[StudySync] fetchBlankPages:', remoteBlankPages.length, 'rows');
+      console.log('[StudySync] fetchTextNotes:', Object.keys(remoteTextNotes).length, 'pages');
+
+      // Drawings are stored locally as "docId:pageNum" — prefix to match
       const prefixedDrawings: Record<string, string> = {};
       for (const [pageKey, data] of Object.entries(remoteDrawings)) {
-        prefixedDrawings[`${activeDocumentId}:${pageKey}`] = data;
+        prefixedDrawings[`${canonicalId}:${pageKey}`] = data;
       }
-      console.log('[StudySync] calling seedDrawings with prefixed keys:', Object.keys(prefixedDrawings));
       seedDrawings(prefixedDrawings);
-      // Blank pages: seed (local wins on ID conflict)
       seedBlankPages(remoteBlankPages);
-      // Text notes: merge (local wins on key conflict)
+
+      // Text notes: remote wins for pages not present locally
       const prefixedNotes: Record<string, TextNote[]> = {};
       for (const [subKey, notes] of Object.entries(remoteTextNotes)) {
-        prefixedNotes[`${activeDocumentId}:${subKey}`] = notes;
+        prefixedNotes[`${canonicalId}:${subKey}`] = notes;
       }
-      console.log('[StudySync] text notes to merge:', Object.keys(prefixedNotes));
       if (Object.keys(prefixedNotes).length > 0) {
         setPageTextNotes((prev) => ({ ...prefixedNotes, ...prev }));
       }
-    }).catch((err) => {
-      console.error('[StudySync] per-doc fetch failed:', err);
-    });
+    };
+
+    syncDoc().catch(console.error);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDocumentId, userId]);
 
