@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
-import { saveDrawing as dbSaveDrawing } from '@/lib/supabase/db';
+import { saveDrawing as dbSaveDrawing, deleteAllDrawings as dbDeleteAllDrawings } from '@/lib/supabase/db';
 
 export function usePDFDrawings() {
   const [drawings, setDrawings] = useState<Record<string, string>>({});
@@ -50,5 +50,20 @@ export function usePDFDrawings() {
     });
   }, []);
 
-  return { getDrawing, saveDrawing, seedDrawings };
+  const clearAllDrawings = useCallback((documentId: string) => {
+    setDrawings((prev) => {
+      const prefix = `${documentId}:`;
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (!k.startsWith(prefix)) next[k] = v;
+      }
+      storageSet(KEYS.DRAWINGS, next);
+      return next;
+    });
+    if (userIdRef.current) {
+      dbDeleteAllDrawings(documentId);
+    }
+  }, []);
+
+  return { getDrawing, saveDrawing, seedDrawings, clearAllDrawings };
 }

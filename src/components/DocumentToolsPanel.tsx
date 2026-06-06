@@ -4,7 +4,7 @@ import {
   ImagePlus, Trash2, FileOutput, Mic,
   Sparkles, Languages, Lightbulb,
   Table2, Quote, FunctionSquare, BookMarked,
-  Loader2, Maximize2, Copy, Check, X, Users,
+  Loader2, Maximize2, Copy, Check, X, Users, Eraser,
 } from 'lucide-react';
 import { callAI } from '@/lib/gemini';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
@@ -52,6 +52,7 @@ interface Props {
   onInsertTextNote?:  (note: Omit<TextNote, 'id'>) => void;
   onInsertBlankPageWithGrid?: (rows: number, cols: number) => void;
   onCreateRoom?:      () => void;
+  onClearAllDrawings?: () => void;
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────
@@ -350,6 +351,7 @@ export default function DocumentToolsPanel({
   onInsertTextNote,
   onInsertBlankPageWithGrid,
   onCreateRoom,
+  onClearAllDrawings,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -372,6 +374,9 @@ export default function DocumentToolsPanel({
   // ── Equation modal ─────────────────────────────────────────────────────────
   const [equationOpen, setEquationOpen] = useState(false);
   const [equationText, setEquationText] = useState('');
+
+  // ── Clear drawings confirmation ────────────────────────────────────────────
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   // ── Key Term modal ─────────────────────────────────────────────────────────
   const [keyTermOpen, setKeyTermOpen] = useState(false);
@@ -1072,6 +1077,33 @@ export default function DocumentToolsPanel({
               </button>
             )}
 
+            {/* Clear all drawings (PDF pages only) */}
+            {onClearAllDrawings && !isBlankPage && (
+              <button
+                onClick={() => setConfirmClearOpen(true)}
+                style={{
+                  width: '100%',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '9px 11px', borderRadius: 8,
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  color: 'var(--red)',
+                  cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                  fontSize: 12.5, fontWeight: 500,
+                  transition: 'background 0.13s, border-color 0.13s',
+                }}
+                onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                  background: 'var(--red-muted)', borderColor: 'rgba(229,72,77,.25)',
+                })}
+                onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                  background: 'transparent', borderColor: 'var(--border)',
+                })}
+              >
+                <Eraser size={14} />
+                Clear All Drawings
+              </button>
+            )}
+
             <button
               disabled
               style={{
@@ -1382,6 +1414,103 @@ export default function DocumentToolsPanel({
                 style={{ height: 32, padding: '0 18px', borderRadius: 7, background: (equationText.trim() && onInsertTextNote) ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: (equationText.trim() && onInsertTextNote) ? '#fff' : 'var(--text-3)', cursor: (equationText.trim() && onInsertTextNote) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
               >
                 Insert as Note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Clear All Drawings confirmation ── */}
+      {confirmClearOpen && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.62)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={() => setConfirmClearOpen(false)}
+        >
+          <div
+            className="animate-scale-in"
+            style={{
+              width: '100%', maxWidth: 400,
+              background: 'var(--bg-panel)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              boxShadow: '0 24px 80px rgba(0,0,0,0.65)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '15px 20px',
+              borderBottom: '1px solid var(--border-subtle)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Eraser size={15} style={{ color: 'var(--red)', flexShrink: 0 }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
+                  Clear All Drawings
+                </span>
+              </div>
+              <button
+                onClick={() => setConfirmClearOpen(false)}
+                style={{
+                  width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 6, border: '1px solid transparent',
+                  background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px' }}>
+              <p style={{ fontSize: 13.5, color: 'var(--text-1)', lineHeight: 1.6, margin: '0 0 8px' }}>
+                Are you sure? This will permanently remove all drawings from this document.
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5, margin: 0 }}>
+                Voice notes and text notes will not be affected.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '12px 20px',
+              borderTop: '1px solid var(--border-subtle)',
+              display: 'flex', gap: 8, justifyContent: 'flex-end',
+            }}>
+              <button
+                onClick={() => setConfirmClearOpen(false)}
+                style={{
+                  height: 32, padding: '0 16px', borderRadius: 7,
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-2)',
+                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onClearAllDrawings?.();
+                  setConfirmClearOpen(false);
+                }}
+                style={{
+                  height: 32, padding: '0 16px', borderRadius: 7,
+                  background: 'var(--red)',
+                  border: 'none',
+                  color: '#fff',
+                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                <Eraser size={13} />
+                Clear All Drawings
               </button>
             </div>
           </div>
