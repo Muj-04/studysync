@@ -1,61 +1,121 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, Link2, Check, ChevronLeft, ChevronRight, Undo2 } from 'lucide-react';
+import {
+  Users, Link2, Check, ChevronLeft, ChevronRight,
+  Undo2, MousePointer, Pencil, Eraser, Minus, Plus,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing } from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
+import { clampZoom } from '@/components/PDFViewer';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
+import { PRESET_COLORS, SIZES } from '@/lib/drawing';
 import type { Tool, PenType } from '@/lib/drawing';
 
-const COLORS = ['#ededf0', '#f87171', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#000000'];
+// ── Toolbar primitives ────────────────────────────────────────────────────────
 
-const PEN_TOOLS: Array<{ id: Tool; label: string }> = [
-  { id: 'cursor', label: 'Cursor' },
-  { id: 'pen',    label: 'Pen'    },
-  { id: 'eraser', label: 'Eraser' },
-];
+function Divider() {
+  return <div style={{ width: 1, height: 22, background: 'var(--border)', flexShrink: 0 }} />;
+}
+
+function ToolBtn({
+  active, onClick, title, children,
+}: {
+  active?: boolean;
+  onClick: () => void;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: 30, padding: '0 9px', gap: 5,
+        borderRadius: 6, fontSize: 12, fontWeight: 500,
+        background: active ? 'var(--accent)' : 'var(--bg-elevated)',
+        color: active ? '#fff' : 'var(--text-2)',
+        border: `1px solid ${active ? 'transparent' : 'var(--border)'}`,
+        cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+        whiteSpace: 'nowrap',
+      }}
+      onMouseOver={(e) => { if (!active) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' }); }}
+      onMouseOut={(e)  => { if (!active) Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' }); }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function IconBtn({
+  onClick, title, disabled, children,
+}: {
+  onClick: () => void;
+  title?: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 30, height: 30, borderRadius: 6,
+        background: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+        color: disabled ? 'var(--text-3)' : 'var(--text-2)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1, flexShrink: 0,
+        transition: 'background 0.12s, color 0.12s',
+      }}
+      onMouseOver={(e) => { if (!disabled) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' }); }}
+      onMouseOut={(e)  => { if (!disabled) Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' }); }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function RoomClient({ roomId }: { roomId: string }) {
   const router = useRouter();
-  const [status, setStatus]       = useState<'loading' | 'ready' | 'error'>('loading');
-  const [errorMsg, setErrorMsg]   = useState('');
-  const [roomName, setRoomName]   = useState('Study Room');
-  const [copied, setCopied]       = useState(false);
-  const [tool, setTool]           = useState<Tool>('pen');
-  const [penType]                 = useState<PenType>('normal');
-  const [color, setColor]         = useState('#ededf0');
-  const [strokeSize]              = useState(4);
-  const [zoom]                    = useState(1.0);
+  const [status, setStatus]     = useState<'loading' | 'ready' | 'error'>('loading');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [roomName, setRoomName] = useState('Study Room');
+  const [copied, setCopied]     = useState(false);
 
-  const drawingRef        = useRef<DrawingCanvasHandle | null>(null);
-  const docIdRef          = useRef<string | null>(null);
-  const currentPageRef    = useRef<number>(1);   // kept in sync below; avoids adding activeDocument to handleIncomingDrawing deps
-  const saveRoomTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Drawing state ─────────────────────────────────────────────────────────
+  const [tool, setTool]           = useState<Tool>('pen');
+  const [penType, setPenType]     = useState<PenType>('normal');
+  const [color, setColor]         = useState('#ededf0');
+  const [strokeSize, setStrokeSize] = useState(5);
+  const [zoom, setZoom]           = useState(1.0);
+
+  const drawingRef       = useRef<DrawingCanvasHandle | null>(null);
+  const docIdRef         = useRef<string | null>(null);
+  const currentPageRef   = useRef<number>(1);
+  const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { activeDocument, addDocument, goToPage } = usePDF();
   const { getDrawing, saveDrawing, seedDrawings }  = usePDFDrawings();
 
-  // broadcastRef breaks the circular dep: handleReconnect needs broadcastDrawing,
-  // but broadcastDrawing comes from useStudyRoom which needs handleReconnect.
   const broadcastRef = useRef<(page: number, data: string) => void>(() => {});
 
   const handleIncomingDrawing = useCallback((pageNumber: number, data: string) => {
-    console.log(`[Room] incoming drawing — page=${pageNumber} dataLen=${data.length}`);
-    // Paint directly onto the remote overlay layer inside PDFWithDrawing.
-    // We do NOT call seedDrawings: remote drawings are ephemeral overlays that
-    // belong to the remote canvas layer, not the local user's persistent state.
-    // This ensures the local canvas is never cleared or overwritten by a peer.
     if (currentPageRef.current === pageNumber) {
       drawingRef.current?.loadData?.(data);
     }
   }, []);
 
-  // Re-broadcast the current page's drawing so other members get the latest
-  // state immediately after a reconnect.
   const handleReconnect = useCallback(() => {
     const docId = docIdRef.current;
     if (!docId || !activeDocument) return;
@@ -68,10 +128,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     roomId, handleIncomingDrawing, handleReconnect,
   );
 
-  // Keep broadcastRef in sync (broadcastDrawing is stable but this is defensive).
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
 
-  // ── Init: auth check → fetch room → download PDF → seed drawings ────────────
+  // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     async function init() {
@@ -97,16 +156,13 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const file = new File([blob], room.documentName + '.pdf', { type: 'application/pdf' });
       const { id: docId } = await addDocument(file);
       docIdRef.current = docId;
-      console.log(`[Room] init complete — roomId=${roomId} docId=${docId}`);
 
-      // Seed own saved drawings for this doc
       const remoteDrawings = await fetchDrawings(docId);
       const prefixed: Record<string, string> = {};
       for (const [k, v] of Object.entries(remoteDrawings)) prefixed[`${docId}:${k}`] = v;
       if (Object.keys(prefixed).length > 0) seedDrawings(prefixed);
 
       await joinRoom(roomId);
-
       if (!cancelled) setStatus('ready');
     }
     init().catch((e) => {
@@ -118,28 +174,21 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
-  const currentPage   = activeDocument?.currentPage ?? 1;
-  const pageCount     = activeDocument?.pageCount ?? 1;
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const currentPage    = activeDocument?.currentPage ?? 1;
+  const pageCount      = activeDocument?.pageCount ?? 1;
   const currentDrawing = activeDocument ? getDrawing(activeDocument.id, currentPage) : undefined;
 
-  // Keep the page ref in sync so handleIncomingDrawing can read it without
-  // taking activeDocument as a dependency (which would re-register the callback).
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
 
-  // Fetch the latest room drawing from Supabase whenever the user navigates to a page.
-  // This is immediate and doesn't depend on another peer being active.
   useEffect(() => {
     if (status !== 'ready') return;
     fetchRoomDrawing(roomId, currentPage).then((data) => {
-      if (data) {
-        console.log(`[Room] fetched room drawing from DB — page=${currentPage} dataLen=${data.length}`);
-        drawingRef.current?.loadData?.(data);
-      }
+      if (data) drawingRef.current?.loadData?.(data);
     });
   }, [currentPage, status, roomId]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSave = useCallback((data: string) => {
     if (!activeDocument) return;
     const page = activeDocument.currentPage;
@@ -157,10 +206,23 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     setTimeout(() => setCopied(false), 2500);
   }, []);
 
-  const prevPage = useCallback(() => { if (activeDocument) goToPage(Math.max(1, currentPage - 1)); }, [activeDocument, currentPage, goToPage]);
-  const nextPage = useCallback(() => { if (activeDocument) goToPage(Math.min(pageCount, currentPage + 1)); }, [activeDocument, currentPage, pageCount, goToPage]);
+  const prevPage = useCallback(() => {
+    if (activeDocument) goToPage(Math.max(1, currentPage - 1));
+  }, [activeDocument, currentPage, goToPage]);
 
-  // ── Loading / error screens ──────────────────────────────────────────────────
+  const nextPage = useCallback(() => {
+    if (activeDocument) goToPage(Math.min(pageCount, currentPage + 1));
+  }, [activeDocument, currentPage, pageCount, goToPage]);
+
+  const handleZoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), []);
+  const handleZoomIn  = useCallback(() => setZoom((z) => clampZoom(z + 0.1)), []);
+
+  const selectTool = useCallback((t: Tool, pt?: PenType) => {
+    setTool(t);
+    if (pt) setPenType(pt);
+  }, []);
+
+  // ── Loading / error states ────────────────────────────────────────────────
   if (status === 'loading') {
     return (
       <div style={{
@@ -201,7 +263,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     );
   }
 
-  // ── Main room UI ─────────────────────────────────────────────────────────────
+  // ── Room UI ───────────────────────────────────────────────────────────────
   return (
     <div style={{
       minHeight: '100dvh', display: 'flex', flexDirection: 'column',
@@ -211,24 +273,25 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 16px', borderBottom: '1px solid var(--border)',
+        padding: '8px 16px', borderBottom: '1px solid var(--border)',
         background: 'var(--bg-panel)', flexShrink: 0,
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{
+          fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
+          flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
           {roomName}
         </span>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-2)', fontSize: 12 }}>
-          <Users size={13} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-3)', fontSize: 11.5 }}>
+          <Users size={12} />
           <span>{memberCount} live</span>
         </div>
-
         <button
           onClick={copyLink}
           title="Copy room link"
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
-            padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
             background: copied ? 'var(--green-muted, #14532d22)' : 'var(--bg-elevated)',
             color: copied ? 'var(--green, #4ade80)' : 'var(--text-2)',
             border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.15s',
@@ -237,11 +300,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           {copied ? <Check size={12} /> : <Link2 size={12} />}
           {copied ? 'Copied!' : 'Share link'}
         </button>
-
         <button
           onClick={() => router.replace('/workspace')}
           style={{
-            padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
             background: 'transparent', color: 'var(--text-3)',
             border: '1px solid var(--border)', cursor: 'pointer',
           }}
@@ -252,63 +314,130 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
       {/* ── Drawing toolbar ── */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 16px', borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '6px 14px', borderBottom: '1px solid var(--border)',
         background: 'var(--bg-panel)', flexShrink: 0, flexWrap: 'wrap',
+        rowGap: 6,
       }}>
-        {/* Tool buttons */}
-        <div style={{ display: 'flex', gap: 4 }}>
-          {PEN_TOOLS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setTool(id)}
-              title={label}
-              style={{
-                padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-                background: tool === id ? 'var(--accent)' : 'var(--bg-elevated)',
-                color: tool === id ? '#fff' : 'var(--text-2)',
-                border: '1px solid ' + (tool === id ? 'transparent' : 'var(--border)'),
-                cursor: 'pointer', transition: 'all 0.12s',
-              }}
-            >
-              {label}
-            </button>
-          ))}
+
+        {/* ── Tools ── */}
+        <div style={{ display: 'flex', gap: 3 }}>
+          <ToolBtn active={tool === 'cursor'} onClick={() => selectTool('cursor')} title="Cursor">
+            <MousePointer size={13} />
+            <span>Cursor</span>
+          </ToolBtn>
+          <ToolBtn
+            active={tool === 'pen' && penType === 'normal'}
+            onClick={() => selectTool('pen', 'normal')}
+            title="Pen"
+          >
+            <Pencil size={13} />
+            <span>Pen</span>
+          </ToolBtn>
+          <ToolBtn
+            active={tool === 'pen' && penType === 'marker'}
+            onClick={() => selectTool('pen', 'marker')}
+            title="Marker"
+          >
+            {/* Marker icon: thick rectangle */}
+            <div style={{ width: 13, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.75 }} />
+            <span>Marker</span>
+          </ToolBtn>
+          <ToolBtn
+            active={tool === 'pen' && penType === 'highlighter'}
+            onClick={() => selectTool('pen', 'highlighter')}
+            title="Highlighter"
+          >
+            {/* Highlighter icon: wide flat rectangle */}
+            <div style={{ width: 13, height: 8, borderRadius: 2, background: 'currentColor', opacity: 0.4 }} />
+            <span>Highlight</span>
+          </ToolBtn>
+          <ToolBtn active={tool === 'eraser'} onClick={() => selectTool('eraser')} title="Eraser">
+            <Eraser size={13} />
+            <span>Eraser</span>
+          </ToolBtn>
         </div>
 
-        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+        <Divider />
 
-        {/* Color swatches */}
-        <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-          {COLORS.map((c) => (
+        {/* ── Color ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {PRESET_COLORS.map((c) => (
             <button
               key={c}
-              onClick={() => setColor(c)}
+              onClick={() => {
+                setColor(c);
+                if (tool === 'eraser' || tool === 'cursor') setTool('pen');
+              }}
               title={c}
               style={{
                 width: 20, height: 20, borderRadius: '50%', background: c,
-                border: color === c ? '2px solid var(--accent)' : '2px solid var(--border)',
-                cursor: 'pointer', flexShrink: 0, transition: 'border-color 0.12s',
+                border: 'none', cursor: 'pointer', flexShrink: 0,
+                outline: color === c && tool !== 'eraser' ? '2px solid var(--accent-hover)' : '1.5px solid transparent',
+                outlineOffset: 2,
+                transform: color === c && tool !== 'eraser' ? 'scale(1.2)' : 'scale(1)',
+                transition: 'transform 0.12s',
               }}
             />
           ))}
+          {/* Custom color */}
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => {
+              setColor(e.target.value);
+              if (tool === 'eraser' || tool === 'cursor') setTool('pen');
+            }}
+            title="Custom color"
+            style={{
+              width: 20, height: 20,
+              border: '1px solid var(--border-strong)',
+              borderRadius: 4, background: 'var(--bg-input)',
+              padding: 0, cursor: 'pointer', flexShrink: 0,
+            }}
+          />
         </div>
 
-        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+        <Divider />
 
-        {/* Undo */}
-        <button
-          onClick={() => drawingRef.current?.undo?.()}
-          title="Undo last stroke"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 28, height: 28, borderRadius: 6,
-            background: 'var(--bg-elevated)', color: 'var(--text-2)',
-            border: '1px solid var(--border)', cursor: 'pointer',
-          }}
-        >
+        {/* ── Stroke size ── */}
+        <div style={{ display: 'flex', gap: 3 }}>
+          {SIZES.map(({ label, value }) => (
+            <ToolBtn
+              key={value}
+              active={strokeSize === value}
+              onClick={() => setStrokeSize(value)}
+              title={`Size ${label}`}
+            >
+              {label}
+            </ToolBtn>
+          ))}
+        </div>
+
+        <Divider />
+
+        {/* ── Zoom ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <IconBtn onClick={handleZoomOut} title="Zoom out" disabled={zoom <= 0.5}>
+            <Minus size={12} />
+          </IconBtn>
+          <span style={{
+            fontSize: 11.5, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums',
+            minWidth: 36, textAlign: 'center', flexShrink: 0,
+          }}>
+            {Math.round(zoom * 100)}%
+          </span>
+          <IconBtn onClick={handleZoomIn} title="Zoom in" disabled={zoom >= 2.0}>
+            <Plus size={12} />
+          </IconBtn>
+        </div>
+
+        <Divider />
+
+        {/* ── Undo ── */}
+        <IconBtn onClick={() => drawingRef.current?.undo?.()} title="Undo last stroke">
           <Undo2 size={13} />
-        </button>
+        </IconBtn>
       </div>
 
       {/* ── PDF viewer ── */}
@@ -325,7 +454,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             savedData={currentDrawing}
             onSave={handleSave}
             zoom={zoom}
-            interactive={tool !== 'cursor'}
+            onZoomChange={setZoom}
+            interactive={true}
           />
         )}
       </div>
@@ -333,7 +463,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       {/* ── Page navigation ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-        padding: '10px 16px', borderTop: '1px solid var(--border)',
+        padding: '9px 16px', borderTop: '1px solid var(--border)',
         background: 'var(--bg-panel)', flexShrink: 0,
       }}>
         <button
@@ -342,24 +472,24 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)',
-            background: 'var(--bg-elevated)', color: currentPage <= 1 ? 'var(--text-3)' : 'var(--text-2)',
+            background: 'var(--bg-elevated)',
+            color: currentPage <= 1 ? 'var(--text-3)' : 'var(--text-2)',
             cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
           }}
         >
           <ChevronLeft size={15} />
         </button>
-
         <span style={{ fontSize: 13, color: 'var(--text-2)', minWidth: 80, textAlign: 'center' }}>
           Page {currentPage} / {pageCount}
         </span>
-
         <button
           onClick={nextPage}
           disabled={currentPage >= pageCount}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)',
-            background: 'var(--bg-elevated)', color: currentPage >= pageCount ? 'var(--text-3)' : 'var(--text-2)',
+            background: 'var(--bg-elevated)',
+            color: currentPage >= pageCount ? 'var(--text-3)' : 'var(--text-2)',
             cursor: currentPage >= pageCount ? 'not-allowed' : 'pointer',
           }}
         >
