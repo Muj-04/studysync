@@ -32,6 +32,8 @@ import {
   saveBookmarks as dbSaveBookmarks,
   saveTextNotes as dbSaveTextNotes,
   saveSessionState as dbSaveSessionState,
+  uploadRoomPdf,
+  createRoom,
 } from '@/lib/supabase/db';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
@@ -1087,6 +1089,29 @@ export default function WorkspacePage() {
   const isPPTX       = activeDocument?.type === 'pptx';
   const hasDocument  = !!activeDocument;
 
+  // ── Study room modal ──────────────────────────────────────────────────────
+  const [roomModal, setRoomModal] = useState<'idle' | 'creating' | 'done'>('idle');
+  const [roomUrl, setRoomUrl]     = useState('');
+
+  const handleCreateRoom = useCallback(async () => {
+    if (!activeDocument || activeDocument.type !== 'pdf') return;
+    setRoomModal('creating');
+    try {
+      const resp = await fetch(activeDocument.url);
+      const blob = await resp.blob();
+      const roomId = crypto.randomUUID();
+      const pdfPath = await uploadRoomPdf(roomId, blob, activeDocument.name);
+      if (!pdfPath) throw new Error('upload failed');
+      const created = await createRoom(roomId, activeDocument.name, pdfPath);
+      if (!created) throw new Error('createRoom failed');
+      setRoomUrl(`${window.location.origin}/room/${roomId}`);
+      setRoomModal('done');
+    } catch (e) {
+      console.error('[Room] create error:', e);
+      setRoomModal('idle');
+    }
+  }, [activeDocument]);
+
   // ── Insert image (blank page canvas) ─────────────────────────────────────
   const handleInsertImage = useCallback((dataUrl: string) => {
     blankDrawingRef.current?.insertImage?.(dataUrl);
@@ -1822,9 +1847,111 @@ export default function WorkspacePage() {
               activeDocumentId={activeDocumentId ?? undefined}
               onInsertTextNote={hasDocument ? handleInsertTextNote : undefined}
               onInsertBlankPageWithGrid={hasDocument ? handleInsertBlankPageWithGrid : undefined}
+              onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
             />
           </div>
 
+        </div>
+      )}
+
+      {/* ══ Study Room modal ══ */}
+      {roomModal !== 'idle' && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1200,
+            background: 'rgba(0,0,0,0.62)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={() => { if (roomModal === 'done') { setRoomModal('idle'); setRoomUrl(''); } }}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: 420,
+              background: 'var(--bg-panel)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              boxShadow: '0 24px 80px rgba(0,0,0,0.65)',
+              padding: '24px',
+              display: 'flex', flexDirection: 'column', gap: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {roomModal === 'creating' ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
+                    animation: 'spin 0.8s linear infinite', flexShrink: 0,
+                  }} />
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
+                      Creating study room…
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
+                      Uploading PDF and setting up room
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
+                    Study room ready!
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)' }}>
+                    Share the link below to collaborate in real-time.
+                  </p>
+                </div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '8px 12px',
+                }}>
+                  <span style={{
+                    flex: 1, fontSize: 12, color: 'var(--text-2)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {roomUrl}
+                  </span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(roomUrl); }}
+                    style={{
+                      padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                      background: 'var(--bg-active)', color: 'var(--text-2)',
+                      border: '1px solid var(--border)', cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => window.open(roomUrl, '_blank')}
+                    style={{
+                      flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                      background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer',
+                    }}
+                  >
+                    Open room
+                  </button>
+                  <button
+                    onClick={() => { setRoomModal('idle'); setRoomUrl(''); }}
+                    style={{
+                      padding: '9px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                      background: 'transparent', color: 'var(--text-2)',
+                      border: '1px solid var(--border)', cursor: 'pointer',
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
