@@ -256,6 +256,13 @@ export async function saveDrawing(docId: string, pageKey: string, canvasData: st
   else console.log('[DB] saveDrawing OK — docId:', docId, 'pageKey:', pageKey);
 }
 
+export async function deleteAllDrawings(docId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const { error } = await sb().from('drawings').delete().match({ user_id: uid, document_id: docId });
+  if (error) console.error('[DB] deleteAllDrawings error:', error.message);
+  else console.log('[DB] deleteAllDrawings OK — docId:', docId);
+}
+
 export async function fetchDrawings(docId: string): Promise<Record<string, string>> {
   const uid = await userId();
   console.log('[DB] fetchDrawings uid:', uid, 'docId:', docId);

@@ -525,7 +525,7 @@ export default function WorkspacePage() {
     updateCanvasData, updateImages, updateBgTheme, getBlankPagesForDocument,
     seedBlankPages,
   } = useBlankPages();
-  const { getDrawing, saveDrawing, seedDrawings } = usePDFDrawings();
+  const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
 
   // ── Virtual pages ─────────────────────────────────────────────────────────
   const [virtualIndex, setVirtualIndex] = useState(0);
@@ -1111,6 +1111,14 @@ export default function WorkspacePage() {
       setRoomModal('idle');
     }
   }, [activeDocument]);
+
+  // ── Clear all drawings for current document ───────────────────────────────
+  const handleClearAllDrawings = useCallback(() => {
+    if (!activeDocument) return;
+    clearAllDrawings(activeDocument.id);
+    pdfDrawingRef.current?.clear();
+    showToast('All drawings cleared.');
+  }, [activeDocument, clearAllDrawings, showToast]);
 
   // ── Insert image (blank page canvas) ─────────────────────────────────────
   const handleInsertImage = useCallback((dataUrl: string) => {
@@ -1848,6 +1856,7 @@ export default function WorkspacePage() {
               onInsertTextNote={hasDocument ? handleInsertTextNote : undefined}
               onInsertBlankPageWithGrid={hasDocument ? handleInsertBlankPageWithGrid : undefined}
               onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
+              onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
             />
           </div>
 
