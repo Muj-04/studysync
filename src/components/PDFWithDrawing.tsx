@@ -167,7 +167,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     notes, onNotesChange, onActivateTextTool, onExitTextTool,
     searchOpen = false, onSearchClose,
   }, ref) {
-    const drawCanvasRef  = useRef<HTMLCanvasElement>(null);
+    const drawCanvasRef   = useRef<HTMLCanvasElement>(null);
+    const remoteCanvasRef = useRef<HTMLCanvasElement>(null); // peer drawing overlay
     const isDrawing      = useRef(false);
     const lastPos        = useRef<{ x: number; y: number } | null>(null);
     const [canvasDims, setCanvasDims] = useState<{ w: number; h: number } | null>(null);
@@ -273,6 +274,19 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         const img = new Image();
         img.onload = () => ctx.drawImage(img, 0, 0, w, h);
         img.src = savedData;
+      }
+
+      // Remote canvas: resize and clear whenever the page or dimensions change.
+      // Peer drawings are ephemeral per-page; there is no history to restore.
+      const remote = remoteCanvasRef.current;
+      if (remote) {
+        remote.width  = Math.round(w * dpr);
+        remote.height = Math.round(h * dpr);
+        remote.style.width  = `${w}px`;
+        remote.style.height = `${h}px`;
+        const rCtx = remote.getContext('2d')!;
+        rCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        rCtx.clearRect(0, 0, w, h);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [document.currentPage, canvasDims?.w, canvasDims?.h]);
@@ -407,10 +421,11 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       img.src = prev;
     }, [cancelLine, onSave]);
 
-    // Draws a data URL onto the live canvas without remounting. Used by the
-    // study room to apply incoming broadcast drawings without a flash.
+    // Paints a peer's broadcast onto the REMOTE overlay canvas.
+    // The local drawing canvas is never touched, so concurrent strokes from
+    // different users never overwrite each other.
     const loadData = useCallback((data: string) => {
-      const canvas = drawCanvasRef.current;
+      const canvas = remoteCanvasRef.current;
       const dims = canvasDimsRef.current;
       if (!canvas || !dims) return;
       const ctx = canvas.getContext('2d');
@@ -435,6 +450,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
         padding: 24, pointerEvents: 'none',
       }}>
+        {/* Container is explicitly sized so both absolutely-positioned canvases
+            have a stable reference point and don't affect layout flow. */}
         <div style={{
           position: 'relative',
           width: canvasDims.w,
@@ -442,10 +459,22 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
           flexShrink: 0,
           pointerEvents: 'none',
         }}>
+          {/* Layer 0 — remote peers' drawings (behind local canvas, never receives pointer events) */}
+          <canvas
+            ref={remoteCanvasRef}
+            style={{
+              position: 'absolute', top: 0, left: 0,
+              zIndex: 0,
+              pointerEvents: 'none',
+            }}
+          />
+
+          {/* Layer 1 — local user's own drawings (in front of remote layer) */}
           <canvas
             ref={drawCanvasRef}
             style={{
-              display: 'block',
+              position: 'absolute', top: 0, left: 0,
+              zIndex: 1,
               pointerEvents: canDrawNow ? 'auto' : 'none',
               cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
               touchAction: canDrawNow ? 'none' : 'pan-y',
@@ -466,6 +495,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
             }}
             onTouchEnd={() => canDrawNow && stopDraw()}
           />
+
+          {/* Layer 2 — text notes (above both canvas layers) */}
           {notes !== undefined && onNotesChange && (
             <TextNotesLayer
               notes={notes}

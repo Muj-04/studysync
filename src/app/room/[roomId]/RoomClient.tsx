@@ -43,17 +43,15 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const broadcastRef = useRef<(page: number, data: string) => void>(() => {});
 
   const handleIncomingDrawing = useCallback((pageNumber: number, data: string) => {
-    const docId = docIdRef.current;
-    console.log(`[Room] incoming drawing — docId=${docId ?? 'NOT SET'} page=${pageNumber} dataLen=${data.length}`);
-    if (!docId) return;
-    // Always persist so navigating to this page later shows the latest drawing.
-    seedDrawings({ [`${docId}:${pageNumber}`]: data });
-    // If the user is already on this page, paint directly onto the live canvas
-    // instead of remounting — no flash, no interruption of an in-progress stroke.
+    console.log(`[Room] incoming drawing — page=${pageNumber} dataLen=${data.length}`);
+    // Paint directly onto the remote overlay layer inside PDFWithDrawing.
+    // We do NOT call seedDrawings: remote drawings are ephemeral overlays that
+    // belong to the remote canvas layer, not the local user's persistent state.
+    // This ensures the local canvas is never cleared or overwritten by a peer.
     if (currentPageRef.current === pageNumber) {
       drawingRef.current?.loadData?.(data);
     }
-  }, [seedDrawings]);
+  }, []);
 
   // Re-broadcast the current page's drawing so other members get the latest
   // state immediately after a reconnect.
