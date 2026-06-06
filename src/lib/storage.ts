@@ -9,6 +9,7 @@ export const KEYS = {
   DOC_MAP:     'studysync_docmap',
   KEY_TERMS:   'studysync_keyterms',
   BOOKMARKS:   'studysync_bookmarks',
+  PAGE_IMAGES: 'studysync_page_images',
 } as const;
 
 export function storageGet<T>(key: string): T | null {

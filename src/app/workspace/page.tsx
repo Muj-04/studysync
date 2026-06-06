@@ -9,6 +9,7 @@ import { usePDF } from '@/hooks/usePDF';
 import { useVoiceNotes } from '@/hooks/useVoiceNotes';
 import { useBlankPages } from '@/hooks/useBlankPages';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
+import { usePDFPageImages } from '@/hooks/usePDFPageImages';
 import PDFUploader from '@/components/PDFUploader';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import PDFScrollViewer from '@/components/PDFScrollViewer';
@@ -29,6 +30,7 @@ import {
   fetchTextNotes,
   fetchBookmarks,
   fetchVoiceNotes,
+  fetchAllPageImages,
   saveBookmarks as dbSaveBookmarks,
   saveTextNotes as dbSaveTextNotes,
   saveSessionState as dbSaveSessionState,
@@ -526,6 +528,7 @@ export default function WorkspacePage() {
     seedBlankPages,
   } = useBlankPages();
   const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
+  const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, allPageImages } = usePDFPageImages();
 
   // ── Virtual pages ─────────────────────────────────────────────────────────
   const [virtualIndex, setVirtualIndex] = useState(0);
@@ -578,11 +581,12 @@ export default function WorkspacePage() {
         return;
       }
 
-      const [remoteDrawings, remoteBlankPages, remoteTextNotes, remoteVoiceNotes] = await Promise.all([
+      const [remoteDrawings, remoteBlankPages, remoteTextNotes, remoteVoiceNotes, remotePageImages] = await Promise.all([
         fetchDrawings(canonicalId),
         fetchBlankPages(canonicalId),
         fetchTextNotes(canonicalId),
         fetchVoiceNotes(canonicalId),
+        fetchAllPageImages(canonicalId),
       ]);
 
       console.log('[StudySync] fetchDrawings:', Object.keys(remoteDrawings).length, 'rows');
@@ -622,6 +626,13 @@ export default function WorkspacePage() {
       // Seed voice notes fetched with the canonical docId — happens after ID resolution
       // so documentId always matches and pageNumber is already normalized to number
       seedVoiceNotes(remoteVoiceNotes);
+
+      // Page image annotations
+      if (Object.keys(remotePageImages).length > 0) {
+        seedPageImages(canonicalId, remotePageImages);
+      } else {
+        loadLocalPageImages(canonicalId);
+      }
     };
 
     syncDoc().catch(console.error);
@@ -1111,6 +1122,17 @@ export default function WorkspacePage() {
       setRoomModal('idle');
     }
   }, [activeDocument]);
+
+  // ── Page image annotation handlers ───────────────────────────────────────
+  const handleSavePageImages = useCallback((images: import('@/types').PDFPageImage[]) => {
+    if (!activeDocument || currentVP?.type !== 'pdf') return;
+    setPageImages(activeDocument.id, currentVP.pdfPage, images);
+  }, [activeDocument, currentVP, setPageImages]);
+
+  const handleDeletePageImage = useCallback((pageNumber: number, imageId: string) => {
+    if (!activeDocument) return;
+    deletePageImage(activeDocument.id, pageNumber, imageId);
+  }, [activeDocument, deletePageImage]);
 
   // ── Add image to current PDF page ────────────────────────────────────────
   const handleAddImageToPage = useCallback((dataUrl: string) => {
@@ -1607,13 +1629,15 @@ export default function WorkspacePage() {
                         onSave={handleSaveDrawing}
                         zoom={leftZoom}
                         onZoomChange={handleLeftZoomChange}
-                        interactive={atTool !== 'cursor' && (!showSplit || activeSide === 'left')}
+                        interactive={!showSplit || activeSide === 'left'}
                         notes={pageTextNotes[leftNotesKey] ?? []}
                         onNotesChange={handleLeftNotesChange}
                         onActivateTextTool={() => setLeftTool('text')}
                         onExitTextTool={() => setLeftTool('pen')}
                         searchOpen={searchOpen}
                         onSearchClose={() => setSearchOpen(false)}
+                        pageImages={currentVP?.type === 'pdf' ? getPageImages(activeDocument.id, currentVP.pdfPage) : []}
+                        onSavePageImages={handleSavePageImages}
                       />
                     )}
                   </div>
@@ -1894,6 +1918,9 @@ export default function WorkspacePage() {
               onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
               onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
               onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
+              docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
+              currentPdfPageForImages={currentPdfPage}
+              onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
             />
           </div>
 
