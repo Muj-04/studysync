@@ -49,7 +49,7 @@ export function usePDF() {
 
   const activeDocument = documents.find((d) => d.id === activeDocumentId) ?? null;
 
-  const addDocument = useCallback(async (file: File): Promise<{ isRestored: boolean }> => {
+  const addDocument = useCallback(async (file: File): Promise<{ isRestored: boolean; id: string }> => {
     setIsLoading(true);
     try {
       const isPPTX = file.name.toLowerCase().endsWith('.pptx');
@@ -86,7 +86,7 @@ export function usePDF() {
         setActiveDocumentId(doc.id);
       }
 
-      return { isRestored };
+      return { isRestored, id };
     } finally {
       setIsLoading(false);
     }

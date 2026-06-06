@@ -4,7 +4,7 @@ import {
   ImagePlus, Trash2, FileOutput, Mic,
   Sparkles, Languages, Lightbulb,
   Table2, Quote, FunctionSquare, BookMarked,
-  Loader2, Maximize2, Copy, Check, X,
+  Loader2, Maximize2, Copy, Check, X, Users,
 } from 'lucide-react';
 import { callAI } from '@/lib/gemini';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
@@ -51,6 +51,7 @@ interface Props {
   activeDocumentId?:  string;
   onInsertTextNote?:  (note: Omit<TextNote, 'id'>) => void;
   onInsertBlankPageWithGrid?: (rows: number, cols: number) => void;
+  onCreateRoom?:      () => void;
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────
@@ -348,6 +349,7 @@ export default function DocumentToolsPanel({
   activeDocumentId,
   onInsertTextNote,
   onInsertBlankPageWithGrid,
+  onCreateRoom,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1088,6 +1090,48 @@ export default function DocumentToolsPanel({
               Convert PPTX to PDF
             </button>
           </div>
+
+          {/* ── Create Study Room button ── */}
+          {onCreateRoom && (
+            <div style={{ padding: '0 10px 0' }}>
+              <button
+                onClick={onCreateRoom}
+                style={{
+                  width: '100%',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 8,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-1)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'background 0.13s, border-color 0.13s',
+                }}
+                onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                  borderColor: 'rgba(37,99,235,0.4)', background: 'var(--bg-hover)',
+                })}
+                onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                  borderColor: 'var(--border)', background: 'var(--bg-elevated)',
+                })}
+              >
+                <div style={{
+                  width: 30, height: 30, borderRadius: '50%',
+                  background: 'var(--bg-active)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Users size={14} style={{ color: 'var(--text-2)' }} />
+                </div>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-1)' }}>
+                    Create Study Room
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 1 }}>
+                    Collaborate in real-time
+                  </div>
+                </div>
+              </button>
+            </div>
+          )}
 
           {/* ── Voice Note button at bottom ── */}
           <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '10px' }}>
