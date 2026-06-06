@@ -89,9 +89,14 @@ export function useVoiceNotes() {
     }
 
     createClient().auth.getUser().then(({ data: { user } }) => {
-      if (!user) return;
+      if (!user) { console.warn('[VoiceNotes] getUser returned no user — Supabase fetch skipped'); return; }
       userIdRef.current = user.id;
+      console.log('[VoiceNotes] userId resolved:', user.id, '— fetching all voice notes from Supabase');
       fetchVoiceNotes().then((remote) => {
+        console.log('[VoiceNotes] fetchVoiceNotes returned', remote.length, 'rows');
+        remote.forEach((r, i) => {
+          console.log(`[VoiceNotes]   [${i}] id:${r.id} doc:${r.documentId} page:${r.pageNumber} audioUrl:${r.audioUrl ? r.audioUrl.slice(0, 80) + '…' : 'NULL'}`);
+        });
         setNotes((prev) => {
           const prevIds = new Set(prev.map((n) => n.id));
           const fromSupabase: VoiceNote[] = remote
@@ -106,6 +111,7 @@ export function useVoiceNotes() {
               timestamp: new Date(r.timestamp),
               title: r.title,
             }));
+          console.log('[VoiceNotes] adding', fromSupabase.length, 'new notes from Supabase (', remote.length - fromSupabase.length, 'already in local state)');
           return fromSupabase.length > 0 ? [...prev, ...fromSupabase] : prev;
         });
       });
@@ -177,6 +183,8 @@ export function useVoiceNotes() {
       const blob = new Blob(chunks, { type: recordedType });
       const audioUrl = URL.createObjectURL(blob);
 
+      console.log('[VoiceNotes] recording stopped — blob size:', blob.size, 'bytes, mime:', blob.type, 'duration:', duration.toFixed(1) + 's');
+
       const note: VoiceNote = {
         id: crypto.randomUUID(),
         documentId,
@@ -191,7 +199,12 @@ export function useVoiceNotes() {
 
       // Upload to Supabase in background
       if (userIdRef.current) {
-        saveVoiceNote(note);
+        console.log('[VoiceNotes] userIdRef set — calling saveVoiceNote id:', note.id);
+        saveVoiceNote(note).then((url) => {
+          console.log('[VoiceNotes] saveVoiceNote returned audioUrl:', url ? url.slice(0, 80) + '…' : null);
+        });
+      } else {
+        console.warn('[VoiceNotes] userIdRef is null — saveVoiceNote NOT called (user not logged in?)');
       }
     };
 
