@@ -52,13 +52,17 @@ export function useStudyRoom(
         channelRef.current = null;
       }
 
-      const channel = createClient().channel(`room:${roomId}`, {
+      const channelName = `room:${roomId}`;
+      console.log(`[StudyRoom] connecting — channel="${channelName}" gen=${generation}`);
+
+      const channel = createClient().channel(channelName, {
         config: { broadcast: { self: false } },
       });
 
       channel
         .on('broadcast', { event: 'drawing' }, ({ payload }: { payload: { pageNumber: number; data: string } }) => {
           if (generation !== generationRef.current) return;
+          console.log(`[StudyRoom] received drawing — page=${payload.pageNumber} dataLen=${payload.data.length}`);
           onDrawingRef.current(payload.pageNumber, payload.data);
         })
         .on('presence', { event: 'sync' }, () => {
@@ -70,11 +74,14 @@ export function useStudyRoom(
           // Discard callbacks from superseded or cleaned-up channels.
           if (deadRef.current || generation !== generationRef.current) return;
 
+          console.log(`[StudyRoom] channel status="${status}" gen=${generation}`);
+
           if (status === 'SUBSCRIBED') {
             retryRef.current = 0;
             await channel.track({ ts: Date.now() });
             if (connectedOnceRef.current) {
               // This is a reconnect — tell the caller to re-sync drawing state.
+              console.log('[StudyRoom] reconnected — calling onReconnect');
               onReconnectRef.current?.();
             }
             connectedOnceRef.current = true;
@@ -83,6 +90,8 @@ export function useStudyRoom(
             status === 'CLOSED' ||
             status === 'CHANNEL_ERROR'
           ) {
+            const delay = BACKOFF_MS[Math.min(retryRef.current, BACKOFF_MS.length - 1)];
+            console.warn(`[StudyRoom] disconnected (${status}) — reconnecting in ${delay}ms (attempt ${retryRef.current + 1})`);
             scheduleReconnect();
           }
         });
@@ -101,10 +110,22 @@ export function useStudyRoom(
   }, [roomId]);
 
   const broadcastDrawing = useCallback((pageNumber: number, data: string) => {
-    channelRef.current?.send({
+    const ch = channelRef.current;
+    if (!ch) {
+      console.warn('[StudyRoom] broadcastDrawing called but channel is null — not connected yet');
+      return;
+    }
+    console.log(`[StudyRoom] broadcasting drawing — page=${pageNumber} dataLen=${data.length}`);
+    ch.send({
       type: 'broadcast',
       event: 'drawing',
       payload: { pageNumber, data },
+    }).then((result) => {
+      if (result !== 'ok') {
+        console.warn('[StudyRoom] broadcast send result:', result);
+      }
+    }).catch((err) => {
+      console.error('[StudyRoom] broadcast send error:', err);
     });
   }, []);
 
