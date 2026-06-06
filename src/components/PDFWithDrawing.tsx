@@ -85,13 +85,11 @@ function computeHighlights(
   const q = query.toLowerCase().trim();
   if (!q) return [];
   const results: HighlightRect[] = [];
-
   for (const item of items) {
     if (!item.str) continue;
     const lower = item.str.toLowerCase();
     const [, , c, d, e, f] = item.transform;
     const fontH = Math.abs(d) || Math.abs(c) || 10;
-
     let start = 0;
     while (true) {
       const found = lower.indexOf(q, start);
@@ -121,39 +119,8 @@ async function searchPage(
   query: string,
 ): Promise<HighlightRect[]> {
   const textContent = await page.getTextContent();
-  const items = textContent.items.filter(
-    (item): item is TextItem => 'str' in item,
-  );
+  const items = textContent.items.filter((item): item is TextItem => 'str' in item);
   return computeHighlights(items, query, cssViewport);
-}
-
-// ── Image interaction helpers ─────────────────────────────────────────────────
-
-// Handle size in pixels for corner hit-testing
-const HANDLE_PX = 12;
-
-function getHitCorner(
-  mx: number, my: number,
-  img: PDFPageImage,
-  w: number, h: number,
-): 'tl' | 'tr' | 'bl' | 'br' | null {
-  const hx = HANDLE_PX / w;
-  const hy = HANDLE_PX / h;
-  const { x, y, width: iw, height: ih } = img;
-  const corners: Array<['tl' | 'tr' | 'bl' | 'br', number, number]> = [
-    ['tl', x,      y],
-    ['tr', x + iw, y],
-    ['bl', x,      y + ih],
-    ['br', x + iw, y + ih],
-  ];
-  for (const [key, cx, cy] of corners) {
-    if (Math.abs(mx - cx) <= hx && Math.abs(my - cy) <= hy) return key;
-  }
-  return null;
-}
-
-function hitImage(mx: number, my: number, img: PDFPageImage): boolean {
-  return mx >= img.x && mx <= img.x + img.width && my >= img.y && my <= img.y + img.height;
 }
 
 // ── ImageToolbar ──────────────────────────────────────────────────────────────
@@ -168,7 +135,6 @@ function ImageToolbar({
   onDelete: () => void;
 }) {
   const [lockPending, setLockPending] = useState(false);
-
   const imgLeft = image.x * canvasDims.w;
   const imgTop  = image.y * canvasDims.h;
   const TOOLBAR_H = 34;
@@ -187,13 +153,11 @@ function ImageToolbar({
     whiteSpace: 'nowrap', flexShrink: 0,
     transition: 'background 0.12s, color 0.12s, border-color 0.12s',
   };
-
-  const divider = (
-    <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
-  );
+  const divider = <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />;
 
   return (
     <div
+      data-image-toolbar=""
       style={{
         position: 'absolute', left: toolLeft, top: toolTop, zIndex: 10,
         display: 'flex', alignItems: 'center', gap: 5,
@@ -214,28 +178,21 @@ function ImageToolbar({
         onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
         onClick={() => onSizeChange(-0.05)}
         title="Shrink image"
-      >
-        −
-      </button>
+      >−</button>
       <button
         style={btnBase}
         onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
         onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
         onClick={() => onSizeChange(+0.05)}
         title="Grow image"
-      >
-        +
-      </button>
+      >+</button>
       {divider}
       {lockPending ? (
         <>
           <span style={{ fontSize: 10.5, color: '#f59e0b', whiteSpace: 'nowrap', maxWidth: 200 }}>
             Once locked, image cannot be moved or resized.
           </span>
-          <button
-            style={{ ...btnBase, color: '#f59e0b', borderColor: '#f59e0b' }}
-            onClick={() => { onLock(); setLockPending(false); }}
-          >
+          <button style={{ ...btnBase, color: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { onLock(); setLockPending(false); }}>
             Confirm Lock
           </button>
           <button
@@ -243,9 +200,7 @@ function ImageToolbar({
             onClick={() => setLockPending(false)}
             onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
             onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
-          >
-            Cancel
-          </button>
+          >Cancel</button>
         </>
       ) : (
         <button
@@ -253,9 +208,7 @@ function ImageToolbar({
           onClick={() => setLockPending(true)}
           onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
           onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
-        >
-          Lock Image
-        </button>
+        >Lock Image</button>
       )}
       {divider}
       <button
@@ -264,9 +217,7 @@ function ImageToolbar({
         onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)' })}
         onClick={onDelete}
         title="Remove image"
-      >
-        Remove
-      </button>
+      >Remove</button>
     </div>
   );
 }
@@ -294,7 +245,7 @@ interface Props {
   onSavePageImages?: (images: PDFPageImage[]) => void;
 }
 
-// ── Interaction state type ────────────────────────────────────────────────────
+// ── Interaction state ─────────────────────────────────────────────────────────
 
 type DragState =
   | { kind: 'none' }
@@ -311,11 +262,12 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     searchOpen = false, onSearchClose,
     pageImages, onSavePageImages,
   }, ref) {
-    const drawCanvasRef   = useRef<HTMLCanvasElement>(null);
-    const remoteCanvasRef = useRef<HTMLCanvasElement>(null);
-    const overlayRef      = useRef<HTMLDivElement>(null);
-    const isDrawing       = useRef(false);
-    const lastPos         = useRef<{ x: number; y: number } | null>(null);
+    const drawCanvasRef      = useRef<HTMLCanvasElement>(null);
+    const remoteCanvasRef    = useRef<HTMLCanvasElement>(null);
+    // Ref on the inner container div — used to compute normalized coords for image interaction
+    const canvasContainerRef = useRef<HTMLDivElement>(null);
+    const isDrawing  = useRef(false);
+    const lastPos    = useRef<{ x: number; y: number } | null>(null);
     const [canvasDims, setCanvasDims] = useState<{ w: number; h: number } | null>(null);
     const canvasDimsRef = useRef(canvasDims);
     canvasDimsRef.current = canvasDims;
@@ -325,18 +277,24 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
 
     // ── Image annotation state ────────────────────────────────────────────────
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
-    const [dragImages, setDragImages] = useState<PDFPageImage[] | null>(null);
+    const [dragImages, setDragImages]           = useState<PDFPageImage[] | null>(null);
 
-    // Stable refs for callbacks
-    const pageImagesRef = useRef<PDFPageImage[]>([]);
-    pageImagesRef.current = pageImages ?? [];
-    const onSavePageImagesRef = useRef<((imgs: PDFPageImage[]) => void) | undefined>(undefined);
+    // Stable refs so event handlers always see the latest values without re-subscribing
+    const pageImagesRef         = useRef<PDFPageImage[]>([]);
+    pageImagesRef.current       = pageImages ?? [];
+    const onSavePageImagesRef   = useRef<((imgs: PDFPageImage[]) => void) | undefined>(undefined);
     onSavePageImagesRef.current = onSavePageImages;
-    const selectedImageIdRef = useRef<string | null>(null);
-    selectedImageIdRef.current = selectedImageId;
-    const dragRef = useRef<DragState>({ kind: 'none' });
+    const selectedImageIdRef    = useRef<string | null>(null);
+    selectedImageIdRef.current  = selectedImageId;
+    const dragRef               = useRef<DragState>({ kind: 'none' });
 
-    // displayImages: use dragImages during interaction, props otherwise
+    // Computed at render time, mirrored to a ref so the window listener can read it without deps
+    const canDrawNow         = interactive && tool !== 'text' && tool !== 'cursor';
+    const isInteractingImages = interactive && tool === 'cursor';
+    const isInteractingRef   = useRef(false);
+    isInteractingRef.current = isInteractingImages;
+
+    // displayImages: during a drag/resize use the local optimistic copy, otherwise use props
     const displayImages = dragImages ?? (pageImages ?? []);
 
     // ── Search state ──────────────────────────────────────────────────────────
@@ -367,7 +325,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     }, [searchQuery, document.currentPage]);
 
     const handlePageReady = useCallback((page: PDFPageProxy, cssVp: PageViewport) => {
-      pdfPageRef.current    = page;
+      pdfPageRef.current     = page;
       cssViewportRef.current = cssVp;
       const q = searchQueryRef.current.trim();
       if (!q) { setSearchRects([]); return; }
@@ -377,7 +335,6 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     const goNext = useCallback(() => {
       setActiveMatchIdx((i) => (searchRects.length === 0 ? 0 : (i + 1) % searchRects.length));
     }, [searchRects.length]);
-
     const goPrev = useCallback(() => {
       setActiveMatchIdx((i) => (searchRects.length === 0 ? 0 : (i - 1 + searchRects.length) % searchRects.length));
     }, [searchRects.length]);
@@ -393,11 +350,9 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       lineStateRef.current = { phase: 'idle' };
     }, []);
 
-    useEffect(() => {
-      if (tool !== 'line') cancelLine();
-    }, [tool, cancelLine]);
+    useEffect(() => { if (tool !== 'line') cancelLine(); }, [tool, cancelLine]);
 
-    // Deselect image on page change
+    // Deselect any selected image on page navigation
     useEffect(() => {
       setSelectedImageId(null);
       setDragImages(null);
@@ -567,7 +522,6 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       img.src = prev;
     }, [cancelLine, onSave]);
 
-    // loadData: paint a peer's broadcast onto the remote overlay canvas
     const loadData = useCallback((data: string) => {
       const canvas = remoteCanvasRef.current;
       const dims = canvasDimsRef.current;
@@ -584,7 +538,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       img.src = data;
     }, []);
 
-    // insertImage: adds image to the annotations layer (40% width, centered)
+    // insertImage: adds image to the page images layer (40% width, centered)
     const insertImage = useCallback((dataUrl: string) => {
       const el = new Image();
       el.onload = () => {
@@ -600,33 +554,31 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
           width: w,
           height: h,
         };
-        const updated = [...pageImagesRef.current, newImg];
-        onSavePageImagesRef.current?.(updated);
+        onSavePageImagesRef.current?.([...pageImagesRef.current, newImg]);
       };
       el.src = dataUrl;
     }, []);
 
     useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas, loadData, insertImage }), [clearCanvas, undoCanvas, loadData, insertImage]);
 
-    // ── Image interaction ─────────────────────────────────────────────────────
+    // ── Image interaction: global drag/resize ─────────────────────────────────
 
-    // Global mouse move/up to handle dragging outside the overlay
-    useEffect(() => {
-      const getOverlayNorm = (e: MouseEvent): { x: number; y: number } => {
-        const el = overlayRef.current;
-        if (!el) return { x: 0, y: 0 };
-        const rect = el.getBoundingClientRect();
-        return {
-          x: (e.clientX - rect.left) / rect.width,
-          y: (e.clientY - rect.top)  / rect.height,
-        };
+    // Helper: compute normalized (0-1) position relative to the canvas container
+    const getContainerNorm = useCallback((e: MouseEvent): { x: number; y: number } => {
+      const el = canvasContainerRef.current;
+      if (!el) return { x: 0, y: 0 };
+      const rect = el.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) / rect.width,
+        y: (e.clientY - rect.top)  / rect.height,
       };
+    }, []);
 
+    useEffect(() => {
       const onMove = (e: MouseEvent) => {
         const ds = dragRef.current;
         if (ds.kind === 'none') return;
-        const { x: mx, y: my } = getOverlayNorm(e);
-
+        const { x: mx, y: my } = getContainerNorm(e);
         setDragImages((prev) => {
           const imgs = prev ?? pageImagesRef.current;
           return imgs.map((img) => {
@@ -647,10 +599,10 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
             const MIN = 0.04;
             let { x, y, width, height } = si;
             switch (ds.corner) {
-              case 'br': width  = Math.max(MIN, si.width + dx);  height = Math.max(MIN, si.height + dy); break;
-              case 'bl': width  = Math.max(MIN, si.width - dx);  height = Math.max(MIN, si.height + dy); x = si.x + si.width - width; break;
-              case 'tr': width  = Math.max(MIN, si.width + dx);  height = Math.max(MIN, si.height - dy); y = si.y + si.height - height; break;
-              case 'tl': width  = Math.max(MIN, si.width - dx);  height = Math.max(MIN, si.height - dy); x = si.x + si.width - width; y = si.y + si.height - height; break;
+              case 'br': width  = Math.max(MIN, si.width  + dx); height = Math.max(MIN, si.height + dy); break;
+              case 'bl': width  = Math.max(MIN, si.width  - dx); height = Math.max(MIN, si.height + dy); x = si.x + si.width - width; break;
+              case 'tr': width  = Math.max(MIN, si.width  + dx); height = Math.max(MIN, si.height - dy); y = si.y + si.height - height; break;
+              case 'tl': width  = Math.max(MIN, si.width  - dx); height = Math.max(MIN, si.height - dy); x = si.x + si.width - width; y = si.y + si.height - height; break;
             }
             return { ...img, x, y, width, height };
           });
@@ -669,53 +621,55 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
       return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, [getContainerNorm]);
+
+    // Deselect image when clicking anywhere that is NOT a managed image, corner handle, or toolbar
+    useEffect(() => {
+      const onDown = (e: MouseEvent) => {
+        if (!isInteractingRef.current) return;
+        const el = e.target as Element;
+        if (
+          el.closest('[data-managed-image]') ||
+          el.closest('[data-corner-handle]') ||
+          el.closest('[data-image-toolbar]')
+        ) return;
+        setSelectedImageId(null);
+      };
+      window.addEventListener('mousedown', onDown);
+      return () => window.removeEventListener('mousedown', onDown);
     }, []);
 
-    const handleOverlayMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-      if (!interactive) return;
-      const el = overlayRef.current;
-      const dims = canvasDimsRef.current;
-      if (!el || !dims) return;
+    // ── Image interaction handlers ─────────────────────────────────────────────
+
+    // Called when user clicks/drags on an image element directly
+    const handleImageMouseDown = useCallback((e: React.MouseEvent, img: PDFPageImage) => {
+      if (!isInteractingRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setSelectedImageId(img.id);
+      const el = canvasContainerRef.current;
+      if (!el) return;
       const rect = el.getBoundingClientRect();
       const mx = (e.clientX - rect.left) / rect.width;
       const my = (e.clientY - rect.top)  / rect.height;
-      const imgs = pageImagesRef.current;
+      dragRef.current = { kind: 'drag', imageId: img.id, startMX: mx, startMY: my, startImg: img };
+    }, []);
+
+    // Called when user drags a corner resize handle
+    const handleCornerMouseDown = useCallback((e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br') => {
+      e.preventDefault();
+      e.stopPropagation();
       const selId = selectedImageIdRef.current;
-
-      // Check corner handles of selected image first
-      if (selId) {
-        const selImg = imgs.find((i) => i.id === selId);
-        if (selImg) {
-          const corner = getHitCorner(mx, my, selImg, dims.w, dims.h);
-          if (corner) {
-            dragRef.current = { kind: 'resize', imageId: selId, corner, startMX: mx, startMY: my, startImg: selImg };
-            e.stopPropagation(); e.preventDefault();
-            return;
-          }
-          if (hitImage(mx, my, selImg)) {
-            dragRef.current = { kind: 'drag', imageId: selId, startMX: mx, startMY: my, startImg: selImg };
-            e.stopPropagation(); e.preventDefault();
-            return;
-          }
-        }
-      }
-
-      // Hit test other images (top = last in array)
-      for (let i = imgs.length - 1; i >= 0; i--) {
-        const img = imgs[i];
-        if (hitImage(mx, my, img)) {
-          setSelectedImageId(img.id);
-          dragRef.current = { kind: 'drag', imageId: img.id, startMX: mx, startMY: my, startImg: img };
-          e.stopPropagation(); e.preventDefault();
-          return;
-        }
-      }
-
-      // Click on empty → deselect
-      setSelectedImageId(null);
-    }, [interactive]);
-
-    // ── Image handlers ────────────────────────────────────────────────────────
+      if (!selId) return;
+      const img = pageImagesRef.current.find((i) => i.id === selId);
+      if (!img) return;
+      const el = canvasContainerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const mx = (e.clientX - rect.left) / rect.width;
+      const my = (e.clientY - rect.top)  / rect.height;
+      dragRef.current = { kind: 'resize', imageId: selId, corner, startMX: mx, startMY: my, startImg: img };
+    }, []);
 
     const handleSizeChange = useCallback((delta: number) => {
       const selId = selectedImageIdRef.current;
@@ -729,8 +683,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         const cx = img.x + img.width  / 2;
         const cy = img.y + img.height / 2;
         return {
-          ...img,
-          width: newW, height: newH,
+          ...img, width: newW, height: newH,
           x: Math.max(0, Math.min(1 - newW, cx - newW / 2)),
           y: Math.max(0, Math.min(1 - newH, cy - newH / 2)),
         };
@@ -759,25 +712,22 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         onSave(canvas.toDataURL('image/png'));
       };
       el.src = img.src;
-      const updated = imgs.filter((i) => i.id !== selId);
       setSelectedImageId(null);
-      onSavePageImagesRef.current?.(updated);
+      onSavePageImagesRef.current?.(imgs.filter((i) => i.id !== selId));
     }, [onSave]);
 
     const handleDeleteImage = useCallback(() => {
       const selId = selectedImageIdRef.current;
       if (!selId) return;
-      const updated = pageImagesRef.current.filter((i) => i.id !== selId);
       setSelectedImageId(null);
-      onSavePageImagesRef.current?.(updated);
+      onSavePageImagesRef.current?.(pageImagesRef.current.filter((i) => i.id !== selId));
     }, []);
 
     // ── Render ────────────────────────────────────────────────────────────────
 
-    const canDrawNow = interactive && tool !== 'text' && tool !== 'cursor';
-    const isInteractingImages = interactive && tool === 'cursor';
-
-    const selectedImage = selectedImageId ? displayImages.find((i) => i.id === selectedImageId) ?? null : null;
+    const selectedImage = selectedImageId
+      ? displayImages.find((i) => i.id === selectedImageId) ?? null
+      : null;
 
     const overlay = canvasDims ? (
       <div style={{
@@ -785,20 +735,29 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
         padding: 24, pointerEvents: 'none',
       }}>
-        <div style={{
-          position: 'relative',
-          width: canvasDims.w,
-          height: canvasDims.h,
-          flexShrink: 0,
-          pointerEvents: 'none',
-        }}>
+        {/* Inner container — sized to the canvas. All absolutely-positioned layers live here.
+            Keeps pointerEvents:'none' so the container itself never blocks PDF text selection.
+            Only specific children (drawing canvas, images in cursor mode, corner handles, toolbar)
+            opt in to receiving pointer events. */}
+        <div
+          ref={canvasContainerRef}
+          style={{
+            position: 'relative',
+            width: canvasDims.w,
+            height: canvasDims.h,
+            flexShrink: 0,
+            pointerEvents: 'none',
+          }}
+        >
           {/* Layer 0 — remote peers' drawings */}
           <canvas
             ref={remoteCanvasRef}
             style={{ position: 'absolute', top: 0, left: 0, zIndex: 0, pointerEvents: 'none' }}
           />
 
-          {/* Layer 1 — page image annotations */}
+          {/* Layer 1 — page image annotations.
+              In cursor mode each <img> opts in to pointer events so the user can drag/select.
+              In drawing mode they're transparent to events so strokes land on the canvas. */}
           <div style={{
             position: 'absolute', top: 0, left: 0,
             width: canvasDims.w, height: canvasDims.h,
@@ -811,22 +770,28 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
                 src={img.src}
                 alt=""
                 draggable={false}
+                data-managed-image=""
                 style={{
                   position: 'absolute',
                   left:   img.x      * canvasDims.w,
                   top:    img.y      * canvasDims.h,
                   width:  img.width  * canvasDims.w,
                   height: img.height * canvasDims.h,
-                  pointerEvents: 'none',
                   userSelect: 'none',
+                  // Only capture pointer events in cursor mode — otherwise drawing strokes pass through
+                  pointerEvents: isInteractingImages ? 'auto' : 'none',
+                  cursor: isInteractingImages ? 'grab' : 'default',
                   outline: selectedImageId === img.id ? '2px solid var(--accent)' : '2px solid transparent',
                   outlineOffset: 1,
                 }}
+                onMouseDown={isInteractingImages ? (e) => handleImageMouseDown(e, img) : undefined}
               />
             ))}
           </div>
 
-          {/* Layer 2 — local drawing canvas */}
+          {/* Layer 2 — local drawing canvas.
+              pointerEvents:'auto' ONLY when a drawing tool is active — otherwise pointer events
+              fall through to the PDF text layer, enabling text selection. */}
           <canvas
             ref={drawCanvasRef}
             style={{
@@ -853,48 +818,37 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
             onTouchEnd={() => canDrawNow && stopDraw()}
           />
 
-          {/* Layer 3 — image interaction overlay (cursor mode only) */}
-          {isInteractingImages && (
-            <div
-              ref={overlayRef}
-              style={{
-                position: 'absolute', top: 0, left: 0,
-                width: canvasDims.w, height: canvasDims.h,
-                zIndex: 3,
-                pointerEvents: 'auto',
-                cursor: 'default',
-              }}
-              onMouseDown={handleOverlayMouseDown}
-            >
-              {/* Corner resize handles for selected image */}
-              {selectedImage && (['tl', 'tr', 'bl', 'br'] as const).map((corner) => {
-                const hx = corner.includes('r') ? selectedImage.x + selectedImage.width  : selectedImage.x;
-                const hy = corner.includes('b') ? selectedImage.y + selectedImage.height : selectedImage.y;
-                const cursor =
-                  corner === 'tl' || corner === 'br' ? 'nwse-resize' : 'nesw-resize';
-                return (
-                  <div
-                    key={corner}
-                    style={{
-                      position: 'absolute',
-                      left:   hx * canvasDims.w - 5,
-                      top:    hy * canvasDims.h - 5,
-                      width: 10, height: 10,
-                      borderRadius: 2,
-                      background: 'var(--accent)',
-                      border: '1.5px solid #fff',
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
-                      cursor,
-                      zIndex: 1,
-                      pointerEvents: 'none',
-                    }}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {/* Corner resize handles for the selected image.
+              These live directly in the container (no wrapper overlay div) so they're
+              the only elements that block pointer events in cursor mode — no invisible
+              full-canvas div that would block PDF text selection. */}
+          {isInteractingImages && selectedImage && (['tl', 'tr', 'bl', 'br'] as const).map((corner) => {
+            const hx = corner.includes('r') ? selectedImage.x + selectedImage.width  : selectedImage.x;
+            const hy = corner.includes('b') ? selectedImage.y + selectedImage.height : selectedImage.y;
+            const cursor = corner === 'tl' || corner === 'br' ? 'nwse-resize' : 'nesw-resize';
+            return (
+              <div
+                key={corner}
+                data-corner-handle=""
+                style={{
+                  position: 'absolute',
+                  left: hx * canvasDims.w - 5,
+                  top:  hy * canvasDims.h - 5,
+                  width: 10, height: 10,
+                  zIndex: 4,
+                  borderRadius: 2,
+                  background: 'var(--accent)',
+                  border: '1.5px solid #fff',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                  cursor,
+                  pointerEvents: 'auto',
+                }}
+                onMouseDown={(e) => handleCornerMouseDown(e, corner)}
+              />
+            );
+          })}
 
-          {/* ImageToolbar */}
+          {/* ImageToolbar — floats above the selected image */}
           {isInteractingImages && selectedImage && (
             <ImageToolbar
               image={selectedImage}
@@ -905,7 +859,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
             />
           )}
 
-          {/* Layer 4 — text notes */}
+          {/* Text notes layer */}
           {notes !== undefined && onNotesChange && (
             <TextNotesLayer
               notes={notes}
