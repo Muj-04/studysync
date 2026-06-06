@@ -14,10 +14,12 @@ async function userId(): Promise<string | null> {
 
 export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }) {
   const uid = await userId(); if (!uid) return;
-  await sb().from('documents').upsert({
+  const { error } = await sb().from('documents').upsert({
     id: doc.id, user_id: uid, name: doc.name, type: doc.type,
     page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
   }, { onConflict: 'id' });
+  if (error) console.error('[DB] upsertDocument error:', error.message, 'docId:', doc.id);
+  else console.log('[DB] upsertDocument OK — docId:', doc.id, 'name:', doc.name);
 }
 
 export async function fetchDocuments(): Promise<Array<{ id: string; name: string; type: string }>> {
@@ -107,8 +109,11 @@ export async function saveTextNotes(docId: string, pageKey: string, notes: TextN
 }
 
 export async function fetchTextNotes(docId: string): Promise<Record<string, TextNote[]>> {
-  const uid = await userId(); if (!uid) return {};
-  const { data } = await sb().from('text_notes').select('*').match({ user_id: uid, document_id: docId });
+  const uid = await userId();
+  console.log('[DB] fetchTextNotes uid:', uid, 'docId:', docId);
+  if (!uid) return {};
+  const { data, error } = await sb().from('text_notes').select('*').match({ user_id: uid, document_id: docId });
+  console.log('[DB] fetchTextNotes rows:', data?.length ?? 0, 'error:', error?.message ?? null);
   const map: Record<string, TextNote[]> = {};
   for (const r of data ?? []) {
     const note: TextNote = { id: r.id, x: r.x, y: r.y, width: r.width, height: r.height, content: r.content, fontSize: r.font_size, color: r.color };
@@ -169,16 +174,21 @@ export async function saveDrawing(docId: string, pageKey: string, canvasData: st
     await sb().from('drawings').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
     return;
   }
-  await sb().from('drawings').upsert({
+  const { error } = await sb().from('drawings').upsert({
     id: `${uid}_${docId}_${pageKey}`,
     user_id: uid, document_id: docId, page_key: pageKey,
     canvas_data: canvasData, updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id,document_id,page_key' });
+  if (error) console.error('[DB] saveDrawing error:', error.message, 'docId:', docId, 'pageKey:', pageKey);
+  else console.log('[DB] saveDrawing OK — docId:', docId, 'pageKey:', pageKey);
 }
 
 export async function fetchDrawings(docId: string): Promise<Record<string, string>> {
-  const uid = await userId(); if (!uid) return {};
-  const { data } = await sb().from('drawings').select('page_key, canvas_data').match({ user_id: uid, document_id: docId });
+  const uid = await userId();
+  console.log('[DB] fetchDrawings uid:', uid, 'docId:', docId);
+  if (!uid) return {};
+  const { data, error } = await sb().from('drawings').select('page_key, canvas_data').match({ user_id: uid, document_id: docId });
+  console.log('[DB] fetchDrawings rows:', data?.length ?? 0, 'error:', error?.message ?? null);
   const map: Record<string, string> = {};
   for (const r of data ?? []) if (r.canvas_data) map[r.page_key] = r.canvas_data;
   return map;
