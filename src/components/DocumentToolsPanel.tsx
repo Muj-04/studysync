@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
 import {
-  ImagePlus, Trash2, FileOutput, Mic,
+  ImagePlus, Trash2, FileOutput, FilePlus, Mic,
   Sparkles, Languages, Lightbulb,
   Table2, Quote, FunctionSquare, BookMarked,
   Loader2, Maximize2, Copy, Check, X, Users, Eraser,
@@ -51,8 +51,10 @@ interface Props {
   activeDocumentId?:  string;
   onInsertTextNote?:  (note: Omit<TextNote, 'id'>) => void;
   onInsertBlankPageWithGrid?: (rows: number, cols: number) => void;
-  onCreateRoom?:      () => void;
+  onCreateRoom?:       () => void;
   onClearAllDrawings?: () => void;
+  onAddImageToPage?:   (dataUrl: string) => void;
+  onAddImageAsNewPage?: (dataUrl: string) => void;
 }
 
 // ── Section label ─────────────────────────────────────────────────────────────
@@ -352,6 +354,8 @@ export default function DocumentToolsPanel({
   onInsertBlankPageWithGrid,
   onCreateRoom,
   onClearAllDrawings,
+  onAddImageToPage,
+  onAddImageAsNewPage,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -377,6 +381,10 @@ export default function DocumentToolsPanel({
 
   // ── Clear drawings confirmation ────────────────────────────────────────────
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+
+  // ── Add image state ────────────────────────────────────────────────────────
+  const [addImageData, setAddImageData] = useState<string | null>(null);
+  const addImageInputRef = useRef<HTMLInputElement>(null);
 
   // ── Key Term modal ─────────────────────────────────────────────────────────
   const [keyTermOpen, setKeyTermOpen] = useState(false);
@@ -1004,6 +1012,39 @@ export default function DocumentToolsPanel({
             {/* ── Divider ── */}
             <div style={{ height: 1, background: 'var(--border-subtle)' }} />
 
+            {/* ── Add Image ── */}
+            {(onAddImageToPage || onAddImageAsNewPage) && (
+              <div>
+                <SectionLabel>Add Image</SectionLabel>
+                <button
+                  onClick={() => addImageInputRef.current?.click()}
+                  style={{
+                    width: '100%',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '9px 11px', borderRadius: 8,
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-2)',
+                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                    fontSize: 12.5, fontWeight: 500,
+                    transition: 'background 0.13s, border-color 0.13s',
+                  }}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                    background: 'var(--bg-hover)', borderColor: 'var(--border-strong)',
+                  })}
+                  onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                    background: 'transparent', borderColor: 'var(--border)',
+                  })}
+                >
+                  <ImagePlus size={14} />
+                  Choose Image…
+                </button>
+              </div>
+            )}
+
+            {/* ── Divider ── */}
+            <div style={{ height: 1, background: 'var(--border-subtle)' }} />
+
             {/* ── Add Blank Page ── */}
             <div>
               <SectionLabel>Add Blank Page</SectionLabel>
@@ -1211,7 +1252,7 @@ export default function DocumentToolsPanel({
             </button>
           </div>
 
-          {/* Hidden file input */}
+          {/* Hidden file input — blank page images */}
           <input
             ref={fileInputRef}
             type="file"
@@ -1223,6 +1264,24 @@ export default function DocumentToolsPanel({
               const reader = new FileReader();
               reader.onload = () => {
                 if (typeof reader.result === 'string') onInsertImage(reader.result);
+              };
+              reader.readAsDataURL(file);
+              e.target.value = '';
+            }}
+          />
+
+          {/* Hidden file input — Add Image feature */}
+          <input
+            ref={addImageInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/jpg,image/webp"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (typeof reader.result === 'string') setAddImageData(reader.result);
               };
               reader.readAsDataURL(file);
               e.target.value = '';
@@ -1415,6 +1474,157 @@ export default function DocumentToolsPanel({
               >
                 Insert as Note
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Image modal ── */}
+      {addImageData && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.62)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 24,
+          }}
+          onClick={() => setAddImageData(null)}
+        >
+          <div
+            className="animate-scale-in"
+            style={{
+              width: '100%', maxWidth: 400,
+              background: 'var(--bg-panel)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              boxShadow: '0 24px 80px rgba(0,0,0,0.65)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '15px 20px',
+              borderBottom: '1px solid var(--border-subtle)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ImagePlus size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
+                  Add Image
+                </span>
+              </div>
+              <button
+                onClick={() => setAddImageData(null)}
+                style={{
+                  width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 6, border: '1px solid transparent',
+                  background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Preview */}
+            <div style={{
+              padding: '16px 20px 12px',
+              display: 'flex', justifyContent: 'center',
+              background: 'var(--bg-elevated)',
+              borderBottom: '1px solid var(--border-subtle)',
+            }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={addImageData}
+                alt="Selected"
+                style={{
+                  maxWidth: '100%', maxHeight: 160,
+                  borderRadius: 6,
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                  objectFit: 'contain',
+                }}
+              />
+            </div>
+
+            {/* Options */}
+            <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 4px', lineHeight: 1.5 }}>
+                Where would you like to add this image?
+              </p>
+
+              {onAddImageToPage && (
+                <button
+                  onClick={() => { onAddImageToPage(addImageData); setAddImageData(null); }}
+                  style={{
+                    width: '100%', textAlign: 'left',
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    padding: '12px 14px', borderRadius: 9,
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    transition: 'border-color 0.13s, background 0.13s',
+                  }}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                    borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)',
+                  })}
+                  onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                    borderColor: 'var(--border)', background: 'var(--bg-elevated)',
+                  })}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'var(--accent-muted)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <ImagePlus size={15} style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 2px' }}>
+                      Add to current page
+                    </p>
+                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4 }}>
+                      Overlay on the current PDF page as an annotation
+                    </p>
+                  </div>
+                </button>
+              )}
+
+              {onAddImageAsNewPage && (
+                <button
+                  onClick={() => { onAddImageAsNewPage(addImageData); setAddImageData(null); }}
+                  style={{
+                    width: '100%', textAlign: 'left',
+                    display: 'flex', alignItems: 'flex-start', gap: 12,
+                    padding: '12px 14px', borderRadius: 9,
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    transition: 'border-color 0.13s, background 0.13s',
+                  }}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                    borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)',
+                  })}
+                  onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                    borderColor: 'var(--border)', background: 'var(--bg-elevated)',
+                  })}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'var(--bg-active)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}>
+                    <FilePlus size={15} style={{ color: 'var(--text-2)' }} />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 2px' }}>
+                      Add as new page
+                    </p>
+                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4 }}>
+                      Create a new blank page with this image on it
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -72,6 +72,7 @@ export interface DrawingCanvasHandle {
   clear: () => void;
   undo?: () => void;
   loadData?: (data: string) => void;
+  insertImage?: (dataUrl: string) => void;
 }
 
 // ── Search helpers ────────────────────────────────────────────────────────────
@@ -421,6 +422,30 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       img.src = prev;
     }, [cancelLine, onSave]);
 
+    // Draws an image onto the LOCAL canvas, centered and fitted, then saves.
+    const insertImage = useCallback((dataUrl: string) => {
+      const canvas = drawCanvasRef.current;
+      const dims   = canvasDimsRef.current;
+      if (!canvas || !dims) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const el = new Image();
+      el.onload = () => {
+        const aspect = el.naturalWidth / el.naturalHeight;
+        let w = Math.min(el.naturalWidth, dims.w * 0.65);
+        let h = w / aspect;
+        if (h > dims.h * 0.65) { h = dims.h * 0.65; w = h * aspect; }
+        undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        ctx.drawImage(el, (dims.w - w) / 2, (dims.h - h) / 2, w, h);
+        ctx.restore();
+        onSave(canvas.toDataURL('image/png'));
+      };
+      el.src = dataUrl;
+    }, [onSave]);
+
     // Paints a peer's broadcast onto the REMOTE overlay canvas.
     // The local drawing canvas is never touched, so concurrent strokes from
     // different users never overwrite each other.
@@ -440,7 +465,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       img.src = data;
     }, []);
 
-    useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas, loadData }), [clearCanvas, undoCanvas, loadData]);
+    useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas, loadData, insertImage }), [clearCanvas, undoCanvas, loadData, insertImage]);
 
     const canDrawNow = interactive && tool !== 'text' && tool !== 'cursor';
 
