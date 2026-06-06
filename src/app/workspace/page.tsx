@@ -450,6 +450,7 @@ export default function WorkspacePage() {
       const uid = user?.id ?? null;
       userIdRef.current = uid;
       setUserId(uid);
+      console.log('[StudySync] userId resolved:', uid ?? 'NOT LOGGED IN');
     });
   }, []);
 
@@ -551,7 +552,9 @@ export default function WorkspacePage() {
 
   // Load per-document data from Supabase when the active document changes
   useEffect(() => {
+    console.log('[StudySync] per-doc effect fired — activeDocumentId:', activeDocumentId, 'userId:', userId, 'activeDocument:', !!activeDocument);
     if (!activeDocumentId || !activeDocument || !userId) return;
+    console.log('[StudySync] fetching from Supabase for doc:', activeDocumentId);
     // Register document so it appears in the dashboard
     upsertDocument({
       id: activeDocument.id,
@@ -565,11 +568,15 @@ export default function WorkspacePage() {
       fetchBlankPages(activeDocumentId),
       fetchTextNotes(activeDocumentId),
     ]).then(([remoteDrawings, remoteBlankPages, remoteTextNotes]) => {
+      console.log('[StudySync] fetchDrawings result:', remoteDrawings);
+      console.log('[StudySync] fetchBlankPages result:', remoteBlankPages);
+      console.log('[StudySync] fetchTextNotes result:', remoteTextNotes);
       // Drawings: prefix keys with docId to match local format, then seed
       const prefixedDrawings: Record<string, string> = {};
       for (const [pageKey, data] of Object.entries(remoteDrawings)) {
         prefixedDrawings[`${activeDocumentId}:${pageKey}`] = data;
       }
+      console.log('[StudySync] calling seedDrawings with prefixed keys:', Object.keys(prefixedDrawings));
       seedDrawings(prefixedDrawings);
       // Blank pages: seed (local wins on ID conflict)
       seedBlankPages(remoteBlankPages);
@@ -578,9 +585,12 @@ export default function WorkspacePage() {
       for (const [subKey, notes] of Object.entries(remoteTextNotes)) {
         prefixedNotes[`${activeDocumentId}:${subKey}`] = notes;
       }
+      console.log('[StudySync] text notes to merge:', Object.keys(prefixedNotes));
       if (Object.keys(prefixedNotes).length > 0) {
         setPageTextNotes((prev) => ({ ...prefixedNotes, ...prev }));
       }
+    }).catch((err) => {
+      console.error('[StudySync] per-doc fetch failed:', err);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDocumentId, userId]);
