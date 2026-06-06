@@ -267,6 +267,31 @@ export function useVoiceNotes() {
     [notes]
   );
 
+  // Called from syncDoc after canonical docId is resolved. Adds any remote notes
+  // not already in local state (idempotent — duplicate IDs are skipped).
+  const seedVoiceNotes = useCallback((remote: Array<{
+    id: string; documentId: string; pageNumber: number | string;
+    duration: number; title?: string; audioUrl?: string; timestamp: string;
+  }>) => {
+    setNotes((prev) => {
+      const prevIds = new Set(prev.map((n) => n.id));
+      const incoming: VoiceNote[] = remote
+        .filter((r) => !prevIds.has(r.id))
+        .map((r) => ({
+          id: r.id,
+          documentId: r.documentId,
+          pageNumber: r.pageNumber,
+          audioBlob: new Blob([], { type: 'audio/webm' }),
+          audioUrl: r.audioUrl ?? '',
+          duration: r.duration,
+          timestamp: new Date(r.timestamp),
+          title: r.title,
+        }));
+      console.log('[VoiceNotes] seedVoiceNotes — incoming:', remote.length, 'new to add:', incoming.length);
+      return incoming.length > 0 ? [...prev, ...incoming] : prev;
+    });
+  }, []);
+
   return {
     notes,
     isRecording,
@@ -277,5 +302,6 @@ export function useVoiceNotes() {
     deleteNote,
     updateNoteTitle,
     getNotesForPage,
+    seedVoiceNotes,
   };
 }
