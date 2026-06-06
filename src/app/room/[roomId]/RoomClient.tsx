@@ -8,7 +8,7 @@ import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
-import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
+import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
 import type { Tool, PenType } from '@/lib/drawing';
 
 const COLORS = ['#ededf0', '#f87171', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#000000'];
@@ -31,15 +31,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [strokeSize]              = useState(4);
   const [zoom]                    = useState(1.0);
 
-  const drawingRef    = useRef<DrawingCanvasHandle | null>(null);
-  const docIdRef      = useRef<string | null>(null);
+  const drawingRef     = useRef<DrawingCanvasHandle | null>(null);
+  const docIdRef       = useRef<string | null>(null);
   const currentPageRef = useRef<number>(1);   // kept in sync below; avoids adding activeDocument to handleIncomingDrawing deps
-
-  // remoteVersion increments whenever a broadcast drawing lands on the page
-  // the user is currently viewing, forcing PDFWithDrawing to remount and load
-  // the latest savedData. Without this the canvas ignores savedData changes
-  // that happen after its initial mount.
-  const [remoteVersion, setRemoteVersion] = useState(0);
 
   const { activeDocument, addDocument, goToPage } = usePDF();
   const { getDrawing, saveDrawing, seedDrawings }  = usePDFDrawings();
@@ -52,10 +46,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     const docId = docIdRef.current;
     console.log(`[Room] incoming drawing — docId=${docId ?? 'NOT SET'} page=${pageNumber} dataLen=${data.length}`);
     if (!docId) return;
+    // Always persist so navigating to this page later shows the latest drawing.
     seedDrawings({ [`${docId}:${pageNumber}`]: data });
-    // Only remount the canvas if this drawing is for the page the user is on.
+    // If the user is already on this page, paint directly onto the live canvas
+    // instead of remounting — no flash, no interruption of an in-progress stroke.
     if (currentPageRef.current === pageNumber) {
-      setRemoteVersion((v) => v + 1);
+      drawingRef.current?.loadData?.(data);
     }
   }, [seedDrawings]);
 
@@ -144,10 +140,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }, []);
-
-  // Reset the remote-version counter on page change so the key stays small and
-  // navigating away then back doesn't reuse a stale high counter.
-  useEffect(() => { setRemoteVersion(0); }, [currentPage]);
 
   const prevPage = useCallback(() => { if (activeDocument) goToPage(Math.max(1, currentPage - 1)); }, [activeDocument, currentPage, goToPage]);
   const nextPage = useCallback(() => { if (activeDocument) goToPage(Math.min(pageCount, currentPage + 1)); }, [activeDocument, currentPage, pageCount, goToPage]);
@@ -307,7 +299,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         {activeDocument && (
           <PDFWithDrawing
-            key={`${activeDocument.id}-p${currentPage}-rv${remoteVersion}`}
+            key={`${activeDocument.id}-p${currentPage}`}
             ref={drawingRef}
             document={activeDocument}
             tool={tool}
