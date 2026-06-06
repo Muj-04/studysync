@@ -390,3 +390,22 @@ export async function joinRoom(roomId: string): Promise<void> {
     { onConflict: 'room_id,user_id' },
   );
 }
+
+export async function saveRoomDrawing(roomId: string, pageNumber: number, data: string): Promise<void> {
+  const { error } = await sb().from('room_drawings').upsert(
+    { room_id: roomId, page_number: pageNumber, data, updated_at: new Date().toISOString() },
+    { onConflict: 'room_id,page_number' },
+  );
+  if (error) console.error('[DB] saveRoomDrawing error:', error.message);
+}
+
+export async function fetchRoomDrawing(roomId: string, pageNumber: number): Promise<string | null> {
+  const { data, error } = await sb()
+    .from('room_drawings')
+    .select('data')
+    .eq('room_id', roomId)
+    .eq('page_number', pageNumber)
+    .maybeSingle();
+  if (error) { console.error('[DB] fetchRoomDrawing error:', error.message); return null; }
+  return data?.data ?? null;
+}
