@@ -37,13 +37,30 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const { activeDocument, addDocument, goToPage } = usePDF();
   const { getDrawing, saveDrawing, seedDrawings }  = usePDFDrawings();
 
+  // broadcastRef breaks the circular dep: handleReconnect needs broadcastDrawing,
+  // but broadcastDrawing comes from useStudyRoom which needs handleReconnect.
+  const broadcastRef = useRef<(page: number, data: string) => void>(() => {});
+
   const handleIncomingDrawing = useCallback((pageNumber: number, data: string) => {
     const docId = docIdRef.current;
     if (!docId) return;
     seedDrawings({ [`${docId}:${pageNumber}`]: data });
   }, [seedDrawings]);
 
-  const { broadcastDrawing, memberCount } = useStudyRoom(roomId, handleIncomingDrawing);
+  // Re-broadcast the current page's drawing so other members get the latest
+  // state immediately after a reconnect.
+  const handleReconnect = useCallback(() => {
+    const docId = docIdRef.current;
+    if (!docId || !activeDocument) return;
+    const page = activeDocument.currentPage;
+    const data = getDrawing(docId, page);
+    if (data) broadcastRef.current(page, data);
+  }, [activeDocument, getDrawing]);
+
+  const { broadcastDrawing, memberCount } = useStudyRoom(roomId, handleIncomingDrawing, handleReconnect);
+
+  // Keep broadcastRef in sync (broadcastDrawing is stable but this is defensive).
+  useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
 
   // ── Init: auth check → fetch room → download PDF → seed drawings ────────────
   useEffect(() => {
