@@ -28,6 +28,7 @@ import {
   fetchBlankPages,
   fetchTextNotes,
   fetchBookmarks,
+  fetchVoiceNotes,
   saveBookmarks as dbSaveBookmarks,
   saveTextNotes as dbSaveTextNotes,
   saveSessionState as dbSaveSessionState,
@@ -515,6 +516,7 @@ export default function WorkspacePage() {
     notes: voiceNotes,
     isRecording, recordingDuration, recordingContext,
     startRecording, stopRecording, deleteNote, updateNoteTitle, getNotesForPage,
+    seedVoiceNotes,
   } = useVoiceNotes();
   const {
     insertBlankPage, removeBlankPage,
@@ -574,15 +576,17 @@ export default function WorkspacePage() {
         return;
       }
 
-      const [remoteDrawings, remoteBlankPages, remoteTextNotes] = await Promise.all([
+      const [remoteDrawings, remoteBlankPages, remoteTextNotes, remoteVoiceNotes] = await Promise.all([
         fetchDrawings(canonicalId),
         fetchBlankPages(canonicalId),
         fetchTextNotes(canonicalId),
+        fetchVoiceNotes(canonicalId),
       ]);
 
       console.log('[StudySync] fetchDrawings:', Object.keys(remoteDrawings).length, 'rows');
       console.log('[StudySync] fetchBlankPages:', remoteBlankPages.length, 'rows');
       console.log('[StudySync] fetchTextNotes:', Object.keys(remoteTextNotes).length, 'pages');
+      console.log('[StudySync] fetchVoiceNotes:', remoteVoiceNotes.length, 'rows');
 
       // Drawings are stored locally as "docId:pageNum" — prefix to match
       const prefixedDrawings: Record<string, string> = {};
@@ -612,6 +616,10 @@ export default function WorkspacePage() {
         console.log('[StudySync] uploading local-only text notes for page:', pageKey, 'count:', notes.length);
         dbSaveTextNotes(canonicalId, pageKey, notes);
       }
+
+      // Seed voice notes fetched with the canonical docId — happens after ID resolution
+      // so documentId always matches and pageNumber is already normalized to number
+      seedVoiceNotes(remoteVoiceNotes);
     };
 
     syncDoc().catch(console.error);
