@@ -72,21 +72,32 @@ export async function saveVoiceNote(note: VoiceNote) {
 
   let audioUrl: string | null = null;
 
-  if (note.audioBlob) {
-    const ext = note.audioBlob.type.includes('ogg') ? 'ogg' : note.audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  if (note.audioBlob && note.audioBlob.size > 0) {
+    // Strip codecs parameter (e.g. "audio/webm;codecs=opus" → "audio/webm") so
+    // the upload content-type matches the bucket's allowed_mime_types exactly.
+    const mimeType = note.audioBlob.type.split(';')[0] || 'audio/webm';
+    const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
     const path = `${uid}/${note.documentId}/${note.id}.${ext}`;
-    const { error } = await sb().storage.from('voice-notes').upload(path, note.audioBlob, { upsert: true });
-    if (!error) {
-      const { data: urlData } = sb().storage.from('voice-notes').getPublicUrl(path);
-      audioUrl = urlData?.publicUrl ?? null;
-      if (!audioUrl) {
-        const { data: signed } = await sb().storage.from('voice-notes').createSignedUrl(path, 60 * 60 * 24 * 365);
-        audioUrl = signed?.signedUrl ?? null;
-      }
+
+    const { error: uploadError } = await sb().storage
+      .from('voice-notes')
+      .upload(path, note.audioBlob, { upsert: true, contentType: mimeType });
+
+    if (uploadError) {
+      console.error('[DB] saveVoiceNote upload error:', uploadError.message, 'path:', path);
+    } else {
+      // Bucket is private — getPublicUrl always returns a string (it's URL construction
+      // only, no auth check), so that URL would 403. Always use signed URL instead.
+      const { data: signed, error: signError } = await sb().storage
+        .from('voice-notes')
+        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10); // 10-year TTL
+      if (signError) console.error('[DB] saveVoiceNote sign error:', signError.message);
+      audioUrl = signed?.signedUrl ?? null;
+      console.log('[DB] saveVoiceNote upload OK — path:', path, 'audioUrl set:', !!audioUrl);
     }
   }
 
-  const { error } = await sb().from('voice_notes').upsert({
+  const { error: dbError } = await sb().from('voice_notes').upsert({
     id: note.id,
     user_id: uid,
     document_id: note.documentId,
@@ -97,7 +108,9 @@ export async function saveVoiceNote(note: VoiceNote) {
     timestamp: note.timestamp instanceof Date ? note.timestamp.toISOString() : note.timestamp,
   }, { onConflict: 'id' });
 
-  return error ? null : audioUrl;
+  if (dbError) console.error('[DB] saveVoiceNote db error:', dbError.message);
+  else console.log('[DB] saveVoiceNote db OK — id:', note.id);
+  return dbError ? null : audioUrl;
 }
 
 export async function fetchVoiceNotes(docId?: string): Promise<Array<{
