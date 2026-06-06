@@ -1112,6 +1112,41 @@ export default function WorkspacePage() {
     }
   }, [activeDocument]);
 
+  // ── Add image to current PDF page ────────────────────────────────────────
+  const handleAddImageToPage = useCallback((dataUrl: string) => {
+    pdfDrawingRef.current?.insertImage?.(dataUrl);
+  }, []);
+
+  // ── Add image as a new blank page ─────────────────────────────────────────
+  const handleAddImageAsNewPage = useCallback((dataUrl: string) => {
+    if (!activeDocument) return;
+    const afterPage = currentVP?.type === 'pdf'
+      ? currentVP.pdfPage
+      : currentVP?.type === 'blank'
+        ? currentVP.blankPage.insertAfterPage
+        : activeDocument.currentPage;
+
+    const W = 816, H = 1056;
+    const offscreen = document.createElement('canvas');
+    offscreen.width  = W;
+    offscreen.height = H;
+    const ctx = offscreen.getContext('2d')!;
+    ctx.fillStyle = defaultBgTheme === 'dark' ? '#1e1e2e' : '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(W / img.naturalWidth, H / img.naturalHeight, 1);
+      const w = img.naturalWidth * scale;
+      const h = img.naturalHeight * scale;
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      const newPage = insertBlankPage(activeDocument.id, afterPage, defaultBgTheme);
+      updateCanvasData(newPage.id, offscreen.toDataURL('image/png'));
+      setVirtualIndex((i) => i + 1);
+    };
+    img.src = dataUrl;
+  }, [activeDocument, currentVP, insertBlankPage, updateCanvasData, defaultBgTheme]);
+
   // ── Clear all drawings for current document ───────────────────────────────
   const handleClearAllDrawings = useCallback(() => {
     if (!activeDocument) return;
@@ -1857,6 +1892,8 @@ export default function WorkspacePage() {
               onInsertBlankPageWithGrid={hasDocument ? handleInsertBlankPageWithGrid : undefined}
               onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
               onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
+              onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
+              onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
             />
           </div>
 
