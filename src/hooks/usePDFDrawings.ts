@@ -33,16 +33,18 @@ export function usePDFDrawings() {
     }
   }, []);
 
-  // Workspace page calls this when it loads a document's drawings from Supabase.
-  // Merges remote drawings in; local state always wins on key conflicts.
+  // Called once per document open to seed Supabase drawings into local state.
+  // Remote wins for keys Supabase knows about (authoritative on load).
+  // Local-only keys (drawings made this session not yet reflected in remote) are kept.
   const seedDrawings = useCallback((remoteDrawings: Record<string, string>) => {
-    console.log('[StudySync] seedDrawings called, keys:', Object.keys(remoteDrawings));
+    if (Object.keys(remoteDrawings).length === 0) return;
+    console.log('[StudySync] seedDrawings called, remote keys:', Object.keys(remoteDrawings));
     setDrawings((prev) => {
-      const merged = { ...remoteDrawings };
-      for (const [key, val] of Object.entries(prev)) merged[key] = val;
-      const hasNew = Object.keys(remoteDrawings).some((k) => !(k in prev));
-      console.log('[StudySync] seedDrawings hasNew:', hasNew, 'prev keys:', Object.keys(prev), 'merged keys:', Object.keys(merged));
-      if (!hasNew) return prev;
+      // Spread order: prev first, then remote overwrites matching keys
+      const merged = { ...prev, ...remoteDrawings };
+      const hasUpdates = Object.keys(remoteDrawings).some((k) => prev[k] !== remoteDrawings[k]);
+      console.log('[StudySync] seedDrawings hasUpdates:', hasUpdates);
+      if (!hasUpdates) return prev;
       storageSet(KEYS.DRAWINGS, merged);
       return merged;
     });
