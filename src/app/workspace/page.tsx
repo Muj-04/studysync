@@ -600,6 +600,18 @@ export default function WorkspacePage() {
       if (Object.keys(prefixedNotes).length > 0) {
         setPageTextNotes((prev) => ({ ...prefixedNotes, ...prev }));
       }
+
+      // Upload local-only text note pages that Supabase doesn't have yet
+      const localPrefix = `${canonicalId}:`;
+      const remotePageKeys = new Set(Object.keys(remoteTextNotes));
+      for (const [fullKey, notes] of Object.entries(pageTextNotes)) {
+        if (!fullKey.startsWith(localPrefix)) continue;
+        const pageKey = fullKey.slice(localPrefix.length);
+        if (remotePageKeys.has(pageKey)) continue;
+        if (notes.length === 0) continue;
+        console.log('[StudySync] uploading local-only text notes for page:', pageKey, 'count:', notes.length);
+        dbSaveTextNotes(canonicalId, pageKey, notes);
+      }
     };
 
     syncDoc().catch(console.error);
@@ -670,10 +682,20 @@ export default function WorkspacePage() {
     if (!activeDocumentId) { setBookmarks([]); return; }
     // Optimistic: localStorage first
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS);
-    setBookmarks(stored?.[activeDocumentId] ?? []);
-    // Authoritative: Supabase
+    const local = stored?.[activeDocumentId] ?? [];
+    setBookmarks(local);
+    // Authoritative: Supabase — merge remote+local; upload any local-only bookmarks
     if (userId) {
-      fetchBookmarks(activeDocumentId).then(setBookmarks);
+      fetchBookmarks(activeDocumentId).then((remote) => {
+        const remoteIds = new Set(remote.map((b) => b.id));
+        const localOnly = local.filter((b) => !remoteIds.has(b.id));
+        const merged = [...remote, ...localOnly];
+        setBookmarks(merged);
+        if (localOnly.length > 0) {
+          console.log('[StudySync] uploading', localOnly.length, 'local-only bookmarks');
+          dbSaveBookmarks(activeDocumentId, merged);
+        }
+      });
     }
   }, [activeDocumentId, userId]);
 
