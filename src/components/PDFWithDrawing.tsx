@@ -71,6 +71,7 @@ type LineState =
 export interface DrawingCanvasHandle {
   clear: () => void;
   undo?: () => void;
+  loadData?: (data: string) => void;
 }
 
 // ── Search helpers ────────────────────────────────────────────────────────────
@@ -406,7 +407,25 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       img.src = prev;
     }, [cancelLine, onSave]);
 
-    useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas }), [clearCanvas, undoCanvas]);
+    // Draws a data URL onto the live canvas without remounting. Used by the
+    // study room to apply incoming broadcast drawings without a flash.
+    const loadData = useCallback((data: string) => {
+      const canvas = drawCanvasRef.current;
+      const dims = canvasDimsRef.current;
+      if (!canvas || !dims) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const img = new Image();
+      img.onload = () => {
+        const dpr = window.devicePixelRatio || 1;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, dims.w, dims.h);
+        ctx.drawImage(img, 0, 0, dims.w, dims.h);
+      };
+      img.src = data;
+    }, []);
+
+    useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas, loadData }), [clearCanvas, undoCanvas, loadData]);
 
     const canDrawNow = interactive && tool !== 'text' && tool !== 'cursor';
 
