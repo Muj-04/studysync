@@ -956,9 +956,13 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Voice notes ───────────────────────────────────────────────────────────
-  const activePdfPage = activeDocument?.currentPage ?? 1;
+  // Read page directly from the virtual page — always matches what's displayed.
+  // activeDocument.currentPage lags one render behind (set by the goToPage effect),
+  // which caused all voice notes to save as page 1.
   const pageIdentifier: number | string =
-    currentVP?.type === 'blank' ? currentVP.blankPage.id : activePdfPage;
+    currentVP?.type === 'blank' ? currentVP.blankPage.id
+    : currentVP?.type === 'pdf' ? currentVP.pdfPage
+    : 1;
   const pageNotes = activeDocument
     ? getNotesForPage(activeDocument.id, pageIdentifier)
     : [];

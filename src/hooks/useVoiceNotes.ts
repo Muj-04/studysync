@@ -158,6 +158,7 @@ export function useVoiceNotes() {
   }, [notes]);
 
   const startRecording = useCallback(async (documentId: string, pageNumber: number | string) => {
+    console.log('[VoiceNotes] startRecording called — docId:', documentId, 'pageNumber:', pageNumber);
     if (recordingRef.current) return;
 
     let stream: MediaStream;
@@ -183,7 +184,7 @@ export function useVoiceNotes() {
       const blob = new Blob(chunks, { type: recordedType });
       const audioUrl = URL.createObjectURL(blob);
 
-      console.log('[VoiceNotes] recording stopped — blob size:', blob.size, 'bytes, mime:', blob.type, 'duration:', duration.toFixed(1) + 's');
+      console.log('[VoiceNotes] recording stopped — pageNumber:', pageNumber, 'blob size:', blob.size, 'bytes, mime:', blob.type, 'duration:', duration.toFixed(1) + 's');
 
       const note: VoiceNote = {
         id: crypto.randomUUID(),
