@@ -43,6 +43,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   const handleIncomingDrawing = useCallback((pageNumber: number, data: string) => {
     const docId = docIdRef.current;
+    console.log(`[Room] incoming drawing — docId=${docId ?? 'NOT SET'} page=${pageNumber} dataLen=${data.length}`);
     if (!docId) return;
     seedDrawings({ [`${docId}:${pageNumber}`]: data });
   }, [seedDrawings]);
@@ -88,6 +89,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const file = new File([blob], room.documentName + '.pdf', { type: 'application/pdf' });
       const { id: docId } = await addDocument(file);
       docIdRef.current = docId;
+      console.log(`[Room] init complete — roomId=${roomId} docId=${docId}`);
 
       // Seed own saved drawings for this doc
       const remoteDrawings = await fetchDrawings(docId);
@@ -118,6 +120,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     if (!activeDocument) return;
     const page = activeDocument.currentPage;
     saveDrawing(activeDocument.id, page, data);
+    console.log(`[Room] onSave fired — page=${page} dataLen=${data.length}`);
     broadcastDrawing(page, data);
   }, [activeDocument, saveDrawing, broadcastDrawing]);
 
