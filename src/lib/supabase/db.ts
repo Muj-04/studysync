@@ -146,13 +146,16 @@ export async function deleteVoiceNote(noteId: string, docId: string) {
 export async function saveTextNotes(docId: string, pageKey: string, notes: TextNote[]) {
   const uid = await userId(); if (!uid) return;
   await ensureDoc(uid, docId);
-  await sb().from('text_notes').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
+  const { error: delErr } = await sb().from('text_notes').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
+  if (delErr) console.error('[DB] saveTextNotes delete error:', delErr.message, 'docId:', docId, 'pageKey:', pageKey);
   if (notes.length === 0) return;
-  await sb().from('text_notes').insert(notes.map((n) => ({
+  const { error: insErr } = await sb().from('text_notes').insert(notes.map((n) => ({
     id: n.id, user_id: uid, document_id: docId, page_key: pageKey,
     x: n.x, y: n.y, width: n.width, height: n.height,
     content: n.content, font_size: n.fontSize, color: n.color,
   })));
+  if (insErr) console.error('[DB] saveTextNotes insert error:', insErr.message, 'docId:', docId, 'pageKey:', pageKey);
+  else console.log('[DB] saveTextNotes OK — docId:', docId, 'pageKey:', pageKey, 'count:', notes.length);
 }
 
 export async function fetchTextNotes(docId: string): Promise<Record<string, TextNote[]>> {
@@ -174,12 +177,15 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
 export async function saveBookmarks(docId: string, bookmarks: Bookmark[]) {
   const uid = await userId(); if (!uid) return;
   await ensureDoc(uid, docId);
-  await sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId });
+  const { error: delErr } = await sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId });
+  if (delErr) console.error('[DB] saveBookmarks delete error:', delErr.message, 'docId:', docId);
   if (bookmarks.length === 0) return;
-  await sb().from('bookmarks').insert(bookmarks.map((b) => ({
+  const { error: insErr } = await sb().from('bookmarks').insert(bookmarks.map((b) => ({
     id: b.id, user_id: uid, document_id: docId,
     virtual_index: b.virtualIndex, label: b.label, created_at: new Date(b.createdAt).toISOString(),
   })));
+  if (insErr) console.error('[DB] saveBookmarks insert error:', insErr.message, 'docId:', docId);
+  else console.log('[DB] saveBookmarks OK — docId:', docId, 'count:', bookmarks.length);
 }
 
 export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
