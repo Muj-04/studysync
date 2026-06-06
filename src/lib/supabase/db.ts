@@ -27,17 +27,31 @@ async function ensureDoc(uid: string, docId: string): Promise<void> {
 
 // ── Documents ────────────────────────────────────────────────────────────────
 
-export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }) {
-  const uid = await userId(); if (!uid) return;
+// Returns the canonical document ID for this user+name (cross-device stable).
+// If a row with the same name already exists (opened on another device first),
+// that existing ID is returned and used — the local UUID is discarded.
+export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }): Promise<string> {
+  const uid = await userId(); if (!uid) return doc.id;
+
+  // Look up by (user_id, name) — stable across devices regardless of local UUID
+  const { data: existing } = await sb()
+    .from('documents').select('id')
+    .eq('user_id', uid).eq('name', doc.name)
+    .maybeSingle();
+
+  const canonicalId = existing?.id ?? doc.id;
+
   const { error } = await sb().from('documents').upsert({
-    id: doc.id, user_id: uid, name: doc.name, type: doc.type,
+    id: canonicalId, user_id: uid, name: doc.name, type: doc.type,
     page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
   }, { onConflict: 'id' });
-  if (error) console.error('[DB] upsertDocument error:', error.message, 'docId:', doc.id);
+
+  if (error) console.error('[DB] upsertDocument error:', error.message, 'canonicalId:', canonicalId);
   else {
-    console.log('[DB] upsertDocument OK — docId:', doc.id, 'name:', doc.name);
-    registeredDocs.add(doc.id);
+    console.log('[DB] upsertDocument OK — canonicalId:', canonicalId, 'localId:', doc.id, 'name:', doc.name);
+    registeredDocs.add(canonicalId);
   }
+  return canonicalId;
 }
 
 export async function fetchDocuments(): Promise<Array<{ id: string; name: string; type: string }>> {
