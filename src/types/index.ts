@@ -19,6 +19,15 @@ export interface VoiceNote {
   title?: string;
 }
 
+export interface PDFPageImage {
+  id: string;
+  src: string;      // base64 data URL
+  x: number;        // fraction of canvas width (0–1)
+  y: number;        // fraction of canvas height (0–1)
+  width: number;    // fraction of canvas width (0–1)
+  height: number;   // fraction of canvas height (0–1)
+}
+
 // Stubs for future features — not yet implemented
 
 export interface CanvasImage {
