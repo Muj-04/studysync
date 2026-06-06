@@ -353,3 +353,40 @@ export async function fetchDashboardData() {
     })),
   };
 }
+
+// ── Study Rooms ───────────────────────────────────────────────────────────────
+
+export async function uploadRoomPdf(roomId: string, blob: Blob, docName: string): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+  const path = `${uid}/rooms/${roomId}/${docName}.pdf`;
+  const { error } = await sb().storage.from('pdfs').upload(path, blob, {
+    contentType: 'application/pdf', upsert: true,
+  });
+  if (error) { console.error('[DB] uploadRoomPdf error:', error.message); return null; }
+  return path;
+}
+
+export async function createRoom(roomId: string, docName: string, pdfPath: string): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { error } = await sb().from('study_rooms').insert({
+    id: roomId, host_user_id: uid, document_name: docName, pdf_path: pdfPath,
+  });
+  if (error) { console.error('[DB] createRoom error:', error.message); return null; }
+  return roomId;
+}
+
+export async function fetchRoom(roomId: string): Promise<{
+  id: string; documentName: string; pdfPath: string; hostUserId: string;
+} | null> {
+  const { data, error } = await sb().from('study_rooms').select('*').eq('id', roomId).single();
+  if (error || !data) { console.error('[DB] fetchRoom error:', error?.message); return null; }
+  return { id: data.id, documentName: data.document_name, pdfPath: data.pdf_path, hostUserId: data.host_user_id };
+}
+
+export async function joinRoom(roomId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('room_members').upsert(
+    { room_id: roomId, user_id: uid },
+    { onConflict: 'room_id,user_id' },
+  );
+}
