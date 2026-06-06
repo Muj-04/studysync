@@ -9,20 +9,23 @@ export function useStudyRoom(
   roomId: string,
   onIncomingDrawing: (pageNumber: number, data: string) => void,
   onReconnect?: () => void,
+  onSyncRequest?: (pageNumber: number) => void,
 ) {
   const [memberCount, setMemberCount] = useState(1);
-  const channelRef       = useRef<RealtimeChannel | null>(null);
-  const onDrawingRef     = useRef(onIncomingDrawing);
-  const onReconnectRef   = useRef(onReconnect);
-  const retryRef         = useRef(0);
-  const timerRef         = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const deadRef          = useRef(false);       // true once cleanup has run
-  const connectedOnceRef = useRef(false);       // false on very first SUBSCRIBED
-  const generationRef    = useRef(0);           // incremented each connect() call
+  const channelRef        = useRef<RealtimeChannel | null>(null);
+  const onDrawingRef      = useRef(onIncomingDrawing);
+  const onReconnectRef    = useRef(onReconnect);
+  const onSyncRequestRef  = useRef(onSyncRequest);
+  const retryRef          = useRef(0);
+  const timerRef          = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deadRef           = useRef(false);       // true once cleanup has run
+  const connectedOnceRef  = useRef(false);       // false on very first SUBSCRIBED
+  const generationRef     = useRef(0);           // incremented each connect() call
 
   // Keep callback refs fresh without causing the effect to re-run.
   useEffect(() => { onDrawingRef.current = onIncomingDrawing; });
   useEffect(() => { onReconnectRef.current = onReconnect; });
+  useEffect(() => { onSyncRequestRef.current = onSyncRequest; });
 
   useEffect(() => {
     deadRef.current = false;
@@ -64,6 +67,11 @@ export function useStudyRoom(
           if (generation !== generationRef.current) return;
           console.log(`[StudyRoom] received drawing — page=${payload.pageNumber} dataLen=${payload.data.length}`);
           onDrawingRef.current(payload.pageNumber, payload.data);
+        })
+        .on('broadcast', { event: 'sync_request' }, ({ payload }: { payload: { pageNumber: number } }) => {
+          if (generation !== generationRef.current) return;
+          console.log(`[StudyRoom] received sync_request — page=${payload.pageNumber}`);
+          onSyncRequestRef.current?.(payload.pageNumber);
         })
         .on('presence', { event: 'sync' }, () => {
           if (generation !== generationRef.current) return;
@@ -129,5 +137,16 @@ export function useStudyRoom(
     });
   }, []);
 
-  return { broadcastDrawing, memberCount };
+  const requestSync = useCallback((pageNumber: number) => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    console.log(`[StudyRoom] sending sync_request — page=${pageNumber}`);
+    ch.send({
+      type: 'broadcast',
+      event: 'sync_request',
+      payload: { pageNumber },
+    });
+  }, []);
+
+  return { broadcastDrawing, memberCount, requestSync };
 }
