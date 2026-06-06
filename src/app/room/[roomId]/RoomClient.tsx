@@ -31,8 +31,15 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [strokeSize]              = useState(4);
   const [zoom]                    = useState(1.0);
 
-  const drawingRef = useRef<DrawingCanvasHandle | null>(null);
-  const docIdRef   = useRef<string | null>(null);
+  const drawingRef    = useRef<DrawingCanvasHandle | null>(null);
+  const docIdRef      = useRef<string | null>(null);
+  const currentPageRef = useRef<number>(1);   // kept in sync below; avoids adding activeDocument to handleIncomingDrawing deps
+
+  // remoteVersion increments whenever a broadcast drawing lands on the page
+  // the user is currently viewing, forcing PDFWithDrawing to remount and load
+  // the latest savedData. Without this the canvas ignores savedData changes
+  // that happen after its initial mount.
+  const [remoteVersion, setRemoteVersion] = useState(0);
 
   const { activeDocument, addDocument, goToPage } = usePDF();
   const { getDrawing, saveDrawing, seedDrawings }  = usePDFDrawings();
@@ -46,6 +53,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     console.log(`[Room] incoming drawing — docId=${docId ?? 'NOT SET'} page=${pageNumber} dataLen=${data.length}`);
     if (!docId) return;
     seedDrawings({ [`${docId}:${pageNumber}`]: data });
+    // Only remount the canvas if this drawing is for the page the user is on.
+    if (currentPageRef.current === pageNumber) {
+      setRemoteVersion((v) => v + 1);
+    }
   }, [seedDrawings]);
 
   // Re-broadcast the current page's drawing so other members get the latest
@@ -115,6 +126,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const pageCount     = activeDocument?.pageCount ?? 1;
   const currentDrawing = activeDocument ? getDrawing(activeDocument.id, currentPage) : undefined;
 
+  // Keep the page ref in sync so handleIncomingDrawing can read it without
+  // taking activeDocument as a dependency (which would re-register the callback).
+  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleSave = useCallback((data: string) => {
     if (!activeDocument) return;
@@ -129,6 +144,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }, []);
+
+  // Reset the remote-version counter on page change so the key stays small and
+  // navigating away then back doesn't reuse a stale high counter.
+  useEffect(() => { setRemoteVersion(0); }, [currentPage]);
 
   const prevPage = useCallback(() => { if (activeDocument) goToPage(Math.max(1, currentPage - 1)); }, [activeDocument, currentPage, goToPage]);
   const nextPage = useCallback(() => { if (activeDocument) goToPage(Math.min(pageCount, currentPage + 1)); }, [activeDocument, currentPage, pageCount, goToPage]);
@@ -288,6 +307,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         {activeDocument && (
           <PDFWithDrawing
+            key={`${activeDocument.id}-p${currentPage}-rv${remoteVersion}`}
             ref={drawingRef}
             document={activeDocument}
             tool={tool}
