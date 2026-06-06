@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, Link2, Check, ChevronLeft, ChevronRight, Undo2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchRoom, joinRoom, fetchDrawings } from '@/lib/supabase/db';
+import { fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing } from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
@@ -31,9 +31,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [strokeSize]              = useState(4);
   const [zoom]                    = useState(1.0);
 
-  const drawingRef     = useRef<DrawingCanvasHandle | null>(null);
-  const docIdRef       = useRef<string | null>(null);
-  const currentPageRef = useRef<number>(1);   // kept in sync below; avoids adding activeDocument to handleIncomingDrawing deps
+  const drawingRef        = useRef<DrawingCanvasHandle | null>(null);
+  const docIdRef          = useRef<string | null>(null);
+  const currentPageRef    = useRef<number>(1);   // kept in sync below; avoids adding activeDocument to handleIncomingDrawing deps
+  const saveRoomTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { activeDocument, addDocument, goToPage } = usePDF();
   const { getDrawing, saveDrawing, seedDrawings }  = usePDFDrawings();
@@ -63,21 +64,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     if (data) broadcastRef.current(page, data);
   }, [activeDocument, getDrawing]);
 
-  // When a peer navigates to a page, they broadcast a sync_request. If we're
-  // on that page and have drawing data, re-broadcast it so they see it immediately
-  // without waiting for us to draw something new.
-  const handleSyncRequest = useCallback((pageNumber: number) => {
-    if (currentPageRef.current !== pageNumber) return;
-    const docId = docIdRef.current;
-    if (!docId) return;
-    const data = getDrawing(docId, pageNumber);
-    if (!data) return;
-    console.log(`[Room] responding to sync_request — page=${pageNumber}`);
-    broadcastRef.current(pageNumber, data);
-  }, [getDrawing]);
-
-  const { broadcastDrawing, memberCount, requestSync } = useStudyRoom(
-    roomId, handleIncomingDrawing, handleReconnect, handleSyncRequest,
+  const { broadcastDrawing, memberCount } = useStudyRoom(
+    roomId, handleIncomingDrawing, handleReconnect,
   );
 
   // Keep broadcastRef in sync (broadcastDrawing is stable but this is defensive).
@@ -139,22 +127,29 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // taking activeDocument as a dependency (which would re-register the callback).
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
 
-  // Request the latest drawings from peers whenever the user lands on a page.
-  // Fires on initial ready AND on every page navigation thereafter.
-  // Any peer currently on that page responds by re-broadcasting their drawing.
+  // Fetch the latest room drawing from Supabase whenever the user navigates to a page.
+  // This is immediate and doesn't depend on another peer being active.
   useEffect(() => {
     if (status !== 'ready') return;
-    requestSync(currentPage);
-  }, [currentPage, status, requestSync]);
+    fetchRoomDrawing(roomId, currentPage).then((data) => {
+      if (data) {
+        console.log(`[Room] fetched room drawing from DB — page=${currentPage} dataLen=${data.length}`);
+        drawingRef.current?.loadData?.(data);
+      }
+    });
+  }, [currentPage, status, roomId]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleSave = useCallback((data: string) => {
     if (!activeDocument) return;
     const page = activeDocument.currentPage;
     saveDrawing(activeDocument.id, page, data);
-    console.log(`[Room] onSave fired — page=${page} dataLen=${data.length}`);
     broadcastDrawing(page, data);
-  }, [activeDocument, saveDrawing, broadcastDrawing]);
+    if (saveRoomTimerRef.current) clearTimeout(saveRoomTimerRef.current);
+    saveRoomTimerRef.current = setTimeout(() => {
+      saveRoomDrawing(roomId, page, data);
+    }, 500);
+  }, [activeDocument, saveDrawing, broadcastDrawing, roomId]);
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(window.location.href);
