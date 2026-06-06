@@ -10,6 +10,21 @@ async function userId(): Promise<string | null> {
   return user?.id ?? null;
 }
 
+// Session-scoped set of docIds that are guaranteed to exist in the documents table.
+// Prevents FK violations when drawing/note saves race ahead of upsertDocument.
+const registeredDocs = new Set<string>();
+
+// Guarantees the documents row exists before any FK-dependent write.
+// Uses ignoreDuplicates so it never overwrites name/type set by upsertDocument.
+async function ensureDoc(uid: string, docId: string): Promise<void> {
+  if (registeredDocs.has(docId)) return;
+  await sb().from('documents').upsert(
+    { id: docId, user_id: uid, name: docId, type: 'pdf', updated_at: new Date().toISOString() },
+    { onConflict: 'id', ignoreDuplicates: true },
+  );
+  registeredDocs.add(docId);
+}
+
 // ── Documents ────────────────────────────────────────────────────────────────
 
 export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }) {
@@ -19,7 +34,10 @@ export async function upsertDocument(doc: { id: string; name: string; type: stri
     page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
   }, { onConflict: 'id' });
   if (error) console.error('[DB] upsertDocument error:', error.message, 'docId:', doc.id);
-  else console.log('[DB] upsertDocument OK — docId:', doc.id, 'name:', doc.name);
+  else {
+    console.log('[DB] upsertDocument OK — docId:', doc.id, 'name:', doc.name);
+    registeredDocs.add(doc.id);
+  }
 }
 
 export async function fetchDocuments(): Promise<Array<{ id: string; name: string; type: string }>> {
@@ -36,6 +54,7 @@ export async function deleteDocument(docId: string) {
 
 export async function saveVoiceNote(note: VoiceNote) {
   const uid = await userId(); if (!uid) return null;
+  await ensureDoc(uid, note.documentId);
 
   let audioUrl: string | null = null;
 
@@ -99,6 +118,7 @@ export async function deleteVoiceNote(noteId: string, docId: string) {
 
 export async function saveTextNotes(docId: string, pageKey: string, notes: TextNote[]) {
   const uid = await userId(); if (!uid) return;
+  await ensureDoc(uid, docId);
   await sb().from('text_notes').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
   if (notes.length === 0) return;
   await sb().from('text_notes').insert(notes.map((n) => ({
@@ -126,6 +146,7 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
 
 export async function saveBookmarks(docId: string, bookmarks: Bookmark[]) {
   const uid = await userId(); if (!uid) return;
+  await ensureDoc(uid, docId);
   await sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId });
   if (bookmarks.length === 0) return;
   await sb().from('bookmarks').insert(bookmarks.map((b) => ({
@@ -149,6 +170,7 @@ export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
 
 export async function saveKeyTerms(docId: string, terms: KeyTerm[]) {
   const uid = await userId(); if (!uid) return;
+  await ensureDoc(uid, docId);
   await sb().from('key_terms').delete().match({ user_id: uid, document_id: docId });
   if (terms.length === 0) return;
   await sb().from('key_terms').insert(terms.map((t) => ({
@@ -170,6 +192,7 @@ export async function fetchKeyTerms(docId: string): Promise<KeyTerm[]> {
 
 export async function saveDrawing(docId: string, pageKey: string, canvasData: string | null) {
   const uid = await userId(); if (!uid) return;
+  await ensureDoc(uid, docId);
   if (!canvasData) {
     await sb().from('drawings').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
     return;
@@ -198,6 +221,7 @@ export async function fetchDrawings(docId: string): Promise<Record<string, strin
 
 export async function saveBlankPages(docId: string, pages: BlankPage[]) {
   const uid = await userId(); if (!uid) return;
+  await ensureDoc(uid, docId);
   await sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId });
   if (pages.length === 0) return;
   await sb().from('blank_pages').insert(pages.map((p) => ({
