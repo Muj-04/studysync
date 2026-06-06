@@ -63,7 +63,22 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     if (data) broadcastRef.current(page, data);
   }, [activeDocument, getDrawing]);
 
-  const { broadcastDrawing, memberCount } = useStudyRoom(roomId, handleIncomingDrawing, handleReconnect);
+  // When a peer navigates to a page, they broadcast a sync_request. If we're
+  // on that page and have drawing data, re-broadcast it so they see it immediately
+  // without waiting for us to draw something new.
+  const handleSyncRequest = useCallback((pageNumber: number) => {
+    if (currentPageRef.current !== pageNumber) return;
+    const docId = docIdRef.current;
+    if (!docId) return;
+    const data = getDrawing(docId, pageNumber);
+    if (!data) return;
+    console.log(`[Room] responding to sync_request — page=${pageNumber}`);
+    broadcastRef.current(pageNumber, data);
+  }, [getDrawing]);
+
+  const { broadcastDrawing, memberCount, requestSync } = useStudyRoom(
+    roomId, handleIncomingDrawing, handleReconnect, handleSyncRequest,
+  );
 
   // Keep broadcastRef in sync (broadcastDrawing is stable but this is defensive).
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
@@ -123,6 +138,14 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // Keep the page ref in sync so handleIncomingDrawing can read it without
   // taking activeDocument as a dependency (which would re-register the callback).
   useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+
+  // Request the latest drawings from peers whenever the user lands on a page.
+  // Fires on initial ready AND on every page navigation thereafter.
+  // Any peer currently on that page responds by re-broadcasting their drawing.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    requestSync(currentPage);
+  }, [currentPage, status, requestSync]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   const handleSave = useCallback((data: string) => {
