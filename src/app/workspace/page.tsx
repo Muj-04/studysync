@@ -441,10 +441,15 @@ export default function WorkspacePage() {
   };
 
   // ── Current user (for Supabase sync) ─────────────────────────────────────
+  // userId as state so effects that depend on it re-run once the async
+  // getUser() resolves. userIdRef mirrors it for use inside callbacks.
+  const [userId, setUserId] = useState<string | null>(null);
   const userIdRef = useRef<string | null>(null);
   useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
-      userIdRef.current = user?.id ?? null;
+      const uid = user?.id ?? null;
+      userIdRef.current = uid;
+      setUserId(uid);
     });
   }, []);
 
@@ -546,8 +551,7 @@ export default function WorkspacePage() {
 
   // Load per-document data from Supabase when the active document changes
   useEffect(() => {
-    if (!activeDocumentId || !activeDocument) return;
-    if (!userIdRef.current) return;
+    if (!activeDocumentId || !activeDocument || !userId) return;
     // Register document so it appears in the dashboard
     upsertDocument({
       id: activeDocument.id,
@@ -579,7 +583,7 @@ export default function WorkspacePage() {
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDocumentId]);
+  }, [activeDocumentId, userId]);
 
   useEffect(() => {
     if (currentPdfPage !== null) goToPage(currentPdfPage);
@@ -647,10 +651,10 @@ export default function WorkspacePage() {
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS);
     setBookmarks(stored?.[activeDocumentId] ?? []);
     // Authoritative: Supabase
-    if (userIdRef.current) {
+    if (userId) {
       fetchBookmarks(activeDocumentId).then(setBookmarks);
     }
-  }, [activeDocumentId]);
+  }, [activeDocumentId, userId]);
 
   const persistBookmarks = useCallback((docId: string, marks: Bookmark[]) => {
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
@@ -1008,6 +1012,17 @@ export default function WorkspacePage() {
     for (const f of files) {
       const { isRestored } = await addDocument(f);
       if (isRestored) anyRestored = true;
+      if (userIdRef.current) {
+        const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
+        const docId = docMap[f.name];
+        if (docId) {
+          upsertDocument({
+            id: docId,
+            name: f.name.replace(/\.(pdf|pptx)$/i, ''),
+            type: f.name.toLowerCase().endsWith('.pptx') ? 'pptx' : 'pdf',
+          });
+        }
+      }
     }
     if (anyRestored) showToast('Welcome back! Your notes have been restored.');
   }, [addDocument, showToast]);
