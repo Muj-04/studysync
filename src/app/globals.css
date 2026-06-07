@@ -75,8 +75,11 @@
 }
 
 /* ── Base ── */
+:root {
+  --font-body: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+}
 body {
-  font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
   color: var(--text-1);
   background: var(--bg-app);
   -webkit-font-smoothing: antialiased;
