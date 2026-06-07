@@ -554,6 +554,27 @@ export async function fetchRoomVoiceNotes(roomId: string): Promise<Array<{
   }));
 }
 
+export async function fetchSingleRoomVoiceNote(noteId: string, roomId: string): Promise<{
+  id: string; pageNumber: number | string;
+  duration: number; title?: string; audioUrl?: string; timestamp: string;
+} | null> {
+  const { data, error } = await sb()
+    .from('room_voice_notes')
+    .select('id, page_number, duration, title, audio_url, timestamp')
+    .eq('id', noteId)
+    .eq('room_id', roomId)
+    .maybeSingle();
+  if (error || !data) { console.error('[DB] fetchSingleRoomVoiceNote error:', error?.message); return null; }
+  return {
+    id: data.id,
+    pageNumber: isNaN(Number(data.page_number)) ? data.page_number : Number(data.page_number),
+    duration: data.duration,
+    title: data.title ?? undefined,
+    audioUrl: data.audio_url ?? undefined,
+    timestamp: data.timestamp,
+  };
+}
+
 export async function deleteRoomVoiceNote(noteId: string, roomId: string): Promise<void> {
   for (const ext of ['webm', 'ogg', 'mp4']) {
     await sb().storage.from('voice-notes').remove([`rooms/${roomId}/${noteId}.${ext}`]);
