@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { saveRoomVoiceNote, deleteRoomVoiceNote, updateRoomVoiceNoteTitle } from '@/lib/supabase/db';
 import type { RoomVoiceNotePayload } from './useStudyRoom';
 
+
 interface RecordingState {
   mediaRecorder: MediaRecorder;
   stream: MediaStream;
@@ -24,7 +25,7 @@ function getSupportedMimeType(): string {
 
 export function useRoomVoiceNotes(
   roomId: string,
-  onNoteSaved?: (payload: RoomVoiceNotePayload) => void,
+  onNoteAdded?: (noteId: string) => void,
   onNoteDeleted?: (noteId: string) => void,
 ) {
   const [notes, setNotes] = useState<VoiceNote[]>([]);
@@ -36,10 +37,10 @@ export function useRoomVoiceNotes(
 
   const recordingRef    = useRef<RecordingState | null>(null);
   const userIdRef       = useRef<string | null>(null);
-  const onNoteSavedRef  = useRef(onNoteSaved);
+  const onNoteAddedRef  = useRef(onNoteAdded);
   const onNoteDeletedRef = useRef(onNoteDeleted);
 
-  useEffect(() => { onNoteSavedRef.current = onNoteSaved; }, [onNoteSaved]);
+  useEffect(() => { onNoteAddedRef.current = onNoteAdded; }, [onNoteAdded]);
   useEffect(() => { onNoteDeletedRef.current = onNoteDeleted; }, [onNoteDeleted]);
 
   useEffect(() => {
@@ -126,14 +127,7 @@ export function useRoomVoiceNotes(
       if (userIdRef.current) {
         saveRoomVoiceNote(roomId, note).then((remoteUrl) => {
           if (remoteUrl) {
-            onNoteSavedRef.current?.({
-              id: note.id,
-              pageNumber: note.pageNumber,
-              duration: note.duration,
-              audioUrl: remoteUrl,
-              timestamp: note.timestamp.toISOString(),
-              title: note.title,
-            });
+            onNoteAddedRef.current?.(note.id);
           }
         });
       }
