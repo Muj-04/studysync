@@ -39,10 +39,21 @@ import {
   uploadRoomPdf,
   createRoom,
   loadUserPreferences,
+  saveDocumentOrder,
+  loadDocumentOrder,
 } from '@/lib/supabase/db';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
 import type { Tool, PenType } from '@/lib/drawing';
+
+// ── Doc order helper ──────────────────────────────────────────────────────────
+
+function applyDocOrder(docs: PDFDocument[], order: string[]): PDFDocument[] {
+  const map = new Map(docs.map((d) => [d.id, d]));
+  const inOrder = order.filter((id) => map.has(id)).map((id) => map.get(id)!);
+  const extra = docs.filter((d) => !order.includes(d.id));
+  return [...inOrder, ...extra];
+}
 
 // ── Virtual page sequence ─────────────────────────────────────────────────────
 
@@ -539,7 +550,7 @@ export default function WorkspacePage() {
   // ── Hooks ─────────────────────────────────────────────────────────────────
   const {
     documents, activeDocument, activeDocumentId,
-    isLoading, addDocument, removeDocument, updateDocumentId, setActiveDocument, goToPage,
+    isLoading, addDocument, removeDocument, updateDocumentId, reorderDocuments, setActiveDocument, goToPage,
   } = usePDF();
   const {
     notes: voiceNotes,
@@ -554,6 +565,32 @@ export default function WorkspacePage() {
   } = useBlankPages();
   const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
   const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, allPageImages } = usePDFPageImages();
+
+  // ── Document order ────────────────────────────────────────────────────────
+  const savedOrderRef = useRef<string[]>([]);
+  const lastAppliedOrderRef = useRef<string>('');
+
+  useEffect(() => {
+    loadDocumentOrder().then((order) => {
+      if (order) savedOrderRef.current = order;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (savedOrderRef.current.length === 0 || documents.length === 0) return;
+    const currentKey = documents.map((d) => d.id).join(',');
+    const ordered = applyDocOrder(documents, savedOrderRef.current);
+    const orderedKey = ordered.map((d) => d.id).join(',');
+    if (orderedKey === currentKey || orderedKey === lastAppliedOrderRef.current) return;
+    lastAppliedOrderRef.current = orderedKey;
+    reorderDocuments(ordered);
+  }, [documents, reorderDocuments]);
+
+  const handleReorderDocuments = useCallback((ids: string[]) => {
+    savedOrderRef.current = ids;
+    reorderDocuments(applyDocOrder(documents, ids));
+    saveDocumentOrder(ids);
+  }, [documents, reorderDocuments]);
 
   // ── Virtual pages ─────────────────────────────────────────────────────────
   const [virtualIndex, setVirtualIndex] = useState(0);
@@ -1523,6 +1560,7 @@ export default function WorkspacePage() {
               voiceNotes={voiceNotes}
               onDeleteTextNote={handleDeleteTextNote}
               onDeleteVoiceNote={deleteNote}
+              onReorderDocuments={handleReorderDocuments}
             />
           </div>
 
