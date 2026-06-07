@@ -127,7 +127,10 @@ export function useRoomVoiceNotes(
       if (userIdRef.current) {
         saveRoomVoiceNote(roomId, note).then((remoteUrl) => {
           if (remoteUrl) {
+            console.log('[VoiceNote] broadcasting voice_note_added event:', { noteId: note.id, pageNumber: note.pageNumber });
             onNoteAddedRef.current?.(note.id);
+          } else {
+            console.warn('[VoiceNote] saveRoomVoiceNote returned null — not broadcasting');
           }
         });
       }
