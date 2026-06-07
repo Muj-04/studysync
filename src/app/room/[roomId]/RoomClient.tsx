@@ -1,23 +1,81 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Users, Link2, Check, ChevronLeft, ChevronRight,
+  Link2, Check, ChevronLeft, ChevronRight,
   Undo2, MousePointer, Pencil, Eraser, Minus, Plus,
+  ChevronDown, FilePlus,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing, fetchRoomVoiceNotes, fetchSingleRoomVoiceNote } from '@/lib/supabase/db';
+import {
+  fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing,
+  fetchRoomVoiceNotes, fetchSingleRoomVoiceNote,
+  saveRoomBlankPage, fetchRoomBlankPages,
+} from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
-import type { RoomVoiceNotePayload } from '@/hooks/useStudyRoom';
+import type { RoomVoiceNotePayload, RoomBlankPagePayload } from '@/hooks/useStudyRoom';
 import { useRoomVoiceNotes } from '@/hooks/useRoomVoiceNotes';
 import { clampZoom } from '@/components/PDFViewer';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
+import BlankPageCanvas from '@/components/BlankPageCanvas';
+import type { DrawingCanvasHandle as BlankCanvasHandle } from '@/components/BlankPageCanvas';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import { PRESET_COLORS, SIZES } from '@/lib/drawing';
 import type { Tool, PenType } from '@/lib/drawing';
+import type { BlankPage } from '@/types';
+
+// ── Virtual page sequence ─────────────────────────────────────────────────────
+
+type VirtualPage =
+  | { type: 'pdf'; pdfPage: number }
+  | { type: 'blank'; blankPage: BlankPage };
+
+function buildVirtualSequence(pdfPageCount: number, blankPages: BlankPage[]): VirtualPage[] {
+  const pages: VirtualPage[] = [];
+  blankPages
+    .filter((b) => b.insertAfterPage === 0)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .forEach((b) => pages.push({ type: 'blank', blankPage: b }));
+  for (let p = 1; p <= pdfPageCount; p++) {
+    pages.push({ type: 'pdf', pdfPage: p });
+    blankPages
+      .filter((b) => b.insertAfterPage === p)
+      .sort((a, b) => a.createdAt - b.createdAt)
+      .forEach((b) => pages.push({ type: 'blank', blankPage: b }));
+  }
+  return pages;
+}
+
+// ── Blank page themes ─────────────────────────────────────────────────────────
+
+const BG_THEMES = [
+  { theme: 'white' as const, label: 'White', bg: '#ffffff',  dotColor: 'rgba(0,0,0,0.15)' },
+  { theme: 'dark'  as const, label: 'Dark',  bg: '#1e1e2e',  dotColor: 'rgba(255,255,255,0.18)' },
+];
+
+// ── Member avatar chip ────────────────────────────────────────────────────────
+
+function MemberAvatar({ name }: { name: string }) {
+  const initials = name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
+  return (
+    <div
+      title={name}
+      style={{
+        width: 24, height: 24, borderRadius: '50%',
+        background: 'var(--accent)', color: '#fff',
+        fontSize: 9.5, fontWeight: 700,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0, border: '1.5px solid var(--bg-panel)',
+        marginLeft: -6,
+      }}
+    >
+      {initials || '?'}
+    </div>
+  );
+}
 
 // ── Toolbar primitives ────────────────────────────────────────────────────────
 
@@ -95,6 +153,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [errorMsg, setErrorMsg] = useState('');
   const [roomName, setRoomName] = useState('Study Room');
   const [copied, setCopied]     = useState(false);
+  const [userName, setUserName] = useState('');
 
   // ── Drawing state ─────────────────────────────────────────────────────────
   const [tool, setTool]             = useState<Tool>('pen');
@@ -106,9 +165,18 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // ── Voice notes state ─────────────────────────────────────────────────────
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
 
-  const drawingRef       = useRef<DrawingCanvasHandle | null>(null);
-  const docIdRef         = useRef<string | null>(null);
-  const currentPageRef   = useRef<number>(1);
+  // ── Blank pages state ─────────────────────────────────────────────────────
+  const [docId, setDocId]                 = useState<string | null>(null);
+  const [roomBlankPages, setRoomBlankPages] = useState<RoomBlankPagePayload[]>([]);
+  const [blankCanvasData, setBlankCanvasData] = useState<Record<string, string>>({});
+  const [virtualIndex, setVirtualIndex]   = useState(0);
+  const [blankMenuOpen, setBlankMenuOpen] = useState(false);
+  const pendingBlankIdRef = useRef<string | null>(null);
+
+  const drawingRef      = useRef<DrawingCanvasHandle | null>(null);
+  const blankDrawingRef = useRef<BlankCanvasHandle | null>(null);
+  const docIdRef        = useRef<string | null>(null);
+  const currentPageRef  = useRef<number>(1);
   const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
@@ -121,6 +189,42 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   const broadcastRef = useRef<(page: number, data: string) => void>(() => {});
 
+  // ── Virtual page sequence ─────────────────────────────────────────────────
+  const virtualSequence = useMemo<VirtualPage[]>(() => {
+    if (!docId || !activeDocument) return [];
+    const blankPages: BlankPage[] = roomBlankPages.map((bp) => ({
+      id: bp.id,
+      documentId: docId,
+      insertAfterPage: bp.insertAfterPage,
+      bgTheme: bp.bgTheme,
+      createdAt: bp.createdAt,
+    }));
+    return buildVirtualSequence(activeDocument.pageCount, blankPages);
+  }, [docId, activeDocument, roomBlankPages]);
+
+  const currentVP = virtualSequence[virtualIndex] ?? null;
+
+  // Navigate to new blank page once virtualSequence updates
+  useEffect(() => {
+    if (!pendingBlankIdRef.current) return;
+    const idx = virtualSequence.findIndex(
+      (vp) => vp.type === 'blank' && vp.blankPage.id === pendingBlankIdRef.current,
+    );
+    if (idx >= 0) {
+      setVirtualIndex(idx);
+      pendingBlankIdRef.current = null;
+    }
+  }, [virtualSequence]);
+
+  // Sync PDF page when virtual index points to a PDF page
+  useEffect(() => {
+    if (currentVP?.type === 'pdf') {
+      goToPage(currentVP.pdfPage);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [virtualIndex]);
+
+  // ── Incoming handlers ─────────────────────────────────────────────────────
   const handleIncomingDrawing = useCallback((pageNumber: number, data: string) => {
     if (currentPageRef.current === pageNumber) {
       drawingRef.current?.loadData?.(data);
@@ -128,10 +232,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, []);
 
   const handleReconnect = useCallback(() => {
-    const docId = docIdRef.current;
-    if (!docId || !activeDocument) return;
+    const did = docIdRef.current;
+    if (!did || !activeDocument) return;
     const page = activeDocument.currentPage;
-    const data = getDrawing(docId, page);
+    const data = getDrawing(did, page);
     if (data) broadcastRef.current(page, data);
   }, [activeDocument, getDrawing]);
 
@@ -157,9 +261,17 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     removeIncomingNoteRef.current?.(id);
   }, []);
 
-  const { broadcastDrawing, broadcastVoiceNoteAdded, broadcastVoiceNoteDelete, memberCount } = useStudyRoom(
+  const handleIncomingBlankPage = useCallback((page: RoomBlankPagePayload) => {
+    setRoomBlankPages((prev) => {
+      if (prev.some((p) => p.id === page.id)) return prev;
+      return [...prev, page];
+    });
+  }, []);
+
+  const { broadcastDrawing, broadcastVoiceNoteAdded, broadcastVoiceNoteDelete, broadcastBlankPageAdded, memberCount, memberNames } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
     handleIncomingVoiceNoteAdded, handleIncomingVoiceNoteDelete,
+    handleIncomingBlankPage, userName,
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
@@ -204,6 +316,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace('/login'); return; }
 
+      const name = (user.user_metadata?.full_name as string | undefined)
+        ?? (user.user_metadata?.name as string | undefined)
+        ?? user.email?.split('@')[0]
+        ?? 'Member';
+      setUserName(name);
+
       const room = await fetchRoom(roomId);
       if (!room) { setErrorMsg('Room not found or has been closed.'); setStatus('error'); return; }
       setRoomName(room.documentName);
@@ -220,20 +338,26 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
       const blob = await resp.blob();
       const file = new File([blob], room.documentName + '.pdf', { type: 'application/pdf' });
-      const { id: docId } = await addDocument(file);
-      docIdRef.current = docId;
+      const { id: newDocId } = await addDocument(file);
+      docIdRef.current = newDocId;
+      if (!cancelled) setDocId(newDocId);
 
-      const [remoteDrawings, remoteVoiceNotes] = await Promise.all([
-        fetchDrawings(docId),
+      const [remoteDrawings, remoteVoiceNotes, remoteBlankPages] = await Promise.all([
+        fetchDrawings(newDocId),
         fetchRoomVoiceNotes(roomId),
+        fetchRoomBlankPages(roomId),
       ]);
 
       const prefixed: Record<string, string> = {};
-      for (const [k, v] of Object.entries(remoteDrawings)) prefixed[`${docId}:${k}`] = v;
+      for (const [k, v] of Object.entries(remoteDrawings)) prefixed[`${newDocId}:${k}`] = v;
       if (Object.keys(prefixed).length > 0) seedDrawings(prefixed);
 
       if (remoteVoiceNotes.length > 0 && !cancelled) {
         seedNotesRef.current?.(remoteVoiceNotes);
+      }
+
+      if (remoteBlankPages.length > 0 && !cancelled) {
+        setRoomBlankPages(remoteBlankPages);
       }
 
       await joinRoom(roomId);
@@ -249,22 +373,24 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [roomId]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const currentPage    = activeDocument?.currentPage ?? 1;
-  const pageCount      = activeDocument?.pageCount ?? 1;
-  const currentDrawing = activeDocument ? getDrawing(activeDocument.id, currentPage) : undefined;
+  const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : (activeDocument?.currentPage ?? 1);
+  const totalPages     = virtualSequence.length || (activeDocument?.pageCount ?? 1);
+  const isBlankPage    = currentVP?.type === 'blank';
+  const currentDrawing = activeDocument && currentVP?.type === 'pdf'
+    ? getDrawing(activeDocument.id, currentVP.pdfPage) : undefined;
 
-  useEffect(() => { currentPageRef.current = currentPage; }, [currentPage]);
+  useEffect(() => { currentPageRef.current = currentPdfPage; }, [currentPdfPage]);
 
   useEffect(() => {
-    if (status !== 'ready') return;
-    fetchRoomDrawing(roomId, currentPage).then((data) => {
+    if (status !== 'ready' || isBlankPage) return;
+    fetchRoomDrawing(roomId, currentPdfPage).then((data) => {
       if (data) drawingRef.current?.loadData?.(data);
     });
-  }, [currentPage, status, roomId]);
+  }, [currentPdfPage, status, roomId, isBlankPage]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSave = useCallback((data: string) => {
-    if (!activeDocument) return;
+    if (!activeDocument || isBlankPage) return;
     const page = activeDocument.currentPage;
     saveDrawing(activeDocument.id, page, data);
     broadcastDrawing(page, data);
@@ -272,7 +398,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     saveRoomTimerRef.current = setTimeout(() => {
       saveRoomDrawing(roomId, page, data);
     }, 500);
-  }, [activeDocument, saveDrawing, broadcastDrawing, roomId]);
+  }, [activeDocument, isBlankPage, saveDrawing, broadcastDrawing, roomId]);
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(window.location.href);
@@ -281,12 +407,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, []);
 
   const prevPage = useCallback(() => {
-    if (activeDocument) goToPage(Math.max(1, currentPage - 1));
-  }, [activeDocument, currentPage, goToPage]);
+    setVirtualIndex((i) => Math.max(0, i - 1));
+  }, []);
 
   const nextPage = useCallback(() => {
-    if (activeDocument) goToPage(Math.min(pageCount, currentPage + 1));
-  }, [activeDocument, currentPage, pageCount, goToPage]);
+    setVirtualIndex((i) => Math.min(virtualSequence.length - 1, i + 1));
+  }, [virtualSequence.length]);
 
   const handleZoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), []);
   const handleZoomIn  = useCallback(() => setZoom((z) => clampZoom(z + 0.1)), []);
@@ -295,6 +421,36 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     setTool(t);
     if (pt) setPenType(pt);
   }, []);
+
+  const handleAddBlankPage = useCallback((theme: 'white' | 'dark') => {
+    setBlankMenuOpen(false);
+    const insertAfterPage = currentVP?.type === 'pdf'
+      ? currentVP.pdfPage
+      : currentVP?.type === 'blank'
+        ? currentVP.blankPage.insertAfterPage
+        : 0;
+    const page: RoomBlankPagePayload = {
+      id: crypto.randomUUID(),
+      insertAfterPage,
+      bgTheme: theme,
+      createdAt: Date.now(),
+    };
+    pendingBlankIdRef.current = page.id;
+    setRoomBlankPages((prev) => [...prev, page]);
+    saveRoomBlankPage(roomId, page);
+    broadcastBlankPageAdded(page);
+  }, [currentVP, roomId, broadcastBlankPageAdded]);
+
+  // Close blank menu on outside click
+  useEffect(() => {
+    if (!blankMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-blank-menu]')) setBlankMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [blankMenuOpen]);
 
   // ── Loading / error states ────────────────────────────────────────────────
   if (status === 'loading') {
@@ -338,8 +494,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }
 
   // ── Derived for voice notes ───────────────────────────────────────────────
-  const pageNotes = voiceGetNotesForPage(currentPage);
-  const pageKey   = `${roomId}:${currentPage}`;
+  const pageNotes = voiceGetNotesForPage(currentPdfPage);
+  const pageKey   = `${roomId}:${currentPdfPage}`;
+
+  // ── Members display ───────────────────────────────────────────────────────
+  const visibleNames  = memberNames.slice(0, 3);
+  const hiddenCount   = memberNames.length > 3 ? memberNames.length - 3 : 0;
 
   // ── Room UI ───────────────────────────────────────────────────────────────
   return (
@@ -361,10 +521,34 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         }}>
           {roomName}
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-3)', fontSize: 11.5 }}>
-          <Users size={12} />
-          <span>{memberCount} live</span>
+
+        {/* Member avatars + names */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {memberNames.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
+              {visibleNames.map((name, i) => (
+                <MemberAvatar key={i} name={name} />
+              ))}
+              {hiddenCount > 0 && (
+                <div style={{
+                  width: 24, height: 24, borderRadius: '50%',
+                  background: 'var(--bg-elevated)', color: 'var(--text-2)',
+                  fontSize: 9, fontWeight: 700, border: '1.5px solid var(--bg-panel)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginLeft: -6, flexShrink: 0,
+                }}>
+                  +{hiddenCount}
+                </div>
+              )}
+            </div>
+          )}
+          <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+            {memberNames.length > 0
+              ? `${memberNames.slice(0, 2).join(', ')}${memberNames.length > 2 ? ` +${memberNames.length - 2}` : ''} • ${memberCount} live`
+              : `${memberCount} live`}
+          </span>
         </div>
+
         <button
           onClick={copyLink}
           title="Copy room link"
@@ -379,12 +563,25 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           {copied ? <Check size={12} /> : <Link2 size={12} />}
           {copied ? 'Copied!' : 'Share link'}
         </button>
+
+        {/* Red Leave button */}
         <button
           onClick={() => router.replace('/workspace')}
           style={{
             padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
-            background: 'transparent', color: 'var(--text-3)',
-            border: '1px solid var(--border)', cursor: 'pointer',
+            background: 'rgba(239,68,68,0.12)',
+            color: '#ef4444',
+            border: '1px solid rgba(239,68,68,0.35)',
+            cursor: 'pointer',
+            transition: 'background 0.13s, border-color 0.13s',
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = 'rgba(239,68,68,0.22)';
+            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.6)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'rgba(239,68,68,0.12)';
+            e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)';
           }}
         >
           Leave
@@ -511,16 +708,94 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         <Divider />
 
         {/* ── Undo ── */}
-        <IconBtn onClick={() => drawingRef.current?.undo?.()} title="Undo last stroke">
+        <IconBtn
+          onClick={() => isBlankPage ? blankDrawingRef.current?.undo?.() : drawingRef.current?.undo?.()}
+          title="Undo last stroke"
+        >
           <Undo2 size={13} />
         </IconBtn>
+
+        <Divider />
+
+        {/* ── Add Blank Page ── */}
+        <div style={{ position: 'relative' }} data-blank-menu>
+          <button
+            onClick={() => setBlankMenuOpen((o) => !o)}
+            title="Add blank page"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              height: 30, padding: '0 9px',
+              borderRadius: 6, fontSize: 12, fontWeight: 500,
+              background: blankMenuOpen ? 'var(--bg-hover)' : 'var(--bg-elevated)',
+              color: 'var(--text-2)',
+              border: '1px solid var(--border)',
+              cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+              transition: 'background 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+            onMouseOut={(e) => { if (!blankMenuOpen) Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' }); }}
+          >
+            <FilePlus size={13} />
+            <span>Blank</span>
+            <ChevronDown size={9} strokeWidth={2.5} style={{ opacity: 0.6 }} />
+          </button>
+
+          {blankMenuOpen && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, marginTop: 4,
+              background: 'var(--bg-panel)', border: '1px solid var(--border)',
+              borderRadius: 9, padding: 10,
+              boxShadow: '0 8px 28px rgba(0,0,0,0.45)',
+              zIndex: 200,
+            }}>
+              <p style={{
+                fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
+                textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8, margin: '0 0 8px',
+              }}>
+                Background
+              </p>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {BG_THEMES.map(({ theme, label, bg, dotColor }) => (
+                  <button
+                    key={theme}
+                    onClick={() => handleAddBlankPage(theme)}
+                    title={`Add ${label} blank page`}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                      border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px',
+                      cursor: 'pointer', background: 'transparent', fontFamily: 'inherit',
+                      minWidth: 60, transition: 'background 0.13s, border-color 0.13s',
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = 'var(--bg-hover)';
+                      e.currentTarget.style.borderColor = 'var(--border-strong)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                    }}
+                  >
+                    <div style={{
+                      width: 48, height: 30, borderRadius: 4,
+                      backgroundColor: bg,
+                      backgroundImage: `radial-gradient(circle, ${dotColor} 1.2px, transparent 1.2px)`,
+                      backgroundSize: '10px 10px',
+                      border: '1px solid rgba(128,128,128,0.2)',
+                    }} />
+                    <span style={{ fontSize: 10, color: 'var(--text-2)', fontWeight: 500 }}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ── PDF viewer ── */}
+      {/* ── PDF / blank page viewer ── */}
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
-        {activeDocument && (
+        {activeDocument && !isBlankPage && (
           <PDFWithDrawing
-            key={`${activeDocument.id}-p${currentPage}`}
+            key={`${activeDocument.id}-p${currentPdfPage}`}
             ref={drawingRef}
             document={activeDocument}
             tool={tool}
@@ -534,6 +809,24 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             interactive={true}
           />
         )}
+        {isBlankPage && currentVP?.type === 'blank' && (
+          <BlankPageCanvas
+            key={currentVP.blankPage.id}
+            ref={blankDrawingRef}
+            blankPage={{
+              ...currentVP.blankPage,
+              canvasData: blankCanvasData[currentVP.blankPage.id],
+            }}
+            onSaveData={(id, data) => setBlankCanvasData((prev) => ({ ...prev, [id]: data }))}
+            onSaveImages={() => {}}
+            tool={tool}
+            penType={penType}
+            color={color}
+            strokeSize={strokeSize}
+            zoom={zoom}
+            onZoomChange={setZoom}
+          />
+        )}
       </div>
 
       {/* ── Voice Notes ── */}
@@ -543,11 +836,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         notes={pageNotes}
         pageKey={pageKey}
         documentId={roomId}
-        pageNumber={currentPage}
+        pageNumber={currentPdfPage}
         isRecording={voiceIsRecording}
         recordingDuration={voiceRecordingDuration}
         recordingContext={voiceRecordingContext}
-        onStart={() => voiceStartRecording(currentPage)}
+        onStart={() => voiceStartRecording(currentPdfPage)}
         onStop={voiceStopRecording}
         onDelete={voiceDeleteNote}
         onUpdateTitle={voiceUpdateNoteTitle}
@@ -561,29 +854,29 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       }}>
         <button
           onClick={prevPage}
-          disabled={currentPage <= 1}
+          disabled={virtualIndex <= 0}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)',
             background: 'var(--bg-elevated)',
-            color: currentPage <= 1 ? 'var(--text-3)' : 'var(--text-2)',
-            cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
+            color: virtualIndex <= 0 ? 'var(--text-3)' : 'var(--text-2)',
+            cursor: virtualIndex <= 0 ? 'not-allowed' : 'pointer',
           }}
         >
           <ChevronLeft size={15} />
         </button>
         <span style={{ fontSize: 13, color: 'var(--text-2)', minWidth: 80, textAlign: 'center' }}>
-          Page {currentPage} / {pageCount}
+          {isBlankPage ? 'Blank' : `Page ${currentPdfPage}`} • {virtualIndex + 1} / {totalPages}
         </span>
         <button
           onClick={nextPage}
-          disabled={currentPage >= pageCount}
+          disabled={virtualIndex >= virtualSequence.length - 1}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)',
             background: 'var(--bg-elevated)',
-            color: currentPage >= pageCount ? 'var(--text-3)' : 'var(--text-2)',
-            cursor: currentPage >= pageCount ? 'not-allowed' : 'pointer',
+            color: virtualIndex >= virtualSequence.length - 1 ? 'var(--text-3)' : 'var(--text-2)',
+            cursor: virtualIndex >= virtualSequence.length - 1 ? 'not-allowed' : 'pointer',
           }}
         >
           <ChevronRight size={15} />

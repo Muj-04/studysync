@@ -12,6 +12,13 @@ export interface RoomVoiceNotePayload {
   title?: string;
 }
 
+export interface RoomBlankPagePayload {
+  id: string;
+  insertAfterPage: number;
+  bgTheme: 'white' | 'dark';
+  createdAt: number;
+}
+
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
 
 export function useStudyRoom(
@@ -20,23 +27,30 @@ export function useStudyRoom(
   onReconnect?: () => void,
   onIncomingVoiceNoteAdded?: (noteId: string) => void,
   onIncomingVoiceNoteDelete?: (noteId: string) => void,
+  onIncomingBlankPage?: (page: RoomBlankPagePayload) => void,
+  myDisplayName?: string,
 ) {
   const [memberCount, setMemberCount] = useState(1);
-  const channelRef                 = useRef<RealtimeChannel | null>(null);
-  const onDrawingRef               = useRef(onIncomingDrawing);
-  const onReconnectRef             = useRef(onReconnect);
-  const onVoiceNoteAddedRef        = useRef(onIncomingVoiceNoteAdded);
-  const onVoiceNoteDeleteRef       = useRef(onIncomingVoiceNoteDelete);
-  const retryRef               = useRef(0);
-  const timerRef               = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const deadRef                = useRef(false);
-  const connectedOnceRef       = useRef(false);
-  const generationRef          = useRef(0);
+  const [memberNames, setMemberNames] = useState<string[]>([]);
+  const channelRef              = useRef<RealtimeChannel | null>(null);
+  const onDrawingRef            = useRef(onIncomingDrawing);
+  const onReconnectRef          = useRef(onReconnect);
+  const onVoiceNoteAddedRef     = useRef(onIncomingVoiceNoteAdded);
+  const onVoiceNoteDeleteRef    = useRef(onIncomingVoiceNoteDelete);
+  const onBlankPageRef          = useRef(onIncomingBlankPage);
+  const myDisplayNameRef        = useRef(myDisplayName);
+  const retryRef                = useRef(0);
+  const timerRef                = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deadRef                 = useRef(false);
+  const connectedOnceRef        = useRef(false);
+  const generationRef           = useRef(0);
 
   useEffect(() => { onDrawingRef.current = onIncomingDrawing; });
   useEffect(() => { onReconnectRef.current = onReconnect; });
   useEffect(() => { onVoiceNoteAddedRef.current = onIncomingVoiceNoteAdded; });
   useEffect(() => { onVoiceNoteDeleteRef.current = onIncomingVoiceNoteDelete; });
+  useEffect(() => { onBlankPageRef.current = onIncomingBlankPage; });
+  useEffect(() => { myDisplayNameRef.current = myDisplayName; });
 
   useEffect(() => {
     deadRef.current = false;
@@ -66,7 +80,7 @@ export function useStudyRoom(
       console.log(`[StudyRoom] connecting — channel="${channelName}" gen=${generation}`);
 
       const channel = createClient().channel(channelName, {
-        config: { broadcast: { self: false } },
+        config: { broadcast: { self: false }, presence: { key: '' } },
       });
 
       channel
@@ -83,10 +97,18 @@ export function useStudyRoom(
           if (generation !== generationRef.current) return;
           onVoiceNoteDeleteRef.current?.(payload.noteId);
         })
+        .on('broadcast', { event: 'blank_page_added' }, ({ payload }: { payload: RoomBlankPagePayload }) => {
+          if (generation !== generationRef.current) return;
+          onBlankPageRef.current?.(payload);
+        })
         .on('presence', { event: 'sync' }, () => {
           if (generation !== generationRef.current) return;
-          const count = Object.keys(channel.presenceState()).length;
-          setMemberCount(count || 1);
+          type PresenceEntry = { ts: number; name?: string };
+          const state = channel.presenceState<PresenceEntry>();
+          const entries = Object.values(state).flat();
+          const names = entries.map((e) => e.name ?? '').filter(Boolean);
+          setMemberNames(names);
+          setMemberCount(entries.length || 1);
         })
         .subscribe(async (status) => {
           if (deadRef.current || generation !== generationRef.current) return;
@@ -95,7 +117,7 @@ export function useStudyRoom(
 
           if (status === 'SUBSCRIBED') {
             retryRef.current = 0;
-            await channel.track({ ts: Date.now() });
+            await channel.track({ ts: Date.now(), name: myDisplayNameRef.current ?? '' });
             if (connectedOnceRef.current) {
               console.log('[StudyRoom] reconnected — calling onReconnect');
               onReconnectRef.current?.();
@@ -144,5 +166,12 @@ export function useStudyRoom(
       .catch((err) => console.error('[StudyRoom] broadcast voice_note_deleted error:', err));
   }, []);
 
-  return { broadcastDrawing, broadcastVoiceNoteAdded, broadcastVoiceNoteDelete, memberCount };
+  const broadcastBlankPageAdded = useCallback((page: RoomBlankPagePayload) => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({ type: 'broadcast', event: 'blank_page_added', payload: page })
+      .catch((err) => console.error('[StudyRoom] broadcast blank_page_added error:', err));
+  }, []);
+
+  return { broadcastDrawing, broadcastVoiceNoteAdded, broadcastVoiceNoteDelete, broadcastBlankPageAdded, memberCount, memberNames };
 }
