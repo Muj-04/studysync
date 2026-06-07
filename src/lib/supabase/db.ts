@@ -709,3 +709,190 @@ export async function fetchRoomDrawing(roomId: string, pageNumber: number): Prom
   if (error) { console.error('[DB] fetchRoomDrawing error:', error.message); return null; }
   return data?.data ?? null;
 }
+
+// ── Friends ───────────────────────────────────────────────────────────────────
+
+export interface UserResult {
+  id: string;
+  username: string | null;
+  email: string;
+  avatarUrl: string | null;
+}
+
+export interface FriendEntry {
+  friendshipId: string;
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+}
+
+export interface FriendRequest {
+  friendshipId: string;
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+}
+
+export interface MyFriendship {
+  friendshipId: string;
+  otherUserId: string;
+  status: 'pending' | 'accepted';
+  isSender: boolean;
+}
+
+export async function searchUsers(query: string): Promise<UserResult[]> {
+  if (!query.trim()) return [];
+  const { data, error } = await sb().rpc('search_users', { search_query: query.trim() });
+  if (error) { console.error('[DB] searchUsers error:', error.message); return []; }
+  return (data ?? []).map((r: { id: string; username: string | null; email: string; avatar_url: string | null }) => ({
+    id: r.id, username: r.username, email: r.email, avatarUrl: r.avatar_url,
+  }));
+}
+
+export async function sendFriendRequest(receiverId: string): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data, error } = await sb()
+    .from('friendships')
+    .insert({ requester_id: uid, receiver_id: receiverId })
+    .select('id').single();
+  if (error) { console.error('[DB] sendFriendRequest error:', error.message); return null; }
+  const { data: myProfile } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
+  await sb().from('notifications').insert({
+    user_id: receiverId, type: 'friend_request',
+    data: {
+      friendship_id: data.id, requester_id: uid,
+      requester_name: myProfile?.username ?? null,
+      requester_avatar: myProfile?.avatar_url ?? null,
+    },
+  });
+  return data.id;
+}
+
+export async function cancelFriendRequest(friendshipId: string): Promise<void> {
+  await sb().from('friendships').delete().eq('id', friendshipId);
+}
+
+export async function respondFriendRequest(
+  friendshipId: string,
+  status: 'accepted' | 'rejected',
+): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const { data: friendship, error } = await sb()
+    .from('friendships').update({ status })
+    .eq('id', friendshipId)
+    .select('requester_id').maybeSingle();
+  if (error || !friendship) return;
+  if (status === 'accepted') {
+    const { data: myProfile } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
+    await sb().from('notifications').insert({
+      user_id: friendship.requester_id, type: 'friend_accepted',
+      data: {
+        friendship_id: friendshipId, accepter_id: uid,
+        accepter_name: myProfile?.username ?? null,
+        accepter_avatar: myProfile?.avatar_url ?? null,
+      },
+    });
+  }
+}
+
+export async function removeFriend(friendshipId: string): Promise<void> {
+  await sb().from('friendships').delete().eq('id', friendshipId);
+}
+
+export async function getFriends(): Promise<FriendEntry[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data: friendships } = await sb()
+    .from('friendships').select('id, requester_id, receiver_id')
+    .eq('status', 'accepted')
+    .or(`requester_id.eq.${uid},receiver_id.eq.${uid}`);
+  if (!friendships?.length) return [];
+  const otherIds = friendships.map((f) => f.requester_id === uid ? f.receiver_id : f.requester_id);
+  const { data: profiles } = await sb().from('profiles').select('id, username, avatar_url').in('id', otherIds);
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+  return friendships.map((f) => {
+    const otherId = f.requester_id === uid ? f.receiver_id : f.requester_id;
+    const p = profileMap.get(otherId);
+    return { friendshipId: f.id, userId: otherId, username: p?.username ?? null, avatarUrl: p?.avatar_url ?? null };
+  });
+}
+
+export async function getFriendRequests(): Promise<{ incoming: FriendRequest[]; outgoing: FriendRequest[] }> {
+  const uid = await userId(); if (!uid) return { incoming: [], outgoing: [] };
+  const { data: rows } = await sb()
+    .from('friendships').select('id, requester_id, receiver_id, created_at')
+    .eq('status', 'pending')
+    .or(`requester_id.eq.${uid},receiver_id.eq.${uid}`);
+  const incoming = (rows ?? []).filter((f) => f.receiver_id === uid);
+  const outgoing = (rows ?? []).filter((f) => f.requester_id === uid);
+  const allOtherIds = [...new Set([...incoming.map((f) => f.requester_id), ...outgoing.map((f) => f.receiver_id)])];
+  const profileMap = new Map(
+    allOtherIds.length
+      ? ((await sb().from('profiles').select('id, username, avatar_url').in('id', allOtherIds)).data ?? []).map((p) => [p.id, p])
+      : [],
+  );
+  const toReq = (f: { id: string; requester_id: string; receiver_id: string; created_at: string }, otherId: string): FriendRequest => {
+    const p = profileMap.get(otherId);
+    return { friendshipId: f.id, userId: otherId, username: p?.username ?? null, avatarUrl: p?.avatar_url ?? null, createdAt: f.created_at };
+  };
+  return { incoming: incoming.map((f) => toReq(f, f.requester_id)), outgoing: outgoing.map((f) => toReq(f, f.receiver_id)) };
+}
+
+export async function getMyFriendships(): Promise<MyFriendship[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data } = await sb()
+    .from('friendships').select('id, requester_id, receiver_id, status')
+    .or(`requester_id.eq.${uid},receiver_id.eq.${uid}`)
+    .in('status', ['pending', 'accepted']);
+  return (data ?? []).map((f) => ({
+    friendshipId: f.id,
+    otherUserId: f.requester_id === uid ? f.receiver_id : f.requester_id,
+    status: f.status as 'pending' | 'accepted',
+    isSender: f.requester_id === uid,
+  }));
+}
+
+export async function inviteToRoom(friendId: string, roomId: string, roomName: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const { data: myProfile } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
+  await sb().from('notifications').insert({
+    user_id: friendId, type: 'room_invite',
+    data: {
+      room_id: roomId, room_name: roomName, inviter_id: uid,
+      inviter_name: myProfile?.username ?? null,
+      inviter_avatar: myProfile?.avatar_url ?? null,
+    },
+  });
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
+  read: boolean;
+  createdAt: string;
+}
+
+export async function getNotifications(): Promise<AppNotification[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data } = await sb()
+    .from('notifications').select('id, type, data, read, created_at')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: false })
+    .limit(30);
+  return (data ?? []).map((r) => ({
+    id: r.id, type: r.type, data: r.data as Record<string, unknown>,
+    read: r.read, createdAt: r.created_at,
+  }));
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await sb().from('notifications').update({ read: true }).eq('id', id);
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false);
+}
