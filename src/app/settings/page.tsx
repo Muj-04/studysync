@@ -687,7 +687,7 @@ function AppearanceSection() {
   useEffect(() => {
     getUserSettings().then((s) => {
       setLanguage(s.language);
-      document.documentElement.setAttribute('dir', s.language === 'ar' ? 'rtl' : 'ltr');
+      document.documentElement.classList.toggle('lang-ar', s.language === 'ar');
       document.documentElement.setAttribute('lang', s.language);
     });
     loadUserPreferences().then((prefs) => {
@@ -775,7 +775,7 @@ function AppearanceSection() {
 
   const handleLanguage = useCallback((lang: 'en' | 'ar') => {
     setLanguage(lang);
-    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    document.documentElement.classList.toggle('lang-ar', lang === 'ar');
     document.documentElement.setAttribute('lang', lang);
     saveUserSettings({ language: lang });
   }, []);
