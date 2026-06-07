@@ -16,6 +16,9 @@ import {
   deleteUserAccount,
   loadUserPreferences,
   saveUserPreferences,
+  getProfile,
+  upsertProfile,
+  uploadAvatar,
 } from '@/lib/supabase/db';
 import { applyPreferences, ACCENT_PRESETS, FONT_STACKS } from '@/lib/preferences';
 
@@ -359,12 +362,21 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, loading 
 // Section: Account
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AccountSection({ userEmail, displayName }: { userEmail: string; displayName: string }) {
+function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
+  userEmail: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  onAvatarChange?: (url: string) => void;
+}) {
   const sb = createClient();
 
   const [name, setName] = useState(displayName);
   const [nameSt, setNameSt] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
   const [nameErr, setNameErr] = useState('');
+
+  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null>(avatarUrl ?? null);
+  const [uploadSt, setUploadSt] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [email, setEmail] = useState(userEmail);
   const [emailSt, setEmailSt] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
@@ -380,12 +392,35 @@ function AccountSection({ userEmail, displayName }: { userEmail: string; display
   const [delLoading, setDelLoading] = useState(false);
   const router = useRouter();
 
+  const handleAvatarUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadSt('loading');
+    const url = await uploadAvatar(file);
+    if (url) {
+      await upsertProfile({ avatarUrl: url });
+      setLocalAvatarUrl(url);
+      onAvatarChange?.(url);
+      setUploadSt('ok');
+      setTimeout(() => setUploadSt('idle'), 3000);
+    } else {
+      setUploadSt('err');
+      setTimeout(() => setUploadSt('idle'), 3000);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [onAvatarChange]);
+
   const saveName = useCallback(async () => {
     setNameSt('loading');
-    const { error } = await sb.auth.updateUser({ data: { display_name: name.trim() } });
-    if (error) { setNameErr(error.message); setNameSt('err'); }
-    else { setNameSt('ok'); setTimeout(() => setNameSt('idle'), 3000); }
-  }, [name, sb]);
+    try {
+      await upsertProfile({ username: name.trim() });
+      setNameSt('ok');
+      setTimeout(() => setNameSt('idle'), 3000);
+    } catch (e) {
+      setNameErr(String(e));
+      setNameSt('err');
+    }
+  }, [name]);
 
   const saveEmail = useCallback(async () => {
     setEmailSt('loading');
@@ -419,6 +454,41 @@ function AccountSection({ userEmail, displayName }: { userEmail: string; display
   return (
     <div>
       <SectionTitle>Account</SectionTitle>
+
+      {/* Profile picture */}
+      <div style={{ marginBottom: 24 }}>
+        <FieldLabel>Profile picture</FieldLabel>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: localAvatarUrl ? 'transparent' : 'var(--accent)',
+            color: '#fff', fontSize: 18, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, overflow: 'hidden', border: '2px solid var(--border)',
+          }}>
+            {localAvatarUrl
+              ? <img src={localAvatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : (displayName?.[0]?.toUpperCase() ?? userEmail[0]?.toUpperCase())}
+          </div>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={handleAvatarUpload}
+              style={{ display: 'none' }}
+            />
+            <PrimaryBtn onClick={() => fileInputRef.current?.click()} loading={uploadSt === 'loading'}>
+              {uploadSt === 'loading' ? 'Uploading…' : 'Upload photo'}
+            </PrimaryBtn>
+            {uploadSt === 'ok' && <StatusMsg type="ok">Photo updated</StatusMsg>}
+            {uploadSt === 'err' && <StatusMsg type="err">Upload failed — try again</StatusMsg>}
+            <SubLabel>JPG, PNG, WebP, or GIF · Max 5 MB</SubLabel>
+          </div>
+        </div>
+      </div>
+
+      <Divider />
 
       {/* Display Name */}
       <div style={{ marginBottom: 20 }}>
@@ -1076,15 +1146,18 @@ export default function SettingsPage() {
   const [active, setActive] = useState<Section>('account');
   const [userEmail, setUserEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const router = useRouter();
   const sb = createClient();
 
   useEffect(() => {
-    sb.auth.getUser().then(({ data: { user } }) => {
+    sb.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { router.push('/login'); return; }
       setUserEmail(user.email ?? '');
-      setDisplayName(user.user_metadata?.display_name ?? user.email?.split('@')[0] ?? '');
+      const profile = await getProfile();
+      setDisplayName(profile?.username ?? user.email?.split('@')[0] ?? '');
+      setAvatarUrl(profile?.avatarUrl ?? null);
       setAuthReady(true);
     });
   }, [router, sb]);
@@ -1179,7 +1252,7 @@ export default function SettingsPage() {
           padding: '36px 48px',
           maxWidth: 640,
         }}>
-          {active === 'account'       && <AccountSection userEmail={userEmail} displayName={displayName} />}
+          {active === 'account'       && <AccountSection userEmail={userEmail} displayName={displayName} avatarUrl={avatarUrl} onAvatarChange={setAvatarUrl} />}
           {active === 'appearance'    && <AppearanceSection />}
           {active === 'workspace'     && <WorkspaceSection />}
           {active === 'notifications' && <NotificationsSection />}
