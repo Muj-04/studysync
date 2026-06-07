@@ -17,6 +17,9 @@ export const KEYS = {
   DEFAULT_ZOOM:     'studysync_default_zoom',
   DEFAULT_BG:       'studysync_default_bg',
   NOTIF_ROOM_JOIN:  'studysync_notif_room_join',
+  BG_COLOR:         'studysync_bg_color',
+  SIDEBAR_COLOR:    'studysync_sidebar_color',
+  FONT_FAMILY:      'studysync_font_family',
 } as const;
 
 export function storageGet<T>(key: string): T | null {

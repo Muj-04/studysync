@@ -1,8 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { FileText, Mic, Bookmark as BookmarkIcon, LogOut, Play, ArrowRight, BookOpen, MessageSquare } from 'lucide-react';
+import { FileText, Mic, Bookmark as BookmarkIcon, Play, ArrowRight, BookOpen, MessageSquare } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchDashboardData, fetchSessionState } from '@/lib/supabase/db';
+import { fetchDashboardData, fetchSessionState, loadUserPreferences } from '@/lib/supabase/db';
+import AvatarDropdown from '@/components/AvatarDropdown';
+import { applyPreferences } from '@/lib/preferences';
+import { storageSet, KEYS } from '@/lib/storage';
 
 interface DocEntry {
   id: string;
@@ -44,10 +47,34 @@ export default function DashboardPage() {
   const [session, setSession] = useState<{ docId: string; virtualIndex: number } | null>(null);
   const [lastDocName, setLastDocName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState('');
+  const [userDisplayName, setUserDisplayName] = useState('');
 
   useEffect(() => {
-    const theme = localStorage.getItem('theme');
-    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    // Load user info
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email ?? '');
+      setUserDisplayName(user?.user_metadata?.display_name ?? '');
+    });
+
+    // Load and apply cross-device preferences from Supabase
+    loadUserPreferences().then((prefs) => {
+      if (!prefs) return;
+      if (prefs.accent_color) storageSet(KEYS.ACCENT_COLOR, prefs.accent_color);
+      if (prefs.font_size)    storageSet(KEYS.FONT_SIZE, prefs.font_size);
+      if (prefs.font_family)  storageSet(KEYS.FONT_FAMILY, prefs.font_family);
+      if (prefs.bg_color !== undefined) storageSet(KEYS.BG_COLOR, prefs.bg_color);
+      if (prefs.sidebar_color !== undefined) storageSet(KEYS.SIDEBAR_COLOR, prefs.sidebar_color);
+      if (prefs.theme)        storageSet(KEYS.THEME, prefs.theme);
+      applyPreferences({
+        theme:        (prefs.theme as 'dark' | 'light') ?? undefined,
+        fontSize:     (prefs.font_size as 'small' | 'medium' | 'large') ?? undefined,
+        accentColor:  prefs.accent_color ?? undefined,
+        bgColor:      prefs.bg_color,
+        sidebarColor: prefs.sidebar_color,
+        fontFamily:   (prefs.font_family as 'default' | 'serif' | 'mono') ?? undefined,
+      });
+    });
 
     Promise.all([fetchDashboardData(), fetchSessionState()]).then(([data, sess]) => {
       if (data) {
@@ -65,11 +92,6 @@ export default function DashboardPage() {
       setLoading(false);
     });
   }, []);
-
-  const handleLogout = async () => {
-    await createClient().auth.signOut();
-    window.location.href = '/login';
-  };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit' }}>
@@ -108,20 +130,7 @@ export default function DashboardPage() {
             ))}
           </nav>
         </div>
-        <button
-          onClick={handleLogout}
-          style={{
-            height: 36, padding: '0 14px', display: 'flex', alignItems: 'center', gap: 6,
-            borderRadius: 8, background: 'transparent', border: '1px solid transparent',
-            color: 'var(--text-2)', cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
-            transition: 'background 0.13s, color 0.13s, border-color 0.13s',
-          }}
-          onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'rgba(229,72,77,.22)' })}
-          onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent' })}
-        >
-          <LogOut size={15} />
-          Log out
-        </button>
+        <AvatarDropdown email={userEmail} displayName={userDisplayName} />
       </header>
 
       <main style={{ maxWidth: 920, margin: '0 auto', padding: '32px 24px 60px' }}>

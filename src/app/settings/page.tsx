@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import {
   User, Palette, Layout, Bell, Database,
   ChevronLeft, Sun, Moon, Check, Trash2, Download,
-  Eye, EyeOff, AlertTriangle, LogOut,
+  Eye, EyeOff, AlertTriangle, LogOut, RotateCcw,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
@@ -14,19 +14,10 @@ import {
   deleteAllDrawingsForUser,
   exportAllUserData,
   deleteUserAccount,
+  loadUserPreferences,
+  saveUserPreferences,
 } from '@/lib/supabase/db';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ACCENT_MAP: Record<string, { label: string; base: string; hover: string; muted: string }> = {
-  Blue:   { label: 'Blue',   base: '#2563eb', hover: '#3b82f6', muted: 'rgba(37,99,235,0.14)' },
-  Purple: { label: 'Purple', base: '#7c3aed', hover: '#8b5cf6', muted: 'rgba(124,58,237,0.14)' },
-  Green:  { label: 'Green',  base: '#059669', hover: '#10b981', muted: 'rgba(5,150,105,0.14)' },
-  Orange: { label: 'Orange', base: '#d97706', hover: '#f59e0b', muted: 'rgba(217,119,6,0.14)' },
-  Pink:   { label: 'Pink',   base: '#db2777', hover: '#ec4899', muted: 'rgba(219,39,119,0.14)' },
-};
+import { applyPreferences, ACCENT_PRESETS, FONT_STACKS } from '@/lib/preferences';
 
 const NAV = [
   { id: 'account',    label: 'Account',        Icon: User },
@@ -532,72 +523,227 @@ function AccountSection({ userEmail, displayName }: { userEmail: string; display
 // Section: Appearance
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Inline color picker swatch ────────────────────────────────────────────────
+
+function ColorPickerField({ label, value, onChange, onReset, sub }: {
+  label: string;
+  value: string;
+  onChange: (hex: string) => void;
+  onReset: () => void;
+  sub?: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div style={{ marginBottom: 0 }}>
+      <FieldLabel>{label}</FieldLabel>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Swatch / trigger */}
+        <button
+          onClick={() => inputRef.current?.click()}
+          title="Pick color"
+          style={{
+            width: 38, height: 38, borderRadius: 9,
+            background: value,
+            border: '2px solid var(--border-strong)',
+            cursor: 'pointer', flexShrink: 0,
+            boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.15)',
+            transition: 'box-shadow 0.15s',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.15), 0 0 0 3px var(--accent-muted)'; }}
+          onMouseOut={(e)  => { e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.15)'; }}
+        />
+        {/* Hidden native color input */}
+        <input
+          ref={inputRef}
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+          tabIndex={-1}
+        />
+        {/* Hex text */}
+        <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-2)', letterSpacing: '0.04em' }}>
+          {value.toUpperCase()}
+        </span>
+        {/* Reset */}
+        <button
+          onClick={onReset}
+          title="Reset to default"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '4px 10px', borderRadius: 7,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+            color: 'var(--text-3)', fontSize: 11.5, fontWeight: 500,
+            cursor: 'pointer', fontFamily: 'inherit',
+            transition: 'color 0.12s, background 0.12s',
+          }}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-1)', background: 'var(--bg-hover)' })}
+          onMouseOut={(e)  => Object.assign(e.currentTarget.style, { color: 'var(--text-3)', background: 'var(--bg-elevated)' })}
+        >
+          <RotateCcw size={10} />
+          Reset
+        </button>
+      </div>
+      {sub && <SubLabel>{sub}</SubLabel>}
+    </div>
+  );
+}
+
 function AppearanceSection() {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return document.documentElement.getAttribute('data-theme') !== 'light';
-  });
+  const [loading, setLoading] = useState(true);
 
-  const [fontSize, setFontSize] = useState<'small' | 'medium' | 'large'>(() =>
-    (storageGet<string>(KEYS.FONT_SIZE) as 'small' | 'medium' | 'large') ?? 'medium'
-  );
+  const [isDark, setIsDark] = useState(true);
+  const [fontSize, setFontSize]     = useState<'small' | 'medium' | 'large'>('medium');
+  const [fontFamily, setFontFamily] = useState<'default' | 'serif' | 'mono'>('default');
+  const [accent, setAccent]         = useState<string>('Blue');
+  const [customAccent, setCustomAccent] = useState('#2563eb');
+  const [bgColor, setBgColor]       = useState('#000000');
+  const [sidebarColor, setSidebarColor] = useState('#0a0a0a');
 
-  const [accent, setAccent] = useState<string>(() =>
-    storageGet<string>(KEYS.ACCENT_COLOR) ?? 'Blue'
-  );
+  // Defaults depend on theme
+  const defaultBg      = isDark ? '#000000' : '#f5f5f5';
+  const defaultSidebar = isDark ? '#0a0a0a' : '#ffffff';
 
-  const applyTheme = useCallback((dark: boolean) => {
-    const r = document.documentElement;
-    if (dark) r.removeAttribute('data-theme');
-    else r.setAttribute('data-theme', 'light');
-    storageSet(KEYS.THEME, dark ? 'dark' : 'light');
+  // Load from Supabase on mount
+  useEffect(() => {
+    loadUserPreferences().then((prefs) => {
+      const dark = (prefs?.theme ?? storageGet<string>(KEYS.THEME) ?? 'dark') !== 'light';
+      setIsDark(dark);
+      setFontSize((prefs?.font_size ?? storageGet<string>(KEYS.FONT_SIZE) ?? 'medium') as 'small' | 'medium' | 'large');
+      setFontFamily((prefs?.font_family ?? storageGet<string>(KEYS.FONT_FAMILY) ?? 'default') as 'default' | 'serif' | 'mono');
+      const ac = prefs?.accent_color ?? storageGet<string>(KEYS.ACCENT_COLOR) ?? 'Blue';
+      setAccent(ac);
+      if (ac.startsWith('#')) setCustomAccent(ac);
+      setBgColor(prefs?.bg_color ?? storageGet<string>(KEYS.BG_COLOR) ?? (dark ? '#000000' : '#f5f5f5'));
+      setSidebarColor(prefs?.sidebar_color ?? storageGet<string>(KEYS.SIDEBAR_COLOR) ?? (dark ? '#0a0a0a' : '#ffffff'));
+      setLoading(false);
+    });
+  }, []);
+
+  const save = useCallback((partial: Parameters<typeof saveUserPreferences>[0]) => {
+    saveUserPreferences(partial);
+  }, []);
+
+  const handleTheme = useCallback((dark: boolean) => {
     setIsDark(dark);
-  }, []);
+    storageSet(KEYS.THEME, dark ? 'dark' : 'light');
+    applyPreferences({ theme: dark ? 'dark' : 'light' });
+    save({ theme: dark ? 'dark' : 'light' });
+  }, [save]);
 
-  const applyFontSize = useCallback((size: 'small' | 'medium' | 'large') => {
-    if (size === 'small') document.body.style.fontSize = '11px';
-    else if (size === 'large') document.body.style.fontSize = '16px';
-    else document.body.style.fontSize = '';
-    storageSet(KEYS.FONT_SIZE, size);
+  const handleFontSize = useCallback((size: 'small' | 'medium' | 'large') => {
     setFontSize(size);
-  }, []);
+    storageSet(KEYS.FONT_SIZE, size);
+    applyPreferences({ fontSize: size });
+    save({ font_size: size });
+  }, [save]);
 
-  const applyAccent = useCallback((color: string) => {
-    const c = ACCENT_MAP[color];
-    if (!c) return;
-    const r = document.documentElement;
-    r.style.setProperty('--accent', c.base);
-    r.style.setProperty('--accent-hover', c.hover);
-    r.style.setProperty('--accent-muted', c.muted);
-    r.style.setProperty('--violet', c.base);
-    r.style.setProperty('--violet-muted', c.muted);
-    storageSet(KEYS.ACCENT_COLOR, color);
-    setAccent(color);
-  }, []);
+  const handleFontFamily = useCallback((ff: 'default' | 'serif' | 'mono') => {
+    setFontFamily(ff);
+    storageSet(KEYS.FONT_FAMILY, ff);
+    applyPreferences({ fontFamily: ff });
+    save({ font_family: ff });
+  }, [save]);
+
+  const handleAccentPreset = useCallback((key: string) => {
+    setAccent(key);
+    storageSet(KEYS.ACCENT_COLOR, key);
+    applyPreferences({ accentColor: key });
+    save({ accent_color: key });
+  }, [save]);
+
+  const handleCustomAccent = useCallback((hex: string) => {
+    setCustomAccent(hex);
+    setAccent(hex);
+    storageSet(KEYS.ACCENT_COLOR, hex);
+    applyPreferences({ accentColor: hex });
+    save({ accent_color: hex });
+  }, [save]);
+
+  const handleBgColor = useCallback((hex: string) => {
+    setBgColor(hex);
+    storageSet(KEYS.BG_COLOR, hex);
+    applyPreferences({ bgColor: hex });
+    save({ bg_color: hex });
+  }, [save]);
+
+  const handleBgReset = useCallback(() => {
+    setBgColor(defaultBg);
+    storageSet(KEYS.BG_COLOR, null);
+    document.documentElement.style.removeProperty('--bg-app');
+    save({ bg_color: null });
+  }, [defaultBg, save]);
+
+  const handleSidebarColor = useCallback((hex: string) => {
+    setSidebarColor(hex);
+    storageSet(KEYS.SIDEBAR_COLOR, hex);
+    applyPreferences({ sidebarColor: hex });
+    save({ sidebar_color: hex });
+  }, [save]);
+
+  const handleSidebarReset = useCallback(() => {
+    setSidebarColor(defaultSidebar);
+    storageSet(KEYS.SIDEBAR_COLOR, null);
+    document.documentElement.style.removeProperty('--bg-panel');
+    document.documentElement.style.removeProperty('--bg-sidebar');
+    save({ sidebar_color: null });
+  }, [defaultSidebar, save]);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
+        <span style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+      </div>
+    );
+  }
 
   return (
     <div>
       <SectionTitle>Appearance</SectionTitle>
 
-      {/* Theme */}
+      {/* ── Theme ── */}
       <div style={{ marginBottom: 24 }}>
         <FieldLabel>Theme</FieldLabel>
         <ChipRow>
-          <Chip active={!isDark} onClick={() => applyTheme(false)}>
+          <Chip active={!isDark} onClick={() => handleTheme(false)}>
             <Sun size={13} /> Light
           </Chip>
-          <Chip active={isDark} onClick={() => applyTheme(true)}>
+          <Chip active={isDark} onClick={() => handleTheme(true)}>
             <Moon size={13} /> Dark
           </Chip>
         </ChipRow>
       </div>
 
-      {/* Font size */}
+      {/* ── Background color ── */}
+      <div style={{ marginBottom: 24 }}>
+        <ColorPickerField
+          label="Background color"
+          value={bgColor}
+          onChange={handleBgColor}
+          onReset={handleBgReset}
+          sub="The main app background. Click the swatch to open the color picker."
+        />
+      </div>
+
+      {/* ── Sidebar color ── */}
+      <div style={{ marginBottom: 24 }}>
+        <ColorPickerField
+          label="Panel / sidebar color"
+          value={sidebarColor}
+          onChange={handleSidebarColor}
+          onReset={handleSidebarReset}
+          sub="Used for sidebars, headers, and floating panels."
+        />
+      </div>
+
+      <Divider />
+
+      {/* ── Font size ── */}
       <div style={{ marginBottom: 24 }}>
         <FieldLabel>Font size</FieldLabel>
         <ChipRow>
           {(['small', 'medium', 'large'] as const).map((s) => (
-            <Chip key={s} active={fontSize === s} onClick={() => applyFontSize(s)}>
+            <Chip key={s} active={fontSize === s} onClick={() => handleFontSize(s)}>
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </Chip>
           ))}
@@ -605,28 +751,65 @@ function AppearanceSection() {
         <SubLabel>Adjusts text size across the app where possible.</SubLabel>
       </div>
 
-      {/* Accent color */}
+      {/* ── Font family ── */}
+      <div style={{ marginBottom: 0 }}>
+        <FieldLabel>Font family</FieldLabel>
+        <ChipRow>
+          {(Object.keys(FONT_STACKS) as ('default' | 'serif' | 'mono')[]).map((ff) => (
+            <Chip key={ff} active={fontFamily === ff} onClick={() => handleFontFamily(ff)}>
+              <span style={{
+                fontFamily: FONT_STACKS[ff],
+                fontSize: ff === 'mono' ? 11 : 13,
+              }}>
+                {ff === 'default' ? 'Default' : ff === 'serif' ? 'Serif' : 'Mono'}
+              </span>
+            </Chip>
+          ))}
+        </ChipRow>
+        <SubLabel>
+          Default (Geist) · Serif (Georgia) · Mono (JetBrains Mono)
+        </SubLabel>
+      </div>
+
+      <Divider />
+
+      {/* ── Accent color ── */}
       <div>
         <FieldLabel>Accent color</FieldLabel>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {Object.entries(ACCENT_MAP).map(([key, c]) => (
-            <button
-              key={key}
-              title={c.label}
-              onClick={() => applyAccent(key)}
-              style={{
-                width: 32, height: 32, borderRadius: '50%',
-                background: c.base, border: 'none', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: accent === key ? `0 0 0 3px var(--bg-app), 0 0 0 5px ${c.base}` : 'none',
-                transition: 'box-shadow 0.15s',
-              }}
-            >
-              {accent === key && <Check size={14} color="#fff" strokeWidth={3} />}
-            </button>
-          ))}
+        {/* Preset swatches */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+          {Object.entries(ACCENT_PRESETS).map(([key, c]) => {
+            const isActive = accent === key;
+            return (
+              <button
+                key={key}
+                title={key}
+                onClick={() => handleAccentPreset(key)}
+                style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: c.base, border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: isActive ? `0 0 0 3px var(--bg-app), 0 0 0 5px ${c.base}` : 'none',
+                  transition: 'box-shadow 0.15s',
+                }}
+              >
+                {isActive && <Check size={14} color="#fff" strokeWidth={3} />}
+              </button>
+            );
+          })}
         </div>
-        <SubLabel>Changes button and highlight colors throughout the app.</SubLabel>
+
+        {/* Custom color picker */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>Custom:</span>
+          <ColorPickerField
+            label=""
+            value={customAccent}
+            onChange={handleCustomAccent}
+            onReset={() => { handleAccentPreset('Blue'); setCustomAccent('#2563eb'); }}
+          />
+        </div>
+        <SubLabel>Changes buttons, links, and highlights throughout the app. Synced across devices.</SubLabel>
       </div>
     </div>
   );
@@ -637,24 +820,33 @@ function AppearanceSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WorkspaceSection() {
-  const [bgTheme, setBgTheme] = useState<'white' | 'dark'>(() =>
-    (storageGet<'white' | 'dark'>(KEYS.DEFAULT_BG)) ?? 'dark'
-  );
+  const [bgTheme, setBgTheme]     = useState<'white' | 'dark'>('dark');
+  const [defaultZoom, setDefaultZoom] = useState<number>(100);
+  const [viewMode, setViewMode]   = useState<'page' | 'scroll'>('page');
 
-  const [defaultZoom, setDefaultZoom] = useState<number>(() =>
-    storageGet<number>(KEYS.DEFAULT_ZOOM) ?? 100
-  );
+  useEffect(() => {
+    loadUserPreferences().then((prefs) => {
+      setBgTheme((prefs?.default_bg as 'white' | 'dark') ?? storageGet<'white' | 'dark'>(KEYS.DEFAULT_BG) ?? 'dark');
+      setDefaultZoom(prefs?.default_zoom ?? storageGet<number>(KEYS.DEFAULT_ZOOM) ?? 100);
+      setViewMode((prefs?.view_mode as 'page' | 'scroll') ?? storageGet<'page' | 'scroll'>(KEYS.VIEW_MODE) ?? 'page');
+    });
+  }, []);
 
-  const [viewMode, setViewMode] = useState<'page' | 'scroll'>(() =>
-    (storageGet<'page' | 'scroll'>(KEYS.VIEW_MODE)) ?? 'page'
-  );
-
+  const setBg = (val: 'white' | 'dark') => {
+    setBgTheme(val); storageSet(KEYS.DEFAULT_BG, val);
+    saveUserPreferences({ default_bg: val });
+  };
+  const setVm = (val: 'page' | 'scroll') => {
+    setViewMode(val); storageSet(KEYS.VIEW_MODE, val);
+    saveUserPreferences({ view_mode: val });
+  };
   const handleZoom = useCallback((raw: string) => {
     const n = parseInt(raw, 10);
     if (Number.isNaN(n)) return;
     const clamped = Math.min(300, Math.max(25, n));
     setDefaultZoom(clamped);
     storageSet(KEYS.DEFAULT_ZOOM, clamped);
+    saveUserPreferences({ default_zoom: clamped });
   }, []);
 
   return (
@@ -665,11 +857,11 @@ function WorkspaceSection() {
       <div style={{ marginBottom: 24 }}>
         <FieldLabel>Default blank page style</FieldLabel>
         <ChipRow>
-          <Chip active={bgTheme === 'white'} onClick={() => { setBgTheme('white'); storageSet(KEYS.DEFAULT_BG, 'white'); }}>
+          <Chip active={bgTheme === 'white'} onClick={() => setBg('white')}>
             <span style={{ width: 14, height: 11, borderRadius: 2, background: '#ffffff', border: '1px solid rgba(0,0,0,0.18)', flexShrink: 0 }} />
             White dots
           </Chip>
-          <Chip active={bgTheme === 'dark'} onClick={() => { setBgTheme('dark'); storageSet(KEYS.DEFAULT_BG, 'dark'); }}>
+          <Chip active={bgTheme === 'dark'} onClick={() => setBg('dark')}>
             <span style={{ width: 14, height: 11, borderRadius: 2, background: '#1e1e2e', border: '1px solid rgba(255,255,255,0.12)', flexShrink: 0 }} />
             Dark dots
           </Chip>
@@ -681,12 +873,8 @@ function WorkspaceSection() {
       <div style={{ marginBottom: 24 }}>
         <FieldLabel>Default view mode</FieldLabel>
         <ChipRow>
-          <Chip active={viewMode === 'page'} onClick={() => { setViewMode('page'); storageSet(KEYS.VIEW_MODE, 'page'); }}>
-            Page by page
-          </Chip>
-          <Chip active={viewMode === 'scroll'} onClick={() => { setViewMode('scroll'); storageSet(KEYS.VIEW_MODE, 'scroll'); }}>
-            Scroll
-          </Chip>
+          <Chip active={viewMode === 'page'} onClick={() => setVm('page')}>Page by page</Chip>
+          <Chip active={viewMode === 'scroll'} onClick={() => setVm('scroll')}>Scroll</Chip>
         </ChipRow>
         <SubLabel>Applied when you open a new document.</SubLabel>
       </div>
@@ -701,10 +889,7 @@ function WorkspaceSection() {
             onChange={(e) => handleZoom(e.target.value)}
             style={{ flex: 1, accentColor: 'var(--accent)' }}
           />
-          <span style={{
-            minWidth: 42, fontSize: 12, fontWeight: 600, color: 'var(--text-2)',
-            fontVariantNumeric: 'tabular-nums', textAlign: 'right',
-          }}>
+          <span style={{ minWidth: 42, fontSize: 12, fontWeight: 600, color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
             {defaultZoom}%
           </span>
         </div>
@@ -719,14 +904,19 @@ function WorkspaceSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function NotificationsSection() {
-  const [roomJoin, setRoomJoin] = useState(() =>
-    storageGet<boolean>(KEYS.NOTIF_ROOM_JOIN) ?? true
-  );
+  const [roomJoin, setRoomJoin] = useState(true);
+
+  useEffect(() => {
+    loadUserPreferences().then((prefs) => {
+      setRoomJoin(prefs?.notif_room_join ?? storageGet<boolean>(KEYS.NOTIF_ROOM_JOIN) ?? true);
+    });
+  }, []);
 
   const toggle = () => {
     const next = !roomJoin;
     setRoomJoin(next);
     storageSet(KEYS.NOTIF_ROOM_JOIN, next);
+    saveUserPreferences({ notif_room_join: next });
   };
 
   return (
@@ -899,22 +1089,19 @@ export default function SettingsPage() {
     });
   }, [router, sb]);
 
-  // Apply accent + font size on mount (same as workspace page)
+  // Apply all appearance prefs from Supabase on mount
   useEffect(() => {
-    const ac = storageGet<string>(KEYS.ACCENT_COLOR);
-    if (ac && ACCENT_MAP[ac]) {
-      const c = ACCENT_MAP[ac];
-      const r = document.documentElement;
-      r.style.setProperty('--accent', c.base);
-      r.style.setProperty('--accent-hover', c.hover);
-      r.style.setProperty('--accent-muted', c.muted);
-      r.style.setProperty('--violet', c.base);
-      r.style.setProperty('--violet-muted', c.muted);
-    }
-    const fs = storageGet<string>(KEYS.FONT_SIZE);
-    if (fs === 'small') document.body.style.fontSize = '11px';
-    else if (fs === 'large') document.body.style.fontSize = '16px';
-    else document.body.style.fontSize = '';
+    loadUserPreferences().then((prefs) => {
+      if (!prefs) return;
+      applyPreferences({
+        theme:        (prefs.theme as 'dark' | 'light') ?? undefined,
+        fontSize:     (prefs.font_size as 'small' | 'medium' | 'large') ?? undefined,
+        accentColor:  prefs.accent_color ?? undefined,
+        bgColor:      prefs.bg_color,
+        sidebarColor: prefs.sidebar_color,
+        fontFamily:   (prefs.font_family as 'default' | 'serif' | 'mono') ?? undefined,
+      });
+    });
   }, []);
 
   if (!authReady) {

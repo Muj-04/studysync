@@ -12,7 +12,19 @@
       "Bash(git branch *)",
       "Bash(git push *)",
       "Bash(npm install *)",
-      "Bash(vercel *)"
+      "Bash(vercel *)",
+      "Bash(powershell *)",
+      "Bash(n\\\\\"\" 2>&1)",
+      "PowerShell(Get-Process *)",
+      "Bash(Test-Path *)",
+      "mcp__claude_ai_Supabase__list_tables",
+      "mcp__claude_ai_Supabase__apply_migration",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__claude_ai_Vercel__deploy_to_vercel",
+      "mcp__claude_ai_Vercel__get_project",
+      "Bash(npx vercel *)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(git diff *)"
     ]
   }
 }

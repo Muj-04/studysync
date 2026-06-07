@@ -441,6 +441,39 @@ export async function deleteUserAccount(): Promise<{ error: string | null }> {
   }
 }
 
+// ── User Preferences ─────────────────────────────────────────────────────────
+
+export interface DbUserPreferences {
+  theme?: string;
+  font_size?: string;
+  accent_color?: string;
+  bg_color?: string | null;
+  sidebar_color?: string | null;
+  font_family?: string;
+  view_mode?: string;
+  default_zoom?: number;
+  default_bg?: string;
+  notif_room_join?: boolean;
+}
+
+export async function loadUserPreferences(): Promise<DbUserPreferences | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data } = await sb()
+    .from('user_preferences')
+    .select('*')
+    .eq('user_id', uid)
+    .maybeSingle();
+  return data ?? null;
+}
+
+export async function saveUserPreferences(prefs: Partial<DbUserPreferences>): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('user_preferences').upsert(
+    { user_id: uid, ...prefs, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id' },
+  );
+}
+
 // ── Room Voice Notes ─────────────────────────────────────────────────────────
 
 export async function saveRoomVoiceNote(roomId: string, note: VoiceNote): Promise<string | null> {
