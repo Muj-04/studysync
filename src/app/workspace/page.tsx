@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Search, CheckCircle, Users,
+  ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -43,6 +43,7 @@ import {
   saveDocumentOrder,
   loadDocumentOrder,
   getProfile,
+  createCommunityPost,
 } from '@/lib/supabase/db';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
@@ -380,6 +381,134 @@ const SHORTCUTS = [
   { key: '?',         desc: 'Toggle this cheat sheet' },
 ];
 
+function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
+  docId: string | null;
+  docName: string | null;
+  pageTextNotes: Record<string, import('@/types').TextNote[]>;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handlePost = async () => {
+    if (!title.trim() || posting) return;
+    setPosting(true);
+    const pages: import('@/lib/supabase/db').CommunityPage[] = [];
+    if (docId) {
+      const prefix = `${docId}:`;
+      for (const [key, notes] of Object.entries(pageTextNotes)) {
+        if (!key.startsWith(prefix)) continue;
+        if (!notes.length) continue;
+        pages.push({
+          pageKey: key.slice(prefix.length),
+          textNotes: notes.map((n) => ({ content: n.content, x: n.x, y: n.y })),
+          canvasData: null,
+        });
+      }
+    }
+    await createCommunityPost({ documentId: docId, title: title.trim(), description: description.trim(), pages });
+    setPosting(false);
+    setDone(true);
+    setTimeout(onClose, 1200);
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 500,
+        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: 'var(--bg-panel)', border: '1px solid var(--border)',
+          borderRadius: 14, padding: '28px', width: 420,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {done ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <div style={{ fontSize: 32, marginBottom: 10 }}>🎉</div>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>Posted to Community!</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Share to Community</h3>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
+                <X size={16} />
+              </button>
+            </div>
+
+            {docName && (
+              <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-3)' }}>
+                Sharing from: <strong style={{ color: 'var(--text-2)' }}>{docName}</strong>
+              </p>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Title *</label>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="e.g. My notes on Chapter 3"
+                  style={{
+                    width: '100%', height: 36, padding: '0 10px', boxSizing: 'border-box',
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                    borderRadius: 8, fontSize: 13, color: 'var(--text-1)',
+                    outline: 'none', fontFamily: 'inherit',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Brief description of what you're sharing…"
+                  rows={3}
+                  style={{
+                    width: '100%', padding: '8px 10px', boxSizing: 'border-box',
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                    borderRadius: 8, fontSize: 13, color: 'var(--text-1)',
+                    outline: 'none', fontFamily: 'inherit', resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)' }}>
+                Your text notes from this document will be shared. Drawings are not included.
+              </p>
+
+              <button
+                onClick={handlePost}
+                disabled={!title.trim() || posting}
+                style={{
+                  height: 40, borderRadius: 10,
+                  background: title.trim() ? 'var(--accent)' : 'var(--bg-elevated)',
+                  color: title.trim() ? '#fff' : 'var(--text-3)',
+                  border: 'none', fontSize: 13.5, fontWeight: 600,
+                  cursor: title.trim() ? 'pointer' : 'default',
+                  fontFamily: 'inherit', transition: 'background 0.12s, color 0.12s',
+                }}
+              >
+                {posting ? 'Posting…' : 'Share Post'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ShortcutsModal({ onClose }: { onClose: () => void }) {
   return (
     <div
@@ -541,6 +670,9 @@ export default function WorkspacePage() {
 
   // ── Shortcuts modal ───────────────────────────────────────────────────────
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // ── Share to Community ────────────────────────────────────────────────────
+  const [shareOpen, setShareOpen] = useState(false);
 
   // ── Toast ─────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<string | null>(null);
@@ -1386,8 +1518,8 @@ export default function WorkspacePage() {
             {[
               { label: 'Dashboard', active: false, href: '/dashboard' },
               { label: 'Documents', active: true,  href: '#' },
-              { label: 'Library',   active: false, href: '#' },
-              { label: 'Community', active: false, href: '#' },
+              { label: 'Library',   active: false, href: '/library' },
+              { label: 'Community', active: false, href: '/community' },
             ].map(({ label, active, href }) => (
               <a
                 key={label}
@@ -1486,6 +1618,12 @@ export default function WorkspacePage() {
             <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
           </HdrBtn>
 
+          {hasDocument && (
+            <HdrBtn onClick={() => setShareOpen(true)} title="Share to Community">
+              <Share2 size={15} />
+            </HdrBtn>
+          )}
+
           <a
             href="/friends"
             title="Friends"
@@ -1509,6 +1647,16 @@ export default function WorkspacePage() {
 
       {/* Shortcuts modal */}
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+
+      {/* Share to Community modal */}
+      {shareOpen && (
+        <ShareToCommunityModal
+          docId={activeDocumentId}
+          docName={activeDocument?.name ?? null}
+          pageTextNotes={pageTextNotes}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
 
       {documents.length === 0 ? (
 

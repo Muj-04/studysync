@@ -64,6 +64,202 @@ export async function deleteDocument(docId: string) {
   await sb().from('documents').delete().eq('id', docId);
 }
 
+// ── Library ───────────────────────────────────────────────────────────────────
+
+export interface LibraryDocument {
+  id: string;
+  name: string;
+  type: string;
+  pageCount: number | null;
+  updatedAt: string;
+  createdAt: string;
+  voiceNoteCount: number;
+  drawingCount: number;
+  textNoteCount: number;
+}
+
+export async function fetchLibraryDocuments(): Promise<LibraryDocument[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data: docs } = await sb()
+    .from('documents')
+    .select('id, name, type, page_count, created_at, updated_at')
+    .eq('user_id', uid)
+    .order('updated_at', { ascending: false });
+  if (!docs?.length) return [];
+
+  const ids = docs.map((d) => d.id);
+  const [vnRes, drRes, tnRes] = await Promise.all([
+    sb().from('voice_notes').select('document_id').eq('user_id', uid).in('document_id', ids),
+    sb().from('drawings').select('document_id').eq('user_id', uid).in('document_id', ids),
+    sb().from('text_notes').select('document_id').eq('user_id', uid).in('document_id', ids),
+  ]);
+
+  const countMap = (rows: Array<{ document_id: string }> | null) => {
+    const m = new Map<string, number>();
+    for (const r of rows ?? []) m.set(r.document_id, (m.get(r.document_id) ?? 0) + 1);
+    return m;
+  };
+  const vnMap = countMap(vnRes.data);
+  const drMap = countMap(drRes.data);
+  const tnMap = countMap(tnRes.data);
+
+  return docs.map((d) => ({
+    id: d.id,
+    name: d.name,
+    type: d.type,
+    pageCount: d.page_count ?? null,
+    updatedAt: d.updated_at,
+    createdAt: d.created_at,
+    voiceNoteCount: vnMap.get(d.id) ?? 0,
+    drawingCount: drMap.get(d.id) ?? 0,
+    textNoteCount: tnMap.get(d.id) ?? 0,
+  }));
+}
+
+export async function deleteLibraryDocument(docId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await Promise.all([
+    sb().from('voice_notes').delete().eq('document_id', docId).eq('user_id', uid),
+    sb().from('drawings').delete().eq('document_id', docId).eq('user_id', uid),
+    sb().from('text_notes').delete().eq('document_id', docId).eq('user_id', uid),
+    sb().from('bookmarks').delete().eq('document_id', docId).eq('user_id', uid),
+    sb().from('key_terms').delete().eq('document_id', docId).eq('user_id', uid),
+  ]);
+  await sb().from('documents').delete().eq('id', docId).eq('user_id', uid);
+}
+
+// ── Community ─────────────────────────────────────────────────────────────────
+
+export interface CommunityPage {
+  pageKey: string;
+  textNotes: Array<{ content: string; x: number; y: number }>;
+  canvasData: string | null;
+}
+
+export interface CommunityPost {
+  id: string;
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  documentId: string | null;
+  title: string;
+  description: string;
+  pages: CommunityPage[];
+  likesCount: number;
+  likedByMe: boolean;
+  createdAt: string;
+  comments: CommunityComment[];
+}
+
+export interface CommunityComment {
+  id: string;
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  content: string;
+  createdAt: string;
+}
+
+export async function fetchCommunityPosts(sort: 'latest' | 'top' = 'latest'): Promise<CommunityPost[]> {
+  const uid = await userId();
+  const orderCol = sort === 'top' ? 'likes_count' : 'created_at';
+  const { data: posts } = await sb()
+    .from('community_posts')
+    .select('id, user_id, document_id, title, description, pages, likes_count, created_at')
+    .order(orderCol, { ascending: false })
+    .limit(50);
+  if (!posts?.length) return [];
+
+  const authorIds = [...new Set(posts.map((p) => p.user_id))];
+  const { data: profiles } = await sb().from('profiles').select('id, username, avatar_url').in('id', authorIds);
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+  const postIds = posts.map((p) => p.id);
+  const [likesRes, commentsRes] = await Promise.all([
+    uid ? sb().from('post_likes').select('post_id').eq('user_id', uid).in('post_id', postIds) : Promise.resolve({ data: [] }),
+    sb().from('post_comments').select('id, post_id, user_id, content, created_at').in('post_id', postIds).order('created_at', { ascending: true }),
+  ]);
+
+  const likedSet = new Set((likesRes.data ?? []).map((l: { post_id: string }) => l.post_id));
+
+  const commentAuthorIds = [...new Set((commentsRes.data ?? []).map((c: { user_id: string }) => c.user_id))];
+  const { data: commentProfiles } = commentAuthorIds.length
+    ? await sb().from('profiles').select('id, username, avatar_url').in('id', commentAuthorIds)
+    : { data: [] };
+  const cpMap = new Map((commentProfiles ?? []).map((p) => [p.id, p]));
+
+  const commentsByPost = new Map<string, CommunityComment[]>();
+  for (const c of (commentsRes.data ?? []) as Array<{ id: string; post_id: string; user_id: string; content: string; created_at: string }>) {
+    if (!commentsByPost.has(c.post_id)) commentsByPost.set(c.post_id, []);
+    const cp = cpMap.get(c.user_id);
+    commentsByPost.get(c.post_id)!.push({
+      id: c.id, userId: c.user_id,
+      username: cp?.username ?? null, avatarUrl: cp?.avatar_url ?? null,
+      content: c.content, createdAt: c.created_at,
+    });
+  }
+
+  return posts.map((p) => {
+    const pr = profileMap.get(p.user_id);
+    return {
+      id: p.id, userId: p.user_id,
+      username: pr?.username ?? null, avatarUrl: pr?.avatar_url ?? null,
+      documentId: p.document_id ?? null,
+      title: p.title, description: p.description,
+      pages: (p.pages as CommunityPage[]) ?? [],
+      likesCount: p.likes_count, likedByMe: likedSet.has(p.id),
+      createdAt: p.created_at,
+      comments: commentsByPost.get(p.id) ?? [],
+    };
+  });
+}
+
+export async function createCommunityPost(post: {
+  documentId: string | null;
+  title: string;
+  description: string;
+  pages: CommunityPage[];
+}): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data, error } = await sb()
+    .from('community_posts')
+    .insert({ user_id: uid, document_id: post.documentId, title: post.title, description: post.description, pages: post.pages })
+    .select('id').single();
+  if (error) { console.error('[DB] createCommunityPost error:', error.message); return null; }
+  return data.id;
+}
+
+export async function togglePostLike(postId: string): Promise<boolean> {
+  const { data, error } = await sb().rpc('toggle_post_like', { p_post_id: postId });
+  if (error) { console.error('[DB] togglePostLike error:', error.message); return false; }
+  return data as boolean;
+}
+
+export async function addPostComment(postId: string, content: string): Promise<CommunityComment | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data, error } = await sb()
+    .from('post_comments')
+    .insert({ post_id: postId, user_id: uid, content })
+    .select('id, user_id, content, created_at').single();
+  if (error) { console.error('[DB] addPostComment error:', error.message); return null; }
+  const { data: pr } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
+  return {
+    id: data.id, userId: uid,
+    username: pr?.username ?? null, avatarUrl: pr?.avatar_url ?? null,
+    content: data.content, createdAt: data.created_at,
+  };
+}
+
+export async function deletePostComment(commentId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('post_comments').delete().eq('id', commentId).eq('user_id', uid);
+}
+
+export async function deleteCommunityPost(postId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('community_posts').delete().eq('id', postId).eq('user_id', uid);
+}
+
 // ── Voice Notes ──────────────────────────────────────────────────────────────
 
 export async function saveVoiceNote(note: VoiceNote) {

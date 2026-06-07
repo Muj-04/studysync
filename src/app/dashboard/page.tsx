@@ -114,6 +114,8 @@ export default function DashboardPage() {
             {[
               { label: 'Dashboard', href: '/dashboard', active: true },
               { label: 'Workspace', href: '/workspace', active: false },
+              { label: 'Library',   href: '/library',   active: false },
+              { label: 'Community', href: '/community', active: false },
               { label: 'Settings',  href: '/settings',  active: false },
             ].map(({ label, href, active }) => (
               <a
