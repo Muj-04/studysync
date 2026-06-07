@@ -28,8 +28,18 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistMono.variable} h-full`}>
       <head>
-        {/* Prevent flash of wrong theme on load */}
-        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('studysync_theme')||localStorage.getItem('theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}` }} />
+        {/* Prevent flash of wrong theme / accent / font-size on load */}
+        <script dangerouslySetInnerHTML={{ __html: `try{
+var r=document.documentElement;
+var t=localStorage.getItem('studysync_theme')||localStorage.getItem('theme');
+if(t==='light')r.setAttribute('data-theme','light');
+var AC={'Blue':['#2563eb','#3b82f6','rgba(37,99,235,0.14)'],'Purple':['#7c3aed','#8b5cf6','rgba(124,58,237,0.14)'],'Green':['#059669','#10b981','rgba(5,150,105,0.14)'],'Orange':['#d97706','#f59e0b','rgba(217,119,6,0.14)'],'Pink':['#db2777','#ec4899','rgba(219,39,119,0.14)']};
+var ac=localStorage.getItem('studysync_accent_color');
+if(ac&&AC[ac]){r.style.setProperty('--accent',AC[ac][0]);r.style.setProperty('--accent-hover',AC[ac][1]);r.style.setProperty('--accent-muted',AC[ac][2]);r.style.setProperty('--violet',AC[ac][0]);r.style.setProperty('--violet-muted',AC[ac][2]);}
+var fs=localStorage.getItem('studysync_font_size');
+if(fs==='small')document.body&&(document.body.style.fontSize='11px');
+if(fs==='large')document.body&&(document.body.style.fontSize='16px');
+}catch(e){}` }} />
         {/* Geist — primary UI font */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

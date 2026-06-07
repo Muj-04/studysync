@@ -385,6 +385,62 @@ export async function fetchAllPageImages(docId: string): Promise<Record<number, 
   return map;
 }
 
+// ── User storage stats & bulk operations ─────────────────────────────────────
+
+export async function getUserStorageStats(): Promise<{
+  documents: number; voiceNotes: number; drawings: number;
+}> {
+  const uid = await userId(); if (!uid) return { documents: 0, voiceNotes: 0, drawings: 0 };
+  const [docsRes, vnRes, drRes] = await Promise.all([
+    sb().from('documents').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+    sb().from('voice_notes').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+    sb().from('drawings').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+  ]);
+  return {
+    documents: docsRes.count ?? 0,
+    voiceNotes: vnRes.count ?? 0,
+    drawings: drRes.count ?? 0,
+  };
+}
+
+export async function deleteAllVoiceNotesForUser(): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('voice_notes').delete().eq('user_id', uid);
+}
+
+export async function deleteAllDrawingsForUser(): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('drawings').delete().eq('user_id', uid);
+}
+
+export async function exportAllUserData(): Promise<object> {
+  const uid = await userId(); if (!uid) return {};
+  const [docsRes, vnRes, tnRes, bmRes, ktRes] = await Promise.all([
+    sb().from('documents').select('id, name, type, page_count').eq('user_id', uid),
+    sb().from('voice_notes').select('id, document_id, page_number, duration, title, timestamp').eq('user_id', uid),
+    sb().from('text_notes').select('id, document_id, page_key, content, x, y').eq('user_id', uid),
+    sb().from('bookmarks').select('id, document_id, virtual_index, label, created_at').eq('user_id', uid),
+    sb().from('key_terms').select('id, document_id, term, definition, created_at').eq('user_id', uid),
+  ]);
+  return {
+    exportedAt: new Date().toISOString(),
+    documents: docsRes.data ?? [],
+    voiceNotes: vnRes.data ?? [],
+    textNotes: tnRes.data ?? [],
+    bookmarks: bmRes.data ?? [],
+    keyTerms: ktRes.data ?? [],
+  };
+}
+
+export async function deleteUserAccount(): Promise<{ error: string | null }> {
+  try {
+    const { error } = await sb().rpc('delete_user_account');
+    return { error: error?.message ?? null };
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
 // ── Room Voice Notes ─────────────────────────────────────────────────────────
 
 export async function saveRoomVoiceNote(roomId: string, note: VoiceNote): Promise<string | null> {

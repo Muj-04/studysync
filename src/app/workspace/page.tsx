@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, LogOut, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Search, CheckCircle,
+  ChevronUp, FilePlus, Search, CheckCircle, Settings,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -485,17 +485,41 @@ export default function WorkspacePage() {
     setTimeout(() => html.removeAttribute('data-transitioning'), 350);
   }, [isDark]);
 
+  // ── Global appearance settings from /settings page ───────────────────────
+  useEffect(() => {
+    const ACCENT_MAP: Record<string, [string, string, string]> = {
+      Blue:   ['#2563eb', '#3b82f6', 'rgba(37,99,235,0.14)'],
+      Purple: ['#7c3aed', '#8b5cf6', 'rgba(124,58,237,0.14)'],
+      Green:  ['#059669', '#10b981', 'rgba(5,150,105,0.14)'],
+      Orange: ['#d97706', '#f59e0b', 'rgba(217,119,6,0.14)'],
+      Pink:   ['#db2777', '#ec4899', 'rgba(219,39,119,0.14)'],
+    };
+    const ac = storageGet<string>(KEYS.ACCENT_COLOR);
+    if (ac && ACCENT_MAP[ac]) {
+      const r = document.documentElement;
+      r.style.setProperty('--accent', ACCENT_MAP[ac][0]);
+      r.style.setProperty('--accent-hover', ACCENT_MAP[ac][1]);
+      r.style.setProperty('--accent-muted', ACCENT_MAP[ac][2]);
+      r.style.setProperty('--violet', ACCENT_MAP[ac][0]);
+      r.style.setProperty('--violet-muted', ACCENT_MAP[ac][2]);
+    }
+    const fs = storageGet<string>(KEYS.FONT_SIZE);
+    if (fs === 'small') document.body.style.fontSize = '11px';
+    else if (fs === 'large') document.body.style.fontSize = '16px';
+    else document.body.style.fontSize = '';
+  }, []);
+
   // ── Default blank page background ────────────────────────────────────────
   const [defaultBgTheme, setDefaultBgTheme] = useState<'white' | 'dark'>('white');
 
   useEffect(() => {
-    const stored = storageGet<'white' | 'dark'>('studysync_default_bg');
+    const stored = storageGet<'white' | 'dark'>(KEYS.DEFAULT_BG);
     if (stored === 'white' || stored === 'dark') setDefaultBgTheme(stored);
   }, []);
 
   const handleDefaultBgThemeChange = useCallback((theme: 'white' | 'dark') => {
     setDefaultBgTheme(theme);
-    storageSet('studysync_default_bg', theme);
+    storageSet(KEYS.DEFAULT_BG, theme);
   }, []);
 
   // ── Shortcuts modal ───────────────────────────────────────────────────────
@@ -892,7 +916,10 @@ export default function WorkspacePage() {
   const [navBarVisible, setNavBarVisible]   = useState(true);
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
-  const [viewMode, setViewMode]             = useState<'page' | 'scroll'>('page');
+  const [viewMode, setViewMode]             = useState<'page' | 'scroll'>(() => {
+    if (typeof window === 'undefined') return 'page';
+    return storageGet<'page' | 'scroll'>(KEYS.VIEW_MODE) ?? 'page';
+  });
   const [selectedText, setSelectedText]     = useState('');
 
   // ── Resizable panels ──────────────────────────────────────────────────────
@@ -1415,6 +1442,23 @@ export default function WorkspacePage() {
           <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title="Keyboard shortcuts (?)">
             <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
           </HdrBtn>
+
+          <a
+            href="/settings"
+            title="Settings"
+            style={{
+              width: 42, height: 42,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: 8, flexShrink: 0,
+              background: 'transparent', border: '1px solid transparent',
+              color: 'var(--text-2)', cursor: 'pointer', textDecoration: 'none',
+              transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)' })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent' })}
+          >
+            <Settings size={17} />
+          </a>
 
           <button
             onClick={handleLogout}

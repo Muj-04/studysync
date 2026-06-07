@@ -1,7 +1,6 @@
 'use client';
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Settings, Sun, Moon, X, RotateCcw, Lock, Eye, EyeOff, ChevronDown } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { useEffect, useRef, useState } from 'react';
+import { Settings, Sun, Moon, X, RotateCcw, ExternalLink } from 'lucide-react';
 
 // ── Shared small icons ────────────────────────────────────────────────────────
 
@@ -92,178 +91,6 @@ function BgSwatch({ theme }: { theme: 'white' | 'dark' }) {
       backgroundSize: '4px 4px',
       border: '1px solid rgba(128,128,128,0.22)',
     }} />
-  );
-}
-
-// ── Change Password sub-component ────────────────────────────────────────────
-
-function ChangePassword() {
-  const [open, setOpen]         = useState(false);
-  const [current, setCurrent]   = useState('');
-  const [next, setNext]         = useState('');
-  const [confirm, setConfirm]   = useState('');
-  const [showPw, setShowPw]     = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
-  const [success, setSuccess]   = useState(false);
-
-  const reset = useCallback(() => {
-    setCurrent(''); setNext(''); setConfirm('');
-    setError(''); setSuccess(false); setShowPw(false);
-  }, []);
-
-  const toggle = () => {
-    setOpen((o) => !o);
-    if (open) reset();
-  };
-
-  const handleSubmit = async () => {
-    if (!current || !next || !confirm) { setError('Please fill in all fields.'); return; }
-    if (next.length < 6) { setError('New password must be at least 6 characters.'); return; }
-    if (next !== confirm) { setError('New passwords do not match.'); return; }
-    setError('');
-    setLoading(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user?.email) { setError('Could not identify user.'); setLoading(false); return; }
-    // Re-authenticate with current password first
-    const { error: authErr } = await supabase.auth.signInWithPassword({
-      email: user.email, password: current,
-    });
-    if (authErr) { setError('Current password is incorrect.'); setLoading(false); return; }
-    // Update to new password
-    const { error: updateErr } = await supabase.auth.updateUser({ password: next });
-    setLoading(false);
-    if (updateErr) { setError(updateErr.message); return; }
-    setSuccess(true);
-    setCurrent(''); setNext(''); setConfirm('');
-  };
-
-  const pwInput: React.CSSProperties = {
-    width: '100%', padding: '6px 30px 6px 9px',
-    background: 'var(--bg-input, var(--bg-elevated))',
-    border: '1px solid var(--border)',
-    borderRadius: 7, color: 'var(--text-1)', fontSize: 11.5,
-    fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none',
-  };
-
-  return (
-    <div>
-      {/* Header toggle */}
-      <button
-        onClick={toggle}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-          color: 'var(--text-2)', fontFamily: 'inherit',
-        }}
-      >
-        <span style={{
-          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.09em',
-          textTransform: 'uppercase', color: 'var(--text-3)',
-        }}>
-          Change Password
-        </span>
-        <ChevronDown
-          size={12}
-          style={{
-            color: 'var(--text-3)', flexShrink: 0,
-            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.18s',
-          }}
-        />
-      </button>
-
-      {/* Collapsible form */}
-      {open && (
-        <div style={{ marginTop: 9, display: 'flex', flexDirection: 'column', gap: 7 }}>
-
-          {success && (
-            <div style={{
-              padding: '6px 9px', borderRadius: 7, fontSize: 11.5,
-              background: 'rgba(52,211,153,0.13)', border: '1px solid rgba(52,211,153,0.3)',
-              color: '#6ee7b7', textAlign: 'center',
-            }}>
-              Password updated successfully.
-            </div>
-          )}
-
-          {error && (
-            <div style={{
-              padding: '6px 9px', borderRadius: 7, fontSize: 11.5,
-              background: 'rgba(229,72,77,0.13)', border: '1px solid rgba(229,72,77,0.3)',
-              color: '#ff8a8e', textAlign: 'center',
-            }}>
-              {error}
-            </div>
-          )}
-
-          {/* Current password */}
-          <div style={{ position: 'relative' }}>
-            <input
-              type={showPw ? 'text' : 'password'}
-              placeholder="Current password"
-              autoComplete="current-password"
-              value={current}
-              onChange={(e) => { setCurrent(e.target.value); setError(''); setSuccess(false); }}
-              style={pwInput}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw((v) => !v)}
-              style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-3)', display: 'flex' }}
-              aria-label={showPw ? 'Hide' : 'Show'}
-            >
-              {showPw ? <EyeOff size={12} /> : <Eye size={12} />}
-            </button>
-          </div>
-
-          {/* New password */}
-          <div style={{ position: 'relative' }}>
-            <input
-              type={showPw ? 'text' : 'password'}
-              placeholder="New password"
-              autoComplete="new-password"
-              value={next}
-              onChange={(e) => { setNext(e.target.value); setError(''); setSuccess(false); }}
-              style={pwInput}
-            />
-            <Lock size={11} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-          </div>
-
-          {/* Confirm password */}
-          <div style={{ position: 'relative' }}>
-            <input
-              type={showPw ? 'text' : 'password'}
-              placeholder="Confirm new password"
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => { setConfirm(e.target.value); setError(''); setSuccess(false); }}
-              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-              style={{
-                ...pwInput,
-                borderColor: confirm && confirm !== next ? 'rgba(229,72,77,0.5)' : 'var(--border)',
-              }}
-            />
-            <Lock size={11} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-          </div>
-
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            style={{
-              height: 32, borderRadius: 7, fontSize: 12, fontWeight: 500,
-              background: loading ? 'var(--bg-elevated)' : 'var(--accent)',
-              color: loading ? 'var(--text-3)' : '#fff',
-              border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-              fontFamily: 'inherit', transition: 'background 0.13s',
-            }}
-          >
-            {loading ? 'Updating…' : 'Update Password'}
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -472,8 +299,23 @@ export default function SettingsDropdown({
               </Section>
             )}
 
-            {/* 5 ── Change password */}
-            <ChangePassword />
+            {/* 5 ── Full settings link */}
+            <div style={{ height: 1, background: 'var(--border-subtle)' }} />
+            <a
+              href="/settings"
+              onClick={() => setOpen(false)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                fontSize: 12, fontWeight: 500, color: 'var(--text-2)',
+                textDecoration: 'none', padding: '4px 0',
+                transition: 'color 0.13s',
+              }}
+              onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
+              onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-2)'; }}
+            >
+              <span>All settings</span>
+              <ExternalLink size={11} style={{ color: 'var(--text-3)' }} />
+            </a>
 
           </div>
         </div>
