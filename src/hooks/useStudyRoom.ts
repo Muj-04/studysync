@@ -18,15 +18,15 @@ export function useStudyRoom(
   roomId: string,
   onIncomingDrawing: (pageNumber: number, data: string) => void,
   onReconnect?: () => void,
-  onIncomingVoiceNote?: (payload: RoomVoiceNotePayload) => void,
+  onIncomingVoiceNoteAdded?: (noteId: string) => void,
   onIncomingVoiceNoteDelete?: (noteId: string) => void,
 ) {
   const [memberCount, setMemberCount] = useState(1);
-  const channelRef             = useRef<RealtimeChannel | null>(null);
-  const onDrawingRef           = useRef(onIncomingDrawing);
-  const onReconnectRef         = useRef(onReconnect);
-  const onVoiceNoteRef         = useRef(onIncomingVoiceNote);
-  const onVoiceNoteDeleteRef   = useRef(onIncomingVoiceNoteDelete);
+  const channelRef                 = useRef<RealtimeChannel | null>(null);
+  const onDrawingRef               = useRef(onIncomingDrawing);
+  const onReconnectRef             = useRef(onReconnect);
+  const onVoiceNoteAddedRef        = useRef(onIncomingVoiceNoteAdded);
+  const onVoiceNoteDeleteRef       = useRef(onIncomingVoiceNoteDelete);
   const retryRef               = useRef(0);
   const timerRef               = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadRef                = useRef(false);
@@ -35,7 +35,7 @@ export function useStudyRoom(
 
   useEffect(() => { onDrawingRef.current = onIncomingDrawing; });
   useEffect(() => { onReconnectRef.current = onReconnect; });
-  useEffect(() => { onVoiceNoteRef.current = onIncomingVoiceNote; });
+  useEffect(() => { onVoiceNoteAddedRef.current = onIncomingVoiceNoteAdded; });
   useEffect(() => { onVoiceNoteDeleteRef.current = onIncomingVoiceNoteDelete; });
 
   useEffect(() => {
@@ -74,9 +74,9 @@ export function useStudyRoom(
           if (generation !== generationRef.current) return;
           onDrawingRef.current(payload.pageNumber, payload.data);
         })
-        .on('broadcast', { event: 'voice_note' }, ({ payload }: { payload: RoomVoiceNotePayload }) => {
+        .on('broadcast', { event: 'voice_note_added' }, ({ payload }: { payload: { noteId: string } }) => {
           if (generation !== generationRef.current) return;
-          onVoiceNoteRef.current?.(payload);
+          onVoiceNoteAddedRef.current?.(payload.noteId);
         })
         .on('broadcast', { event: 'voice_note_deleted' }, ({ payload }: { payload: { noteId: string } }) => {
           if (generation !== generationRef.current) return;
@@ -127,11 +127,11 @@ export function useStudyRoom(
       .catch((err) => console.error('[StudyRoom] broadcast drawing error:', err));
   }, []);
 
-  const broadcastVoiceNote = useCallback((payload: RoomVoiceNotePayload) => {
+  const broadcastVoiceNoteAdded = useCallback((noteId: string) => {
     const ch = channelRef.current;
     if (!ch) return;
-    ch.send({ type: 'broadcast', event: 'voice_note', payload })
-      .catch((err) => console.error('[StudyRoom] broadcast voice_note error:', err));
+    ch.send({ type: 'broadcast', event: 'voice_note_added', payload: { noteId } })
+      .catch((err) => console.error('[StudyRoom] broadcast voice_note_added error:', err));
   }, []);
 
   const broadcastVoiceNoteDelete = useCallback((noteId: string) => {
@@ -141,5 +141,5 @@ export function useStudyRoom(
       .catch((err) => console.error('[StudyRoom] broadcast voice_note_deleted error:', err));
   }, []);
 
-  return { broadcastDrawing, broadcastVoiceNote, broadcastVoiceNoteDelete, memberCount };
+  return { broadcastDrawing, broadcastVoiceNoteAdded, broadcastVoiceNoteDelete, memberCount };
 }

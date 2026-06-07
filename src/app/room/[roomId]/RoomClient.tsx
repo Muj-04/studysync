@@ -6,7 +6,7 @@ import {
   Undo2, MousePointer, Pencil, Eraser, Minus, Plus,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing, fetchRoomVoiceNotes } from '@/lib/supabase/db';
+import { fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing, fetchRoomVoiceNotes, fetchSingleRoomVoiceNote } from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
@@ -135,25 +135,35 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     if (data) broadcastRef.current(page, data);
   }, [activeDocument, getDrawing]);
 
-  const handleIncomingVoiceNote = useCallback((p: RoomVoiceNotePayload) => {
-    addIncomingNoteRef.current?.(p);
-  }, []);
+  const handleIncomingVoiceNoteAdded = useCallback(async (noteId: string) => {
+    const note = await fetchSingleRoomVoiceNote(noteId, roomId);
+    if (note && note.audioUrl) {
+      addIncomingNoteRef.current?.({
+        id: note.id,
+        pageNumber: note.pageNumber,
+        duration: note.duration,
+        audioUrl: note.audioUrl,
+        timestamp: note.timestamp,
+        title: note.title,
+      });
+    }
+  }, [roomId]);
 
   const handleIncomingVoiceNoteDelete = useCallback((id: string) => {
     removeIncomingNoteRef.current?.(id);
   }, []);
 
-  const { broadcastDrawing, broadcastVoiceNote, broadcastVoiceNoteDelete, memberCount } = useStudyRoom(
+  const { broadcastDrawing, broadcastVoiceNoteAdded, broadcastVoiceNoteDelete, memberCount } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
-    handleIncomingVoiceNote, handleIncomingVoiceNoteDelete,
+    handleIncomingVoiceNoteAdded, handleIncomingVoiceNoteDelete,
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
 
   // Stable broadcast callbacks for voice notes
-  const handleNoteSaved = useCallback((payload: RoomVoiceNotePayload) => {
-    broadcastVoiceNote(payload);
-  }, [broadcastVoiceNote]);
+  const handleNoteAdded = useCallback((noteId: string) => {
+    broadcastVoiceNoteAdded(noteId);
+  }, [broadcastVoiceNoteAdded]);
 
   const handleNoteDeleted = useCallback((noteId: string) => {
     broadcastVoiceNoteDelete(noteId);
@@ -172,7 +182,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     seedNotes: voiceSeedNotes,
     addIncomingNote,
     removeIncomingNote,
-  } = useRoomVoiceNotes(roomId, handleNoteSaved, handleNoteDeleted);
+  } = useRoomVoiceNotes(roomId, handleNoteAdded, handleNoteDeleted);
 
   // Keep incoming + seed refs in sync
   useEffect(() => { addIncomingNoteRef.current    = addIncomingNote; },    [addIncomingNote]);
