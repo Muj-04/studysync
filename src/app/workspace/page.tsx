@@ -10,6 +10,7 @@ import { useVoiceNotes } from '@/hooks/useVoiceNotes';
 import { useBlankPages } from '@/hooks/useBlankPages';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { usePDFPageImages } from '@/hooks/usePDFPageImages';
+import { useStudySession } from '@/hooks/useStudySession';
 import PDFUploader from '@/components/PDFUploader';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import PDFScrollViewer from '@/components/PDFScrollViewer';
@@ -389,8 +390,17 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
 }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [posting, setPosting] = useState(false);
   const [done, setDone] = useState(false);
+
+  const addTag = (t: string) => {
+    const trimmed = t.trim().replace(/,/g, '');
+    if (!trimmed || tags.includes(trimmed) || tags.length >= 5) return;
+    setTags((prev) => [...prev, trimmed]);
+    setTagInput('');
+  };
 
   const handlePost = async () => {
     if (!title.trim() || posting) return;
@@ -408,7 +418,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
         });
       }
     }
-    await createCommunityPost({ documentId: docId, title: title.trim(), description: description.trim(), pages });
+    await createCommunityPost({ documentId: docId, title: title.trim(), description: description.trim(), pages, tags });
     setPosting(false);
     setDone(true);
     setTimeout(onClose, 1200);
@@ -481,6 +491,27 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                     outline: 'none', fontFamily: 'inherit', resize: 'vertical',
                   }}
                 />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Tags (up to 5)</label>
+                {tags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7 }}>
+                    {tags.map((t) => (
+                      <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'var(--accent)', color: '#fff', fontSize: 11.5, fontWeight: 500 }}>
+                        {t}
+                        <button onClick={() => setTags((prev) => prev.filter((x) => x !== t))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 0, fontSize: 12 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }}
+                    placeholder="e.g. Math, CS, Physics" disabled={tags.length >= 5}
+                    style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
+                  <button onClick={() => addTag(tagInput)} disabled={!tagInput.trim() || tags.length >= 5} style={{ height: 32, padding: '0 10px', borderRadius: 7, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Add</button>
+                </div>
               </div>
 
               <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)' }}>
@@ -702,6 +733,7 @@ export default function WorkspacePage() {
   } = useBlankPages();
   const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
   const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, allPageImages } = usePDFPageImages();
+  useStudySession(activeDocumentId, userId);
 
   // ── Document order ────────────────────────────────────────────────────────
   const savedOrderRef = useRef<string[]>([]);

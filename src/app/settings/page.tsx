@@ -5,6 +5,7 @@ import {
   User, Palette, Layout, Bell, Database,
   ChevronLeft, Sun, Moon, Check, Trash2, Download,
   Eye, EyeOff, AlertTriangle, LogOut, RotateCcw,
+  BookOpen, Shield, Flame, Globe2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
@@ -19,13 +20,20 @@ import {
   getProfile,
   upsertProfile,
   uploadAvatar,
+  getUserSettings,
+  saveUserSettings,
+  getStudyStreak,
+  getTodayStudySeconds,
 } from '@/lib/supabase/db';
+import type { UserAppSettings } from '@/lib/supabase/db';
 import { applyPreferences, ACCENT_PRESETS, FONT_STACKS } from '@/lib/preferences';
 
 const NAV = [
   { id: 'account',    label: 'Account',        Icon: User },
   { id: 'appearance', label: 'Appearance',      Icon: Palette },
   { id: 'workspace',  label: 'Workspace',       Icon: Layout },
+  { id: 'study',      label: 'Study & Goals',   Icon: BookOpen },
+  { id: 'privacy',    label: 'Privacy',         Icon: Shield },
   { id: 'notifications', label: 'Notifications', Icon: Bell },
   { id: 'data',       label: 'Data & Storage',  Icon: Database },
 ] as const;
@@ -661,6 +669,7 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
 
 function AppearanceSection() {
   const [loading, setLoading] = useState(true);
+  const [language, setLanguage] = useState<'en' | 'ar'>('en');
 
   const [isDark, setIsDark] = useState(true);
   const [fontSize, setFontSize]     = useState<'small' | 'medium' | 'large'>('medium');
@@ -676,6 +685,11 @@ function AppearanceSection() {
 
   // Load from Supabase on mount
   useEffect(() => {
+    getUserSettings().then((s) => {
+      setLanguage(s.language);
+      document.documentElement.setAttribute('dir', s.language === 'ar' ? 'rtl' : 'ltr');
+      document.documentElement.setAttribute('lang', s.language);
+    });
     loadUserPreferences().then((prefs) => {
       const dark = (prefs?.theme ?? storageGet<string>(KEYS.THEME) ?? 'dark') !== 'light';
       setIsDark(dark);
@@ -767,9 +781,32 @@ function AppearanceSection() {
     );
   }
 
+  const handleLanguage = useCallback((lang: 'en' | 'ar') => {
+    setLanguage(lang);
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    document.documentElement.setAttribute('lang', lang);
+    saveUserSettings({ language: lang });
+  }, []);
+
   return (
     <div>
       <SectionTitle>Appearance</SectionTitle>
+
+      {/* ── Language ── */}
+      <div style={{ marginBottom: 24 }}>
+        <FieldLabel>Language</FieldLabel>
+        <ChipRow>
+          <Chip active={language === 'en'} onClick={() => handleLanguage('en')}>
+            <Globe2 size={13} /> English
+          </Chip>
+          <Chip active={language === 'ar'} onClick={() => handleLanguage('ar')}>
+            <Globe2 size={13} /> العربية (Arabic)
+          </Chip>
+        </ChipRow>
+        <SubLabel>Arabic enables right-to-left layout across the app.</SubLabel>
+      </div>
+
+      <Divider />
 
       {/* ── Theme ── */}
       <div style={{ marginBottom: 24 }}>
@@ -880,6 +917,197 @@ function AppearanceSection() {
           />
         </div>
         <SubLabel>Changes buttons, links, and highlights throughout the app. Synced across devices.</SubLabel>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Study & Goals
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StudySection() {
+  const [streak, setStreak] = useState(0);
+  const [todaySeconds, setTodaySeconds] = useState(0);
+  const [goal, setGoal] = useState(2);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    Promise.all([getStudyStreak(), getTodayStudySeconds(), getUserSettings()]).then(([s, t, settings]) => {
+      setStreak(s);
+      setTodaySeconds(t);
+      setGoal(settings.dailyStudyGoalHours);
+    });
+  }, []);
+
+  const todayHours = todaySeconds / 3600;
+  const goalProgress = Math.min(1, todayHours / goal);
+
+  const handleSaveGoal = async () => {
+    await saveUserSettings({ dailyStudyGoalHours: goal });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div>
+      <SectionTitle>Study & Goals</SectionTitle>
+
+      {/* Streak */}
+      <div style={{ marginBottom: 28 }}>
+        <FieldLabel>Current Study Streak</FieldLabel>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 14,
+          background: 'var(--bg-elevated)', borderRadius: 12,
+          padding: '16px 20px', border: '1px solid var(--border)',
+        }}>
+          <div style={{ fontSize: 36 }}>🔥</div>
+          <div>
+            <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{streak}</p>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
+              {streak === 1 ? 'day in a row' : 'days in a row'}
+            </p>
+          </div>
+          {streak >= 7 && (
+            <span style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: 12, fontWeight: 600 }}>
+              🎯 {streak}+ day streak!
+            </span>
+          )}
+        </div>
+        <SubLabel>Study every day to keep your streak alive. Open any document in the Workspace to log a session.</SubLabel>
+      </div>
+
+      {/* Today's progress */}
+      <div style={{ marginBottom: 28 }}>
+        <FieldLabel>Today&apos;s Progress</FieldLabel>
+        <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
+            {todaySeconds < 60
+              ? `${todaySeconds}s`
+              : todaySeconds < 3600
+                ? `${Math.floor(todaySeconds / 60)}m`
+                : `${(todaySeconds / 3600).toFixed(1)}h`} studied today
+          </span>
+          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Goal: {goal}h</span>
+        </div>
+        <div style={{ height: 10, borderRadius: 6, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${goalProgress * 100}%`, background: goalProgress >= 1 ? '#22c55e' : 'var(--accent)', borderRadius: 6, transition: 'width 0.4s ease' }} />
+        </div>
+        {goalProgress >= 1 && (
+          <p style={{ margin: '6px 0 0', fontSize: 12, color: '#22c55e', fontWeight: 500 }}>
+            Daily goal achieved!
+          </p>
+        )}
+      </div>
+
+      {/* Daily goal setting */}
+      <div style={{ marginBottom: 24 }}>
+        <FieldLabel>Daily Study Goal</FieldLabel>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          {[1, 2, 3, 4].map((h) => (
+            <button
+              key={h}
+              onClick={() => setGoal(h)}
+              style={{
+                height: 36, padding: '0 16px', borderRadius: 8,
+                background: goal === h ? 'var(--accent)' : 'var(--bg-elevated)',
+                color: goal === h ? '#fff' : 'var(--text-2)',
+                border: `1px solid ${goal === h ? 'var(--accent)' : 'var(--border)'}`,
+                fontSize: 13, fontWeight: goal === h ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'all 0.12s',
+              }}
+            >{h}h</button>
+          ))}
+          <button
+            onClick={() => setGoal(5)}
+            style={{
+              height: 36, padding: '0 16px', borderRadius: 8,
+              background: goal >= 5 ? 'var(--accent)' : 'var(--bg-elevated)',
+              color: goal >= 5 ? '#fff' : 'var(--text-2)',
+              border: `1px solid ${goal >= 5 ? 'var(--accent)' : 'var(--border)'}`,
+              fontSize: 13, fontWeight: goal >= 5 ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'all 0.12s',
+            }}
+          >4h+</button>
+        </div>
+        <PrimaryBtn onClick={handleSaveGoal} loading={false} disabled={false}>
+          {saved ? <><Check size={13} /> Saved</> : 'Save Goal'}
+        </PrimaryBtn>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Section: Privacy
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PrivacySection() {
+  const [visibility, setVisibility] = useState<'everyone' | 'friends' | 'only_me'>('everyone');
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getUserSettings().then((s) => {
+      setVisibility(s.communityVisibility);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    await saveUserSettings({ communityVisibility: visibility });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const options: Array<{ value: 'everyone' | 'friends' | 'only_me'; label: string; desc: string }> = [
+    { value: 'everyone', label: 'Everyone', desc: 'Your community posts are visible to all users' },
+    { value: 'friends', label: 'Friends only', desc: 'Only users you are friends with can see your posts' },
+    { value: 'only_me', label: 'Only me', desc: 'Your posts are private — only you can see them' },
+  ];
+
+  return (
+    <div>
+      <SectionTitle>Privacy</SectionTitle>
+
+      <div style={{ marginBottom: 28 }}>
+        <FieldLabel>Who can see your community posts?</FieldLabel>
+        <SubLabel>This controls the visibility of content you share to the Community feed.</SubLabel>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+          {options.map(({ value, label, desc }) => (
+            <button
+              key={value}
+              onClick={() => setVisibility(value)}
+              disabled={loading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 16px', borderRadius: 10, textAlign: 'left',
+                background: visibility === value ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+                border: `1.5px solid ${visibility === value ? 'var(--accent)' : 'var(--border)'}`,
+                cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'background 0.12s, border-color 0.12s',
+              }}
+            >
+              <div style={{
+                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                border: `2px solid ${visibility === value ? 'var(--accent)' : 'var(--border)'}`,
+                background: visibility === value ? 'var(--accent)' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {visibility === value && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff' }} />}
+              </div>
+              <div>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{label}</p>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)' }}>{desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <PrimaryBtn onClick={handleSave} disabled={loading}>
+            {saved ? <><Check size={13} /> Saved</> : 'Save Privacy Settings'}
+          </PrimaryBtn>
+        </div>
       </div>
     </div>
   );
@@ -1255,6 +1483,8 @@ export default function SettingsPage() {
           {active === 'account'       && <AccountSection userEmail={userEmail} displayName={displayName} avatarUrl={avatarUrl} onAvatarChange={setAvatarUrl} />}
           {active === 'appearance'    && <AppearanceSection />}
           {active === 'workspace'     && <WorkspaceSection />}
+          {active === 'study'         && <StudySection />}
+          {active === 'privacy'       && <PrivacySection />}
           {active === 'notifications' && <NotificationsSection />}
           {active === 'data'          && <DataSection />}
         </main>
