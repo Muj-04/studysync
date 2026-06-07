@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { FileText, Mic, Bookmark as BookmarkIcon, Play, ArrowRight, BookOpen, MessageSquare } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchDashboardData, fetchSessionState, loadUserPreferences } from '@/lib/supabase/db';
+import { fetchDashboardData, fetchSessionState, loadUserPreferences, getProfile } from '@/lib/supabase/db';
 import AvatarDropdown from '@/components/AvatarDropdown';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
@@ -49,12 +49,15 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // Load user info
-    createClient().auth.getUser().then(({ data: { user } }) => {
+    createClient().auth.getUser().then(async ({ data: { user } }) => {
       setUserEmail(user?.email ?? '');
-      setUserDisplayName(user?.user_metadata?.display_name ?? '');
+      const profile = await getProfile();
+      setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
+      setUserAvatarUrl(profile?.avatarUrl ?? null);
     });
 
     // Load and apply cross-device preferences from Supabase
@@ -130,7 +133,7 @@ export default function DashboardPage() {
             ))}
           </nav>
         </div>
-        <AvatarDropdown email={userEmail} displayName={userDisplayName} />
+        <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
       </header>
 
       <main style={{ maxWidth: 920, margin: '0 auto', padding: '32px 24px 60px' }}>

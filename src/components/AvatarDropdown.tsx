@@ -7,9 +7,10 @@ import { getInitials } from '@/lib/preferences';
 interface Props {
   email: string;
   displayName?: string;
+  avatarUrl?: string | null;
 }
 
-export default function AvatarDropdown({ email, displayName }: Props) {
+export default function AvatarDropdown({ email, displayName, avatarUrl }: Props) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +39,7 @@ export default function AvatarDropdown({ email, displayName }: Props) {
         aria-label="Account menu"
         style={{
           width: 34, height: 34, borderRadius: '50%',
-          background: open ? 'var(--accent-hover)' : 'var(--accent)',
+          background: avatarUrl ? 'transparent' : (open ? 'var(--accent-hover)' : 'var(--accent)'),
           border: open ? '2px solid var(--accent-hover)' : '2px solid transparent',
           color: '#fff',
           fontSize: 12, fontWeight: 700, letterSpacing: '0.02em',
@@ -46,12 +47,14 @@ export default function AvatarDropdown({ email, displayName }: Props) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           transition: 'background 0.15s, box-shadow 0.15s',
           boxShadow: open ? '0 0 0 3px var(--accent-muted)' : 'none',
-          flexShrink: 0,
+          flexShrink: 0, overflow: 'hidden', padding: 0,
         }}
         onMouseOver={(e) => { e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-muted)'; }}
         onMouseOut={(e) => { if (!open) e.currentTarget.style.boxShadow = 'none'; }}
       >
-        {initials}
+        {avatarUrl
+          ? <img src={avatarUrl} alt={displayName || email} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+          : initials}
       </button>
 
       {/* ── Dropdown ── */}
@@ -82,12 +85,14 @@ export default function AvatarDropdown({ email, displayName }: Props) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
                 width: 32, height: 32, borderRadius: '50%',
-                background: 'var(--accent)', color: '#fff',
+                background: avatarUrl ? 'transparent' : 'var(--accent)', color: '#fff',
                 fontSize: 12, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
+                flexShrink: 0, overflow: 'hidden',
               }}>
-                {initials}
+                {avatarUrl
+                  ? <img src={avatarUrl} alt={displayName || email} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : initials}
               </div>
               <div style={{ minWidth: 0 }}>
                 {displayName && (

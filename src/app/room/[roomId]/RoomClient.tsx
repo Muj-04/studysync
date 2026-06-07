@@ -11,6 +11,7 @@ import {
   fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing,
   fetchRoomVoiceNotes, fetchSingleRoomVoiceNote,
   saveRoomBlankPage, fetchRoomBlankPages,
+  getProfile,
 } from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
@@ -58,21 +59,23 @@ const BG_THEMES = [
 
 // ── Member avatar chip ────────────────────────────────────────────────────────
 
-function MemberAvatar({ name }: { name: string }) {
+function MemberAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   const initials = name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
   return (
     <div
       title={name}
       style={{
         width: 24, height: 24, borderRadius: '50%',
-        background: 'var(--accent)', color: '#fff',
+        background: avatarUrl ? 'transparent' : 'var(--accent)', color: '#fff',
         fontSize: 9.5, fontWeight: 700,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0, border: '1.5px solid var(--bg-panel)',
-        marginLeft: -6,
+        marginLeft: -6, overflow: 'hidden',
       }}
     >
-      {initials || '?'}
+      {avatarUrl
+        ? <img src={avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : (initials || '?')}
     </div>
   );
 }
@@ -152,8 +155,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [status, setStatus]     = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
   const [roomName, setRoomName] = useState('Study Room');
-  const [copied, setCopied]     = useState(false);
-  const [userName, setUserName] = useState('');
+  const [copied, setCopied]       = useState(false);
+  const [userName, setUserName]   = useState('');
+  const [userId, setUserId]       = useState('');
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | undefined>(undefined);
 
   // ── Drawing state ─────────────────────────────────────────────────────────
   const [tool, setTool]             = useState<Tool>('pen');
@@ -277,15 +282,20 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     }
   }, []);
 
+  const myPresence = useMemo(
+    () => ({ userId, name: userName, avatarUrl: userAvatarUrl }),
+    [userId, userName, userAvatarUrl],
+  );
+
   const {
     broadcastDrawing, broadcastBlankDrawing,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
     broadcastBlankPageAdded,
-    memberCount, memberNames,
+    memberCount, members,
   } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
     handleIncomingVoiceNoteAdded, handleIncomingVoiceNoteDelete,
-    handleIncomingBlankPage, userName,
+    handleIncomingBlankPage, myPresence,
     handleIncomingBlankDrawing,
   );
 
@@ -331,11 +341,15 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace('/login'); return; }
 
-      const name = (user.user_metadata?.full_name as string | undefined)
+      const profile = await getProfile();
+      const name = profile?.username
+        ?? (user.user_metadata?.full_name as string | undefined)
         ?? (user.user_metadata?.name as string | undefined)
         ?? user.email?.split('@')[0]
         ?? 'Member';
       setUserName(name);
+      setUserId(user.id);
+      if (profile?.avatarUrl) setUserAvatarUrl(profile.avatarUrl);
 
       const room = await fetchRoom(roomId);
       if (!room) { setErrorMsg('Room not found or has been closed.'); setStatus('error'); return; }
@@ -513,8 +527,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const pageKey   = `${roomId}:${currentPdfPage}`;
 
   // ── Members display ───────────────────────────────────────────────────────
-  const visibleNames  = memberNames.slice(0, 3);
-  const hiddenCount   = memberNames.length > 3 ? memberNames.length - 3 : 0;
+  const visibleMembers = members.slice(0, 3);
+  const hiddenCount    = members.length > 3 ? members.length - 3 : 0;
 
   // ── Room UI ───────────────────────────────────────────────────────────────
   return (
@@ -539,10 +553,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
         {/* Member avatars + names */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          {memberNames.length > 0 && (
+          {members.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
-              {visibleNames.map((name, i) => (
-                <MemberAvatar key={i} name={name} />
+              {visibleMembers.map((m, i) => (
+                <MemberAvatar key={m.userId || i} name={m.name} avatarUrl={m.avatarUrl} />
               ))}
               {hiddenCount > 0 && (
                 <div style={{
@@ -558,8 +572,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             </div>
           )}
           <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-            {memberNames.length > 0
-              ? `${memberNames.slice(0, 2).join(', ')}${memberNames.length > 2 ? ` +${memberNames.length - 2}` : ''} • ${memberCount} live`
+            {members.length > 0
+              ? `${members.slice(0, 2).map((m) => m.name).join(', ')}${members.length > 2 ? ` +${members.length - 2}` : ''} • ${memberCount} live`
               : `${memberCount} live`}
           </span>
         </div>

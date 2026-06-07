@@ -620,6 +620,40 @@ export async function updateRoomVoiceNoteTitle(noteId: string, title: string | u
   await sb().from('room_voice_notes').update({ title: title ?? null }).eq('id', noteId).eq('user_id', uid);
 }
 
+// ── Profiles ─────────────────────────────────────────────────────────────────
+
+export async function getProfile(): Promise<{ username: string | null; avatarUrl: string | null } | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data } = await sb()
+    .from('profiles')
+    .select('username, avatar_url')
+    .eq('id', uid)
+    .maybeSingle();
+  return data ? { username: data.username ?? null, avatarUrl: data.avatar_url ?? null } : null;
+}
+
+export async function upsertProfile(profile: { username?: string; avatarUrl?: string }): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const update: Record<string, string | null> = {};
+  if ('username' in profile) update.username = profile.username || null;
+  if ('avatarUrl' in profile) update.avatar_url = profile.avatarUrl || null;
+  const { error } = await sb().from('profiles').upsert({ id: uid, ...update }, { onConflict: 'id' });
+  if (error) console.error('[DB] upsertProfile error:', error.message);
+}
+
+export async function uploadAvatar(file: File): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+  const ext = file.name.split('.').pop() ?? 'jpg';
+  const path = `${uid}/avatar.${ext}`;
+  const { error } = await sb().storage
+    .from('avatars')
+    .upload(path, file, { upsert: true, contentType: file.type });
+  if (error) { console.error('[DB] uploadAvatar error:', error.message); return null; }
+  // Bust the cache so the new image is served immediately (append a timestamp)
+  const { data } = sb().storage.from('avatars').getPublicUrl(path);
+  return data?.publicUrl ? `${data.publicUrl}?t=${Date.now()}` : null;
+}
+
 // ── Study Rooms ───────────────────────────────────────────────────────────────
 
 export async function uploadRoomPdf(roomId: string, blob: Blob, docName: string): Promise<string | null> {
