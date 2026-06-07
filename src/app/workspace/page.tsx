@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
-  BookOpen, X, LogOut, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Search, CheckCircle, Settings,
+  BookOpen, X, PanelLeft, PanelRight,
+  ChevronUp, FilePlus, Search, CheckCircle,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -21,7 +21,9 @@ import FloatingAnnotationToolbar from '@/components/FloatingAnnotationToolbar';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
+import AvatarDropdown from '@/components/AvatarDropdown';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
+import { applyPreferences } from '@/lib/preferences';
 import { createClient } from '@/lib/supabase/client';
 import {
   upsertDocument,
@@ -36,6 +38,7 @@ import {
   saveSessionState as dbSaveSessionState,
   uploadRoomPdf,
   createRoom,
+  loadUserPreferences,
 } from '@/lib/supabase/db';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
@@ -440,10 +443,8 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
 
 export default function WorkspacePage() {
   // ── Auth ──────────────────────────────────────────────────────────────────
-  const handleLogout = async () => {
-    await createClient().auth.signOut();
-    window.location.href = '/login';
-  };
+  const [userEmail, setUserEmail] = useState('');
+  const [userDisplayName, setUserDisplayName] = useState('');
 
   // ── Current user (for Supabase sync) ─────────────────────────────────────
   // userId as state so effects that depend on it re-run once the async
@@ -455,6 +456,8 @@ export default function WorkspacePage() {
       const uid = user?.id ?? null;
       userIdRef.current = uid;
       setUserId(uid);
+      setUserEmail(user?.email ?? '');
+      setUserDisplayName(user?.user_metadata?.display_name ?? '');
       console.log('[StudySync] userId resolved:', uid ?? 'NOT LOGGED IN');
     });
   }, []);
@@ -485,28 +488,26 @@ export default function WorkspacePage() {
     setTimeout(() => html.removeAttribute('data-transitioning'), 350);
   }, [isDark]);
 
-  // ── Global appearance settings from /settings page ───────────────────────
+  // ── Global appearance — load from Supabase (cross-device) ────────────────
   useEffect(() => {
-    const ACCENT_MAP: Record<string, [string, string, string]> = {
-      Blue:   ['#2563eb', '#3b82f6', 'rgba(37,99,235,0.14)'],
-      Purple: ['#7c3aed', '#8b5cf6', 'rgba(124,58,237,0.14)'],
-      Green:  ['#059669', '#10b981', 'rgba(5,150,105,0.14)'],
-      Orange: ['#d97706', '#f59e0b', 'rgba(217,119,6,0.14)'],
-      Pink:   ['#db2777', '#ec4899', 'rgba(219,39,119,0.14)'],
-    };
-    const ac = storageGet<string>(KEYS.ACCENT_COLOR);
-    if (ac && ACCENT_MAP[ac]) {
-      const r = document.documentElement;
-      r.style.setProperty('--accent', ACCENT_MAP[ac][0]);
-      r.style.setProperty('--accent-hover', ACCENT_MAP[ac][1]);
-      r.style.setProperty('--accent-muted', ACCENT_MAP[ac][2]);
-      r.style.setProperty('--violet', ACCENT_MAP[ac][0]);
-      r.style.setProperty('--violet-muted', ACCENT_MAP[ac][2]);
-    }
-    const fs = storageGet<string>(KEYS.FONT_SIZE);
-    if (fs === 'small') document.body.style.fontSize = '11px';
-    else if (fs === 'large') document.body.style.fontSize = '16px';
-    else document.body.style.fontSize = '';
+    loadUserPreferences().then((prefs) => {
+      if (!prefs) return;
+      // Sync localStorage cache
+      if (prefs.accent_color) storageSet(KEYS.ACCENT_COLOR, prefs.accent_color);
+      if (prefs.font_size)    storageSet(KEYS.FONT_SIZE, prefs.font_size);
+      if (prefs.font_family)  storageSet(KEYS.FONT_FAMILY, prefs.font_family);
+      if (prefs.bg_color !== undefined) storageSet(KEYS.BG_COLOR, prefs.bg_color);
+      if (prefs.sidebar_color !== undefined) storageSet(KEYS.SIDEBAR_COLOR, prefs.sidebar_color);
+      if (prefs.theme)        storageSet(KEYS.THEME, prefs.theme);
+      applyPreferences({
+        theme:        (prefs.theme as 'dark' | 'light') ?? undefined,
+        fontSize:     (prefs.font_size as 'small' | 'medium' | 'large') ?? undefined,
+        accentColor:  prefs.accent_color ?? undefined,
+        bgColor:      prefs.bg_color,
+        sidebarColor: prefs.sidebar_color,
+        fontFamily:   (prefs.font_family as 'default' | 'serif' | 'mono') ?? undefined,
+      });
+    });
   }, []);
 
   // ── Default blank page background ────────────────────────────────────────
@@ -1443,48 +1444,7 @@ export default function WorkspacePage() {
             <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
           </HdrBtn>
 
-          <a
-            href="/settings"
-            title="Settings"
-            style={{
-              width: 42, height: 42,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 8, flexShrink: 0,
-              background: 'transparent', border: '1px solid transparent',
-              color: 'var(--text-2)', cursor: 'pointer', textDecoration: 'none',
-              transition: 'background 0.13s, color 0.13s, border-color 0.13s',
-            }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)' })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent' })}
-          >
-            <Settings size={17} />
-          </a>
-
-          <button
-            onClick={handleLogout}
-            title="Log out"
-            aria-label="Log out"
-            style={{
-              height: 42, padding: '0 14px',
-              display: 'flex', alignItems: 'center', gap: 7,
-              borderRadius: 8, flexShrink: 0,
-              background: 'transparent',
-              border: '1px solid transparent',
-              color: 'var(--text-2)',
-              cursor: 'pointer',
-              fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
-              transition: 'background 0.13s, color 0.13s, border-color 0.13s',
-            }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-              background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'rgba(229,72,77,.22)',
-            })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-              background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
-            })}
-          >
-            <LogOut size={17} />
-            <span className="hidden sm:inline">Log out</span>
-          </button>
+          <AvatarDropdown email={userEmail} displayName={userDisplayName} />
         </div>
       </header>
 
