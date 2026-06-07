@@ -773,6 +773,13 @@ function AppearanceSection() {
     save({ sidebar_color: null });
   }, [defaultSidebar, save]);
 
+  const handleLanguage = useCallback((lang: 'en' | 'ar') => {
+    setLanguage(lang);
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    document.documentElement.setAttribute('lang', lang);
+    saveUserSettings({ language: lang });
+  }, []);
+
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
@@ -780,13 +787,6 @@ function AppearanceSection() {
       </div>
     );
   }
-
-  const handleLanguage = useCallback((lang: 'en' | 'ar') => {
-    setLanguage(lang);
-    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
-    document.documentElement.setAttribute('lang', lang);
-    saveUserSettings({ language: lang });
-  }, []);
 
   return (
     <div>
