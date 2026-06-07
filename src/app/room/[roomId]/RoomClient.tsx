@@ -4,21 +4,23 @@ import { useRouter } from 'next/navigation';
 import {
   Link2, Check, ChevronLeft, ChevronRight,
   Undo2, MousePointer, Pencil, Eraser, Minus, Plus,
-  ChevronDown, FilePlus,
+  ChevronDown, FilePlus, UserPlus, UserCheck, X as XIcon,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing,
   fetchRoomVoiceNotes, fetchSingleRoomVoiceNote,
   saveRoomBlankPage, fetchRoomBlankPages,
-  getProfile,
+  getProfile, getFriends, inviteToRoom,
 } from '@/lib/supabase/db';
+import type { FriendEntry } from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
 import type { RoomVoiceNotePayload, RoomBlankPagePayload } from '@/hooks/useStudyRoom';
 import { useRoomVoiceNotes } from '@/hooks/useRoomVoiceNotes';
 import { clampZoom } from '@/components/PDFViewer';
+import NotificationBell from '@/components/NotificationBell';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
@@ -177,6 +179,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [virtualIndex, setVirtualIndex]   = useState(0);
   const [blankMenuOpen, setBlankMenuOpen] = useState(false);
   const pendingBlankIdRef = useRef<string | null>(null);
+
+  // ── Invite friends state ──────────────────────────────────────────────────
+  const [inviteOpen, setInviteOpen]     = useState(false);
+  const [friendsList, setFriendsList]   = useState<FriendEntry[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [invitedIds, setInvitedIds]     = useState<Set<string>>(new Set());
 
   const drawingRef      = useRef<DrawingCanvasHandle | null>(null);
   const blankDrawingRef = useRef<BlankCanvasHandle | null>(null);
@@ -390,7 +398,13 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       }
 
       await joinRoom(roomId);
-      if (!cancelled) setStatus('ready');
+      if (!cancelled) {
+        setStatus('ready');
+        // Let friends page know which room is active
+        try {
+          localStorage.setItem('activeRoom', JSON.stringify({ roomId, roomName: room.documentName, timestamp: Date.now() }));
+        } catch { /* ignore */ }
+      }
     }
     init().catch((e) => {
       console.error('[Room] init error:', e);
@@ -480,6 +494,22 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [blankMenuOpen]);
+
+  // Open invite modal — lazy-load friends on first open
+  const handleOpenInvite = useCallback(async () => {
+    setInviteOpen(true);
+    if (friendsList.length === 0) {
+      setFriendsLoading(true);
+      const list = await getFriends();
+      setFriendsList(list);
+      setFriendsLoading(false);
+    }
+  }, [friendsList.length]);
+
+  const handleInviteFriend = useCallback(async (friendId: string) => {
+    await inviteToRoom(friendId, roomId, roomName);
+    setInvitedIds((prev) => new Set([...prev, friendId]));
+  }, [roomId, roomName]);
 
   // ── Loading / error states ────────────────────────────────────────────────
   if (status === 'loading') {
@@ -578,6 +608,24 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           </span>
         </div>
 
+        <NotificationBell />
+
+        {/* Invite Friends */}
+        <button
+          onClick={handleOpenInvite}
+          title="Invite a friend"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            background: 'var(--bg-elevated)', color: 'var(--text-2)',
+            border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+          onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
+        >
+          <UserPlus size={12} /> Invite
+        </button>
+
         <button
           onClick={copyLink}
           title="Copy room link"
@@ -595,7 +643,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
         {/* Red Leave button */}
         <button
-          onClick={() => router.replace('/workspace')}
+          onClick={() => { try { localStorage.removeItem('activeRoom'); } catch { /* */ } router.replace('/workspace'); }}
           style={{
             padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
             background: 'rgba(239,68,68,0.12)',
@@ -914,6 +962,108 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           <ChevronRight size={15} />
         </button>
       </div>
+
+      {/* ── Invite Friends modal ── */}
+      {inviteOpen && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setInviteOpen(false); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 500,
+            background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            className="animate-scale-in"
+            style={{
+              width: '100%', maxWidth: 400,
+              background: 'var(--bg-panel)', border: '1px solid var(--border)',
+              borderRadius: 14, overflow: 'hidden',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)',
+            }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)' }}>Invite Friends</span>
+              <button
+                onClick={() => setInviteOpen(false)}
+                style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}
+              >
+                <XIcon size={15} />
+              </button>
+            </div>
+
+            {/* Friends list */}
+            <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+              {friendsLoading ? (
+                <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
+                  <span style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+                </div>
+              ) : friendsList.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
+                  <UserPlus size={28} style={{ margin: '0 auto 10px', opacity: 0.35, display: 'block' }} />
+                  No friends yet. Add friends to invite them.
+                </div>
+              ) : (
+                friendsList.map((f) => {
+                  const sent = invitedIds.has(f.userId);
+                  const displayN = f.username || 'Unknown';
+                  const initials = displayN.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
+                  return (
+                    <div key={f.userId} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)',
+                    }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                        background: f.avatarUrl ? 'transparent' : 'var(--accent)', color: '#fff',
+                        fontSize: 12, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+                      }}>
+                        {f.avatarUrl
+                          ? <img src={f.avatarUrl} alt={displayN} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : initials || '?'}
+                      </div>
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {displayN}
+                      </span>
+                      <button
+                        onClick={() => handleInviteFriend(f.userId)}
+                        disabled={sent}
+                        style={{
+                          height: 28, padding: '0 12px', borderRadius: 7,
+                          background: sent ? 'var(--bg-elevated)' : 'var(--accent)',
+                          color: sent ? 'var(--text-3)' : '#fff',
+                          border: sent ? '1px solid var(--border)' : 'none',
+                          fontSize: 12, fontWeight: 600, cursor: sent ? 'default' : 'pointer',
+                          fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5,
+                          transition: 'background 0.12s',
+                        }}
+                      >
+                        {sent ? <><UserCheck size={12} /> Sent</> : <><UserPlus size={12} /> Invite</>}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-subtle)' }}>
+              <a
+                href="/friends"
+                target="_blank"
+                style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}
+              >
+                Manage friends →
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

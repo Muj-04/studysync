@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { FileText, Mic, Bookmark as BookmarkIcon, Play, ArrowRight, BookOpen, MessageSquare } from 'lucide-react';
+import { FileText, Mic, Bookmark as BookmarkIcon, Play, ArrowRight, BookOpen, MessageSquare, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { fetchDashboardData, fetchSessionState, loadUserPreferences, getProfile } from '@/lib/supabase/db';
 import AvatarDropdown from '@/components/AvatarDropdown';
+import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
 
@@ -133,7 +134,24 @@ export default function DashboardPage() {
             ))}
           </nav>
         </div>
-        <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <a
+            href="/friends"
+            title="Friends"
+            style={{
+              width: 34, height: 34, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-2)', textDecoration: 'none',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
+          >
+            <Users size={16} />
+          </a>
+          <NotificationBell />
+          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
+        </div>
       </header>
 
       <main style={{ maxWidth: 920, margin: '0 auto', padding: '32px 24px 60px' }}>
