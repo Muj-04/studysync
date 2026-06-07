@@ -145,6 +145,7 @@ export interface CommunityPost {
   title: string;
   description: string;
   pages: CommunityPage[];
+  tags: string[];
   likesCount: number;
   likedByMe: boolean;
   createdAt: string;
@@ -160,14 +161,37 @@ export interface CommunityComment {
   createdAt: string;
 }
 
-export async function fetchCommunityPosts(sort: 'latest' | 'top' = 'latest'): Promise<CommunityPost[]> {
+export type CommunityFeedTab = 'latest' | 'top' | 'trending' | 'following';
+
+export async function fetchCommunityPosts(opts: {
+  tab?: CommunityFeedTab;
+  tag?: string | null;
+  followingIds?: string[];
+} = {}): Promise<CommunityPost[]> {
   const uid = await userId();
-  const orderCol = sort === 'top' ? 'likes_count' : 'created_at';
-  const { data: posts } = await sb()
+  const { tab = 'latest', tag = null, followingIds } = opts;
+
+  let query = sb()
     .from('community_posts')
-    .select('id, user_id, document_id, title, description, pages, likes_count, created_at')
-    .order(orderCol, { ascending: false })
-    .limit(50);
+    .select('id, user_id, document_id, title, description, pages, tags, likes_count, created_at');
+
+  if (tab === 'trending') {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    query = query.gte('created_at', sevenDaysAgo).order('likes_count', { ascending: false });
+  } else if (tab === 'top') {
+    query = query.order('likes_count', { ascending: false });
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+
+  if (tab === 'following' && followingIds) {
+    if (!followingIds.length) return [];
+    query = query.in('user_id', followingIds);
+  }
+
+  if (tag) query = query.contains('tags', [tag]);
+
+  const { data: posts } = await query.limit(60);
   if (!posts?.length) return [];
 
   const authorIds = [...new Set(posts.map((p) => p.user_id))];
@@ -207,6 +231,7 @@ export async function fetchCommunityPosts(sort: 'latest' | 'top' = 'latest'): Pr
       documentId: p.document_id ?? null,
       title: p.title, description: p.description,
       pages: (p.pages as CommunityPage[]) ?? [],
+      tags: (p.tags as string[]) ?? [],
       likesCount: p.likes_count, likedByMe: likedSet.has(p.id),
       createdAt: p.created_at,
       comments: commentsByPost.get(p.id) ?? [],
@@ -219,11 +244,12 @@ export async function createCommunityPost(post: {
   title: string;
   description: string;
   pages: CommunityPage[];
+  tags?: string[];
 }): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
   const { data, error } = await sb()
     .from('community_posts')
-    .insert({ user_id: uid, document_id: post.documentId, title: post.title, description: post.description, pages: post.pages })
+    .insert({ user_id: uid, document_id: post.documentId, title: post.title, description: post.description, pages: post.pages, tags: post.tags ?? [] })
     .select('id').single();
   if (error) { console.error('[DB] createCommunityPost error:', error.message); return null; }
   return data.id;
@@ -1091,4 +1117,248 @@ export async function markNotificationRead(id: string): Promise<void> {
 export async function markAllNotificationsRead(): Promise<void> {
   const uid = await userId(); if (!uid) return;
   await sb().from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false);
+}
+
+// ── Document Tags ─────────────────────────────────────────────────────────────
+
+export async function getDocumentTags(docId: string): Promise<string[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data } = await sb().from('document_tags').select('tag').eq('user_id', uid).eq('document_id', docId);
+  return (data ?? []).map((r) => r.tag);
+}
+
+export async function getAllUserTags(): Promise<string[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data } = await sb().from('document_tags').select('tag').eq('user_id', uid);
+  return [...new Set((data ?? []).map((r) => r.tag as string))].sort();
+}
+
+export async function addDocumentTag(docId: string, tag: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('document_tags').upsert(
+    { user_id: uid, document_id: docId, tag },
+    { onConflict: 'user_id,document_id,tag', ignoreDuplicates: true },
+  );
+}
+
+export async function removeDocumentTag(docId: string, tag: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('document_tags').delete().eq('user_id', uid).eq('document_id', docId).eq('tag', tag);
+}
+
+export async function getDocumentTagsMap(docIds: string[]): Promise<Record<string, string[]>> {
+  const uid = await userId(); if (!uid || !docIds.length) return {};
+  const { data } = await sb().from('document_tags').select('document_id, tag')
+    .eq('user_id', uid).in('document_id', docIds);
+  const map: Record<string, string[]> = {};
+  for (const r of (data ?? [])) {
+    (map[r.document_id] ??= []).push(r.tag as string);
+  }
+  return map;
+}
+
+// ── Document Favorites ────────────────────────────────────────────────────────
+
+export async function getFavoriteDocIds(): Promise<Set<string>> {
+  const uid = await userId(); if (!uid) return new Set();
+  const { data } = await sb().from('document_favorites').select('document_id').eq('user_id', uid);
+  return new Set((data ?? []).map((r) => r.document_id as string));
+}
+
+export async function toggleFavorite(docId: string): Promise<boolean> {
+  const uid = await userId(); if (!uid) return false;
+  const { data: existing } = await sb().from('document_favorites')
+    .select('document_id').eq('user_id', uid).eq('document_id', docId).maybeSingle();
+  if (existing) {
+    await sb().from('document_favorites').delete().eq('user_id', uid).eq('document_id', docId);
+    return false;
+  }
+  await sb().from('document_favorites').insert({ user_id: uid, document_id: docId });
+  return true;
+}
+
+// ── Study Sessions ────────────────────────────────────────────────────────────
+
+export async function startStudySession(docId: string): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data, error } = await sb().from('study_sessions')
+    .insert({ user_id: uid, document_id: docId })
+    .select('id').single();
+  if (error) { console.error('[DB] startStudySession error:', error.message); return null; }
+  return data.id;
+}
+
+export async function endStudySession(sessionId: string): Promise<void> {
+  const endedAt = new Date().toISOString();
+  const { data: session } = await sb().from('study_sessions')
+    .select('started_at').eq('id', sessionId).maybeSingle();
+  if (!session) return;
+  const durationSeconds = Math.round((Date.now() - new Date(session.started_at).getTime()) / 1000);
+  if (durationSeconds < 10) {
+    await sb().from('study_sessions').delete().eq('id', sessionId);
+    return;
+  }
+  await sb().from('study_sessions').update({ ended_at: endedAt, duration_seconds: durationSeconds }).eq('id', sessionId);
+}
+
+export async function getStudyStreak(): Promise<number> {
+  const uid = await userId(); if (!uid) return 0;
+  const { data, error } = await sb().rpc('get_study_streak', { p_user_id: uid });
+  if (error) { console.error('[DB] getStudyStreak error:', error.message); return 0; }
+  return (data as number) ?? 0;
+}
+
+export async function getStudyTimeMap(docIds: string[]): Promise<Record<string, number>> {
+  const uid = await userId(); if (!uid || !docIds.length) return {};
+  const { data, error } = await sb().rpc('get_study_time_map', { p_user_id: uid, p_doc_ids: docIds });
+  if (error) { console.error('[DB] getStudyTimeMap error:', error.message); return {}; }
+  const map: Record<string, number> = {};
+  for (const r of (data ?? []) as Array<{ document_id: string; total_seconds: number }>) {
+    map[r.document_id] = r.total_seconds;
+  }
+  return map;
+}
+
+export async function getTodayStudySeconds(): Promise<number> {
+  const uid = await userId(); if (!uid) return 0;
+  const { data } = await sb().rpc('get_today_study_seconds', { p_user_id: uid });
+  return (data as number) ?? 0;
+}
+
+// ── Follows ───────────────────────────────────────────────────────────────────
+
+export async function followUser(targetId: string): Promise<void> {
+  const uid = await userId(); if (!uid || uid === targetId) return;
+  await sb().from('follows').upsert(
+    { follower_id: uid, following_id: targetId },
+    { onConflict: 'follower_id,following_id', ignoreDuplicates: true },
+  );
+}
+
+export async function unfollowUser(targetId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('follows').delete().eq('follower_id', uid).eq('following_id', targetId);
+}
+
+export async function getFollowCounts(targetId: string): Promise<{ followers: number; following: number }> {
+  const [followersRes, followingRes] = await Promise.all([
+    sb().from('follows').select('follower_id', { count: 'exact', head: true }).eq('following_id', targetId),
+    sb().from('follows').select('following_id', { count: 'exact', head: true }).eq('follower_id', targetId),
+  ]);
+  return { followers: followersRes.count ?? 0, following: followingRes.count ?? 0 };
+}
+
+export async function getFollowingIds(): Promise<string[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data } = await sb().from('follows').select('following_id').eq('follower_id', uid);
+  return (data ?? []).map((r) => r.following_id as string);
+}
+
+export async function isFollowing(targetId: string): Promise<boolean> {
+  const uid = await userId(); if (!uid) return false;
+  const { data } = await sb().from('follows').select('follower_id')
+    .eq('follower_id', uid).eq('following_id', targetId).maybeSingle();
+  return !!data;
+}
+
+// ── User Profile (public) ─────────────────────────────────────────────────────
+
+export interface PublicProfile {
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  followersCount: number;
+  followingCount: number;
+  isFollowedByMe: boolean;
+}
+
+export async function getPublicProfile(targetId: string): Promise<PublicProfile | null> {
+  const uid = await userId();
+  const [profileRes, countsData, followingData] = await Promise.all([
+    sb().from('profiles').select('username, avatar_url').eq('id', targetId).maybeSingle(),
+    getFollowCounts(targetId),
+    uid && uid !== targetId ? isFollowing(targetId) : Promise.resolve(false),
+  ]);
+  if (!profileRes.data && !profileRes.error) return null;
+  return {
+    userId: targetId,
+    username: profileRes.data?.username ?? null,
+    avatarUrl: profileRes.data?.avatar_url ?? null,
+    followersCount: countsData.followers,
+    followingCount: countsData.following,
+    isFollowedByMe: followingData as boolean,
+  };
+}
+
+export async function getUserCommunityPosts(targetId: string): Promise<CommunityPost[]> {
+  const uid = await userId();
+  const { data: posts } = await sb()
+    .from('community_posts')
+    .select('id, user_id, document_id, title, description, pages, tags, likes_count, created_at')
+    .eq('user_id', targetId)
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (!posts?.length) return [];
+  const postIds = posts.map((p) => p.id);
+  const [likesRes, commentsRes] = await Promise.all([
+    uid ? sb().from('post_likes').select('post_id').eq('user_id', uid).in('post_id', postIds) : Promise.resolve({ data: [] }),
+    sb().from('post_comments').select('id, post_id, user_id, content, created_at').in('post_id', postIds).order('created_at', { ascending: true }),
+  ]);
+  const likedSet = new Set((likesRes.data ?? []).map((l: { post_id: string }) => l.post_id));
+  const profileRes = await sb().from('profiles').select('username, avatar_url').eq('id', targetId).maybeSingle();
+  const commentAuthorIds = [...new Set((commentsRes.data ?? []).map((c: { user_id: string }) => c.user_id))];
+  const { data: cpData } = commentAuthorIds.length
+    ? await sb().from('profiles').select('id, username, avatar_url').in('id', commentAuthorIds)
+    : { data: [] };
+  const cpMap = new Map((cpData ?? []).map((p) => [p.id, p]));
+  const commentsByPost = new Map<string, CommunityComment[]>();
+  for (const c of (commentsRes.data ?? []) as Array<{ id: string; post_id: string; user_id: string; content: string; created_at: string }>) {
+    if (!commentsByPost.has(c.post_id)) commentsByPost.set(c.post_id, []);
+    const cp = cpMap.get(c.user_id);
+    commentsByPost.get(c.post_id)!.push({
+      id: c.id, userId: c.user_id,
+      username: cp?.username ?? null, avatarUrl: cp?.avatar_url ?? null,
+      content: c.content, createdAt: c.created_at,
+    });
+  }
+  return posts.map((p) => ({
+    id: p.id, userId: p.user_id,
+    username: profileRes.data?.username ?? null,
+    avatarUrl: profileRes.data?.avatar_url ?? null,
+    documentId: p.document_id ?? null,
+    title: p.title, description: p.description,
+    pages: (p.pages as CommunityPage[]) ?? [],
+    tags: (p.tags as string[]) ?? [],
+    likesCount: p.likes_count, likedByMe: likedSet.has(p.id),
+    createdAt: p.created_at,
+    comments: commentsByPost.get(p.id) ?? [],
+  }));
+}
+
+// ── User Settings (language / study goal / privacy) ───────────────────────────
+
+export interface UserAppSettings {
+  language: 'en' | 'ar';
+  dailyStudyGoalHours: number;
+  communityVisibility: 'everyone' | 'friends' | 'only_me';
+}
+
+export async function getUserSettings(): Promise<UserAppSettings> {
+  const uid = await userId();
+  if (!uid) return { language: 'en', dailyStudyGoalHours: 2, communityVisibility: 'everyone' };
+  const { data } = await sb().from('user_settings').select('*').eq('user_id', uid).maybeSingle();
+  return {
+    language: (data?.language ?? 'en') as 'en' | 'ar',
+    dailyStudyGoalHours: data?.daily_study_goal_hours ?? 2,
+    communityVisibility: (data?.community_visibility ?? 'everyone') as 'everyone' | 'friends' | 'only_me',
+  };
+}
+
+export async function saveUserSettings(settings: Partial<UserAppSettings>): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const update: Record<string, unknown> = { user_id: uid, updated_at: new Date().toISOString() };
+  if (settings.language !== undefined) update.language = settings.language;
+  if (settings.dailyStudyGoalHours !== undefined) update.daily_study_goal_hours = settings.dailyStudyGoalHours;
+  if (settings.communityVisibility !== undefined) update.community_visibility = settings.communityVisibility;
+  await sb().from('user_settings').upsert(update, { onConflict: 'user_id' });
 }

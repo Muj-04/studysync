@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { FileText, Mic, Bookmark as BookmarkIcon, Play, ArrowRight, BookOpen, MessageSquare, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchDashboardData, fetchSessionState, loadUserPreferences, getProfile } from '@/lib/supabase/db';
+import { fetchDashboardData, fetchSessionState, loadUserPreferences, getProfile, getStudyStreak } from '@/lib/supabase/db';
 import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
@@ -51,6 +51,7 @@ export default function DashboardPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+  const [studyStreak, setStudyStreak] = useState(0);
 
   useEffect(() => {
     // Load user info
@@ -95,6 +96,7 @@ export default function DashboardPage() {
       }
       setLoading(false);
     });
+    getStudyStreak().then(setStudyStreak);
   }, []);
 
   return (
@@ -205,11 +207,18 @@ export default function DashboardPage() {
             )}
 
             {/* ── Stats ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 28 }}>
               <StatCard label="Documents"   value={docs.length}      icon={<FileText size={20} />}     color="var(--accent)" />
               <StatCard label="Voice Notes" value={totalVoiceNotes}  icon={<Mic size={20} />}           color="#a78bfa" />
               <StatCard label="Text Notes"  value={totalTextNotes}   icon={<MessageSquare size={20} />} color="#34d399" />
               <StatCard label="Bookmarks"   value={totalBookmarks}   icon={<BookmarkIcon size={20} />}  color="#f59e0b" />
+              <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 20px' }}>
+                <div style={{ fontSize: 24, marginBottom: 10 }}>🔥</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
+                  {studyStreak}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Day streak</div>
+              </div>
             </div>
 
             {/* ── Two-column section ── */}
