@@ -6,13 +6,16 @@ import {
   Undo2, MousePointer, Pencil, Eraser, Minus, Plus,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing } from '@/lib/supabase/db';
+import { fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing, fetchRoomVoiceNotes } from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
+import type { RoomVoiceNotePayload } from '@/hooks/useStudyRoom';
+import { useRoomVoiceNotes } from '@/hooks/useRoomVoiceNotes';
 import { clampZoom } from '@/components/PDFViewer';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
+import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import { PRESET_COLORS, SIZES } from '@/lib/drawing';
 import type { Tool, PenType } from '@/lib/drawing';
 
@@ -94,16 +97,24 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [copied, setCopied]     = useState(false);
 
   // ── Drawing state ─────────────────────────────────────────────────────────
-  const [tool, setTool]           = useState<Tool>('pen');
-  const [penType, setPenType]     = useState<PenType>('normal');
-  const [color, setColor]         = useState('#ededf0');
+  const [tool, setTool]             = useState<Tool>('pen');
+  const [penType, setPenType]       = useState<PenType>('normal');
+  const [color, setColor]           = useState('#ededf0');
   const [strokeSize, setStrokeSize] = useState(5);
-  const [zoom, setZoom]           = useState(1.0);
+  const [zoom, setZoom]             = useState(1.0);
+
+  // ── Voice notes state ─────────────────────────────────────────────────────
+  const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
 
   const drawingRef       = useRef<DrawingCanvasHandle | null>(null);
   const docIdRef         = useRef<string | null>(null);
   const currentPageRef   = useRef<number>(1);
   const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
+  const addIncomingNoteRef    = useRef<((p: RoomVoiceNotePayload) => void) | null>(null);
+  const removeIncomingNoteRef = useRef<((id: string) => void) | null>(null);
+  const seedNotesRef          = useRef<((remote: Parameters<ReturnType<typeof useRoomVoiceNotes>['seedNotes']>[0]) => void) | null>(null);
 
   const { activeDocument, addDocument, goToPage } = usePDF();
   const { getDrawing, saveDrawing, seedDrawings }  = usePDFDrawings();
@@ -124,11 +135,52 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     if (data) broadcastRef.current(page, data);
   }, [activeDocument, getDrawing]);
 
-  const { broadcastDrawing, memberCount } = useStudyRoom(
+  const handleIncomingVoiceNote = useCallback((p: RoomVoiceNotePayload) => {
+    addIncomingNoteRef.current?.(p);
+  }, []);
+
+  const handleIncomingVoiceNoteDelete = useCallback((id: string) => {
+    removeIncomingNoteRef.current?.(id);
+  }, []);
+
+  const { broadcastDrawing, broadcastVoiceNote, broadcastVoiceNoteDelete, memberCount } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
+    handleIncomingVoiceNote, handleIncomingVoiceNoteDelete,
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
+
+  // Stable broadcast callbacks for voice notes
+  const handleNoteSaved = useCallback((payload: RoomVoiceNotePayload) => {
+    broadcastVoiceNote(payload);
+  }, [broadcastVoiceNote]);
+
+  const handleNoteDeleted = useCallback((noteId: string) => {
+    broadcastVoiceNoteDelete(noteId);
+  }, [broadcastVoiceNoteDelete]);
+
+  const {
+    notes: voiceNotes,
+    isRecording: voiceIsRecording,
+    recordingDuration: voiceRecordingDuration,
+    recordingContext: voiceRecordingContext,
+    startRecording: voiceStartRecording,
+    stopRecording: voiceStopRecording,
+    deleteNote: voiceDeleteNote,
+    updateNoteTitle: voiceUpdateNoteTitle,
+    getNotesForPage: voiceGetNotesForPage,
+    seedNotes: voiceSeedNotes,
+    addIncomingNote,
+    removeIncomingNote,
+  } = useRoomVoiceNotes(roomId, handleNoteSaved, handleNoteDeleted);
+
+  // Keep incoming + seed refs in sync
+  useEffect(() => { addIncomingNoteRef.current    = addIncomingNote; },    [addIncomingNote]);
+  useEffect(() => { removeIncomingNoteRef.current = removeIncomingNote; }, [removeIncomingNote]);
+  useEffect(() => { seedNotesRef.current          = voiceSeedNotes; },     [voiceSeedNotes]);
+
+  // Auto-open sheet when recording starts
+  useEffect(() => { if (voiceIsRecording) setVoiceSheetOpen(true); }, [voiceIsRecording]);
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -157,10 +209,18 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const { id: docId } = await addDocument(file);
       docIdRef.current = docId;
 
-      const remoteDrawings = await fetchDrawings(docId);
+      const [remoteDrawings, remoteVoiceNotes] = await Promise.all([
+        fetchDrawings(docId),
+        fetchRoomVoiceNotes(roomId),
+      ]);
+
       const prefixed: Record<string, string> = {};
       for (const [k, v] of Object.entries(remoteDrawings)) prefixed[`${docId}:${k}`] = v;
       if (Object.keys(prefixed).length > 0) seedDrawings(prefixed);
+
+      if (remoteVoiceNotes.length > 0 && !cancelled) {
+        seedNotesRef.current?.(remoteVoiceNotes);
+      }
 
       await joinRoom(roomId);
       if (!cancelled) setStatus('ready');
@@ -263,11 +323,16 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     );
   }
 
+  // ── Derived for voice notes ───────────────────────────────────────────────
+  const pageNotes = voiceGetNotesForPage(currentPage);
+  const pageKey   = `${roomId}:${currentPage}`;
+
   // ── Room UI ───────────────────────────────────────────────────────────────
   return (
     <div style={{
-      minHeight: '100dvh', display: 'flex', flexDirection: 'column',
+      height: '100dvh', display: 'flex', flexDirection: 'column',
       background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit',
+      overflow: 'hidden',
     }}>
 
       {/* ── Header ── */}
@@ -339,7 +404,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             onClick={() => selectTool('pen', 'marker')}
             title="Marker"
           >
-            {/* Marker icon: thick rectangle */}
             <div style={{ width: 13, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.75 }} />
             <span>Marker</span>
           </ToolBtn>
@@ -348,7 +412,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             onClick={() => selectTool('pen', 'highlighter')}
             title="Highlighter"
           >
-            {/* Highlighter icon: wide flat rectangle */}
             <div style={{ width: 13, height: 8, borderRadius: 2, background: 'currentColor', opacity: 0.4 }} />
             <span>Highlight</span>
           </ToolBtn>
@@ -380,7 +443,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               }}
             />
           ))}
-          {/* Custom color */}
           <input
             type="color"
             value={color}
@@ -441,7 +503,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       </div>
 
       {/* ── PDF viewer ── */}
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
         {activeDocument && (
           <PDFWithDrawing
             key={`${activeDocument.id}-p${currentPage}`}
@@ -459,6 +521,23 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           />
         )}
       </div>
+
+      {/* ── Voice Notes ── */}
+      <VoiceNotesSheet
+        isOpen={voiceSheetOpen}
+        onToggle={() => setVoiceSheetOpen((o) => !o)}
+        notes={pageNotes}
+        pageKey={pageKey}
+        documentId={roomId}
+        pageNumber={currentPage}
+        isRecording={voiceIsRecording}
+        recordingDuration={voiceRecordingDuration}
+        recordingContext={voiceRecordingContext}
+        onStart={() => voiceStartRecording(currentPage)}
+        onStop={voiceStopRecording}
+        onDelete={voiceDeleteNote}
+        onUpdateTitle={voiceUpdateNoteTitle}
+      />
 
       {/* ── Page navigation ── */}
       <div style={{
