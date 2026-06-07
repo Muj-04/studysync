@@ -385,6 +385,79 @@ export async function fetchAllPageImages(docId: string): Promise<Record<number, 
   return map;
 }
 
+// ── Room Voice Notes ─────────────────────────────────────────────────────────
+
+export async function saveRoomVoiceNote(roomId: string, note: VoiceNote): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+
+  let audioUrl: string | null = null;
+
+  if (note.audioBlob && note.audioBlob.size > 0) {
+    const mimeType = note.audioBlob.type.split(';')[0] || 'audio/webm';
+    const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+    const path = `rooms/${roomId}/${note.id}.${ext}`;
+
+    const { error: uploadError } = await sb().storage
+      .from('voice-notes')
+      .upload(path, note.audioBlob, { upsert: true, contentType: mimeType });
+
+    if (!uploadError) {
+      const { data: signed } = await sb().storage
+        .from('voice-notes')
+        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+      audioUrl = signed?.signedUrl ?? null;
+    } else {
+      console.error('[DB] saveRoomVoiceNote upload error:', uploadError.message);
+    }
+  }
+
+  const { error } = await sb().from('room_voice_notes').upsert({
+    id: note.id,
+    room_id: roomId,
+    user_id: uid,
+    page_number: String(note.pageNumber),
+    duration: note.duration,
+    title: note.title ?? null,
+    audio_url: audioUrl,
+    timestamp: note.timestamp instanceof Date ? note.timestamp.toISOString() : note.timestamp,
+  }, { onConflict: 'id' });
+
+  if (error) console.error('[DB] saveRoomVoiceNote DB error:', error.message);
+  return error ? null : audioUrl;
+}
+
+export async function fetchRoomVoiceNotes(roomId: string): Promise<Array<{
+  id: string; pageNumber: number | string;
+  duration: number; title?: string; audioUrl?: string; timestamp: string;
+}>> {
+  const { data, error } = await sb()
+    .from('room_voice_notes')
+    .select('id, page_number, duration, title, audio_url, timestamp')
+    .eq('room_id', roomId)
+    .order('timestamp', { ascending: false });
+  if (error) { console.error('[DB] fetchRoomVoiceNotes error:', error.message); return []; }
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    pageNumber: isNaN(Number(r.page_number)) ? r.page_number : Number(r.page_number),
+    duration: r.duration,
+    title: r.title ?? undefined,
+    audioUrl: r.audio_url ?? undefined,
+    timestamp: r.timestamp,
+  }));
+}
+
+export async function deleteRoomVoiceNote(noteId: string, roomId: string): Promise<void> {
+  for (const ext of ['webm', 'ogg', 'mp4']) {
+    await sb().storage.from('voice-notes').remove([`rooms/${roomId}/${noteId}.${ext}`]);
+  }
+  await sb().from('room_voice_notes').delete().eq('id', noteId);
+}
+
+export async function updateRoomVoiceNoteTitle(noteId: string, title: string | undefined): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('room_voice_notes').update({ title: title ?? null }).eq('id', noteId).eq('user_id', uid);
+}
+
 // ── Study Rooms ───────────────────────────────────────────────────────────────
 
 export async function uploadRoomPdf(roomId: string, blob: Blob, docName: string): Promise<string | null> {
