@@ -177,6 +177,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const blankDrawingRef = useRef<BlankCanvasHandle | null>(null);
   const docIdRef        = useRef<string | null>(null);
   const currentPageRef  = useRef<number>(1);
+  const currentVPRef    = useRef<VirtualPage | null>(null);
   const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
@@ -203,6 +204,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [docId, activeDocument, roomBlankPages]);
 
   const currentVP = virtualSequence[virtualIndex] ?? null;
+  useEffect(() => { currentVPRef.current = currentVP; }, [currentVP]);
 
   // Navigate to new blank page once virtualSequence updates
   useEffect(() => {
@@ -268,10 +270,23 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     });
   }, []);
 
-  const { broadcastDrawing, broadcastVoiceNoteAdded, broadcastVoiceNoteDelete, broadcastBlankPageAdded, memberCount, memberNames } = useStudyRoom(
+  const handleIncomingBlankDrawing = useCallback((pageId: string, data: string) => {
+    setBlankCanvasData((prev) => ({ ...prev, [pageId]: data }));
+    if (currentVPRef.current?.type === 'blank' && currentVPRef.current.blankPage.id === pageId) {
+      blankDrawingRef.current?.loadData?.(data);
+    }
+  }, []);
+
+  const {
+    broadcastDrawing, broadcastBlankDrawing,
+    broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
+    broadcastBlankPageAdded,
+    memberCount, memberNames,
+  } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
     handleIncomingVoiceNoteAdded, handleIncomingVoiceNoteDelete,
     handleIncomingBlankPage, userName,
+    handleIncomingBlankDrawing,
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
@@ -817,7 +832,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               ...currentVP.blankPage,
               canvasData: blankCanvasData[currentVP.blankPage.id],
             }}
-            onSaveData={(id, data) => setBlankCanvasData((prev) => ({ ...prev, [id]: data }))}
+            onSaveData={(id, data) => {
+              setBlankCanvasData((prev) => ({ ...prev, [id]: data }));
+              broadcastBlankDrawing(id, data);
+            }}
             onSaveImages={() => {}}
             tool={tool}
             penType={penType}
