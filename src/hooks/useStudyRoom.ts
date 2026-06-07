@@ -76,6 +76,7 @@ export function useStudyRoom(
         })
         .on('broadcast', { event: 'voice_note_added' }, ({ payload }: { payload: { noteId: string } }) => {
           if (generation !== generationRef.current) return;
+          console.log('[StudyRoom] received voice_note_added event:', payload);
           onVoiceNoteAddedRef.current?.(payload.noteId);
         })
         .on('broadcast', { event: 'voice_note_deleted' }, ({ payload }: { payload: { noteId: string } }) => {
@@ -129,6 +130,8 @@ export function useStudyRoom(
 
   const broadcastVoiceNoteAdded = useCallback((noteId: string) => {
     const ch = channelRef.current;
+    const state = (ch as unknown as { state?: string })?.state ?? 'no channel';
+    console.log('[StudyRoom] broadcastVoiceNoteAdded — channel state:', state, 'noteId:', noteId);
     if (!ch) return;
     ch.send({ type: 'broadcast', event: 'voice_note_added', payload: { noteId } })
       .catch((err) => console.error('[StudyRoom] broadcast voice_note_added error:', err));

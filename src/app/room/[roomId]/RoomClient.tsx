@@ -136,7 +136,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [activeDocument, getDrawing]);
 
   const handleIncomingVoiceNoteAdded = useCallback(async (noteId: string) => {
+    console.log('[Room] received voice_note_added, fetching from DB:', noteId);
     const note = await fetchSingleRoomVoiceNote(noteId, roomId);
+    console.log('[Room] fetched note from DB:', note);
     if (note && note.audioUrl) {
       addIncomingNoteRef.current?.({
         id: note.id,
@@ -146,6 +148,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         timestamp: note.timestamp,
         title: note.title,
       });
+    } else {
+      console.warn('[Room] note fetch failed or missing audioUrl:', note);
     }
   }, [roomId]);
 
