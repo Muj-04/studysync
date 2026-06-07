@@ -78,6 +78,7 @@ export interface DrawingCanvasHandle {
   clear: () => void;
   insertImage?: (dataUrl: string) => void;
   undo?: () => void;
+  loadData?: (data: string) => void;
 }
 
 interface Props {
@@ -268,6 +269,19 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       const canvas = canvasRef.current;
       if (canvas) onSaveData(blankPage.id, canvas.toDataURL('image/png'));
     }, [blankPage.id, onSaveData]);
+
+    // ── Remote data load (for Realtime sync) ──────────────────────────────
+    const loadData = useCallback((data: string) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, PAGE_W, PAGE_H);
+        ctx.drawImage(img, 0, 0, PAGE_W, PAGE_H);
+      };
+      img.src = data;
+    }, []);
 
     // ── Image hit-test ─────────────────────────────────────────────────────
     function imageAtPoint(x: number, y: number) {
@@ -514,7 +528,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       el.src = dataUrl;
     }, [blankPage.id, onSaveImages]);
 
-    useImperativeHandle(ref, () => ({ clear: clearCanvas, insertImage, undo }), [clearCanvas, insertImage, undo]);
+    useImperativeHandle(ref, () => ({ clear: clearCanvas, insertImage, undo, loadData }), [clearCanvas, insertImage, undo, loadData]);
 
     useEffect(() => {
       const fn = (e: KeyboardEvent) => {
