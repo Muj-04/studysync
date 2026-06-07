@@ -474,6 +474,25 @@ export async function saveUserPreferences(prefs: Partial<DbUserPreferences>): Pr
   );
 }
 
+export async function saveDocumentOrder(orderedIds: string[]): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('user_preferences').upsert(
+    { user_id: uid, document_order: orderedIds, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id' },
+  );
+}
+
+export async function loadDocumentOrder(): Promise<string[] | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data } = await sb()
+    .from('user_preferences')
+    .select('document_order')
+    .eq('user_id', uid)
+    .maybeSingle();
+  const order = data?.document_order;
+  return Array.isArray(order) ? (order as string[]) : null;
+}
+
 // ── Room Voice Notes ─────────────────────────────────────────────────────────
 
 export async function saveRoomVoiceNote(roomId: string, note: VoiceNote): Promise<string | null> {

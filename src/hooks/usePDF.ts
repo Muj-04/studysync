@@ -121,6 +121,10 @@ export function usePDF() {
     [documents]
   );
 
+  const reorderDocuments = useCallback((newDocs: PDFDocument[]) => {
+    setDocuments(newDocs);
+  }, []);
+
   const goToPage = useCallback(
     (page: number) => {
       setDocuments((prev) =>
@@ -150,6 +154,7 @@ export function usePDF() {
     addDocument,
     removeDocument,
     updateDocumentId,
+    reorderDocuments,
     setActiveDocument: setActiveDocumentId,
     goToPage,
     nextPage,

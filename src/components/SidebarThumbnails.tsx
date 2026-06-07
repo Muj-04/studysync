@@ -1,6 +1,17 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Presentation, X, FileImage, Bookmark, ChevronRight, Loader2, Mic, Trash2 } from 'lucide-react';
+import { FileText, Presentation, X, FileImage, Bookmark, ChevronRight, Loader2, Mic, Trash2, GripVertical } from 'lucide-react';
+import {
+  DndContext, closestCenter, DragOverlay,
+  MouseSensor, TouchSensor, KeyboardSensor,
+  useSensor, useSensors,
+  type DragStartEvent, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, sortableKeyboardCoordinates,
+  verticalListSortingStrategy, arrayMove, useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { PDFDocument, BlankPage, Bookmark as BookmarkType, VoiceNote, TextNote } from '@/types';
 
 // ── Module-level thumbnail caches ─────────────────────────────────────────────
@@ -237,6 +248,120 @@ function OutlineNode({
   );
 }
 
+// ── Sortable document row ─────────────────────────────────────────────────────
+
+function SortableDocRow({
+  doc, isActive, onSelect, onRemove,
+}: {
+  doc: PDFDocument; isActive: boolean;
+  onSelect: (id: string) => void; onRemove: (id: string) => void;
+}) {
+  const {
+    attributes, listeners, setNodeRef,
+    transform, transition, isDragging,
+  } = useSortable({ id: doc.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: transition ?? undefined,
+        opacity: isDragging ? 0 : 1,
+      }}
+    >
+      <DocRowContent
+        doc={doc} isActive={isActive}
+        onSelect={onSelect} onRemove={onRemove}
+        dragHandleProps={{ ...attributes, ...listeners }}
+      />
+    </div>
+  );
+}
+
+// ── Shared row visual (used by both sortable item and drag overlay) ────────────
+
+function DocRowContent({
+  doc, isActive, onSelect, onRemove, dragHandleProps,
+}: {
+  doc: PDFDocument; isActive: boolean;
+  onSelect: (id: string) => void; onRemove: (id: string) => void;
+  dragHandleProps?: Record<string, unknown>;
+}) {
+  return (
+    <div
+      className="group"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        padding: '3px 6px 3px 3px', borderRadius: 5, marginBottom: 1,
+        background: isActive ? 'var(--bg-active)' : 'transparent',
+        border: `1px solid ${isActive ? 'var(--border-strong)' : 'transparent'}`,
+        color: isActive ? 'var(--text-1)' : 'var(--text-2)',
+        transition: 'background 0.12s, color 0.12s',
+        cursor: 'default',
+        userSelect: 'none',
+      }}
+      onMouseOver={(e) => {
+        if (!isActive) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' });
+      }}
+      onMouseOut={(e) => {
+        if (!isActive) Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' });
+      }}
+    >
+      {/* Drag handle */}
+      <span
+        {...(dragHandleProps as React.HTMLAttributes<HTMLSpanElement>)}
+        title="Drag to reorder"
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 14, height: 18, flexShrink: 0,
+          color: 'var(--text-3)', cursor: 'grab',
+          touchAction: 'none',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical size={9} />
+      </span>
+
+      {/* File icon */}
+      {doc.type === 'pptx'
+        ? <Presentation size={10} style={{ flexShrink: 0, color: isActive ? 'var(--accent-hover)' : 'var(--text-3)' }} />
+        : <FileText     size={10} style={{ flexShrink: 0, color: isActive ? 'var(--accent-hover)' : 'var(--text-3)' }} />}
+
+      {/* Name — clickable */}
+      <button
+        onClick={() => onSelect(doc.id)}
+        style={{
+          flex: 1, background: 'none', border: 'none', padding: 0,
+          fontSize: 11, fontWeight: isActive ? 500 : 400,
+          overflow: 'hidden', textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap', lineHeight: 1.3,
+          color: 'inherit', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+        }}
+      >
+        {doc.name}
+      </button>
+
+      {/* Remove */}
+      <span
+        role="button"
+        onClick={(e) => { e.stopPropagation(); onRemove(doc.id); }}
+        className="opacity-0 group-hover:opacity-100"
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 15, height: 15, borderRadius: 3,
+          color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0,
+          transition: 'opacity 0.12s, color 0.12s',
+        }}
+        onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)' })}
+        onMouseOut={(e)  => Object.assign(e.currentTarget.style, { color: 'var(--text-3)' })}
+      >
+        <X size={9} />
+      </span>
+    </div>
+  );
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type VirtualPage =
@@ -261,6 +386,7 @@ interface Props {
   voiceNotes?:          VoiceNote[];
   onDeleteTextNote?:    (pageKey: string, noteId: string) => void;
   onDeleteVoiceNote?:   (id: string) => void;
+  onReorderDocuments?:  (ids: string[]) => void;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -280,9 +406,34 @@ export default function SidebarThumbnails({
   bookmarks = [], onRemoveBookmark, onNavigateToPdfPage,
   isPPTX = false,
   allTextNotes = {}, voiceNotes = [], onDeleteTextNote, onDeleteVoiceNote,
+  onReorderDocuments,
 }: Props) {
   const thumbListRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<SidebarTab>('pages');
+
+  // ── DnD (hooks must be unconditional) ─────────────────────────────────────
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggingId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setDraggingId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = documents.findIndex((d) => d.id === active.id);
+    const newIndex = documents.findIndex((d) => d.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    onReorderDocuments?.(arrayMove(documents.map((d) => d.id), oldIndex, newIndex));
+  };
+
+  const draggingDoc = draggingId ? documents.find((d) => d.id === draggingId) : null;
 
   // Outline state
   const [outlineItems, setOutlineItems] = useState<OutlineItem[] | null>(null);
@@ -554,70 +705,50 @@ export default function SidebarThumbnails({
               </span>
             </div>
 
-            <div style={{
-              padding: '0 5px 4px',
-              flexShrink: 0,
-              maxHeight: 120,
-              overflowY: 'auto',
-            }}>
-              {documents.map((doc) => {
-                const active = doc.id === activeDocumentId;
-                return (
-                  <button
-                    key={doc.id}
-                    onClick={() => onSelectDocument(doc.id)}
-                    className="group"
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 5,
-                      padding: '4px 6px', borderRadius: 5, marginBottom: 1,
-                      background: active ? 'var(--bg-active)' : 'transparent',
-                      border: '1px solid transparent',
-                      color: active ? 'var(--text-1)' : 'var(--text-2)',
-                      cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                      transition: 'background 0.12s, color 0.12s',
-                    }}
-                    onMouseOver={(e) => {
-                      if (!active) Object.assign(e.currentTarget.style, {
-                        background: 'var(--bg-hover)', color: 'var(--text-1)',
-                      });
-                    }}
-                    onMouseOut={(e) => {
-                      if (!active) Object.assign(e.currentTarget.style, {
-                        background: 'transparent',
-                        color: 'var(--text-2)',
-                      });
-                    }}
-                  >
-                    {doc.type === 'pptx'
-                      ? <Presentation size={11} style={{ flexShrink: 0, color: active ? 'var(--accent-hover)' : 'var(--text-3)' }} />
-                      : <FileText     size={11} style={{ flexShrink: 0, color: active ? 'var(--accent-hover)' : 'var(--text-3)' }} />}
-                    <span style={{
-                      flex: 1, fontSize: 11,
-                      fontWeight: active ? 500 : 400,
-                      overflow: 'hidden', textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap', lineHeight: 1.3,
-                    }}>
-                      {doc.name}
-                    </span>
-                    <span
-                      role="button"
-                      onClick={(e) => { e.stopPropagation(); onRemoveDocument(doc.id); }}
-                      className="opacity-0 group-hover:opacity-100"
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: 15, height: 15, borderRadius: 3,
-                        color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0,
-                        transition: 'opacity 0.12s, color 0.12s',
-                      }}
-                      onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)' })}
-                      onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)' })}
-                    >
-                      <X size={9} />
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={documents.map((d) => d.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div style={{ padding: '0 5px 4px', flexShrink: 0, maxHeight: 120, overflowY: 'auto' }}>
+                  {documents.map((doc) => (
+                    <SortableDocRow
+                      key={doc.id}
+                      doc={doc}
+                      isActive={doc.id === activeDocumentId}
+                      onSelect={onSelectDocument}
+                      onRemove={onRemoveDocument}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+
+              {/* Floating drag preview */}
+              <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+                {draggingDoc && (
+                  <div style={{
+                    background: 'var(--bg-panel)',
+                    border: '1px solid var(--accent)',
+                    borderRadius: 5,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+                    padding: '0 6px 0 3px',
+                    opacity: 0.96,
+                  }}>
+                    <DocRowContent
+                      doc={draggingDoc}
+                      isActive={draggingDoc.id === activeDocumentId}
+                      onSelect={() => {}}
+                      onRemove={() => {}}
+                    />
+                  </div>
+                )}
+              </DragOverlay>
+            </DndContext>
 
             {/* ── Divider ── */}
             <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
