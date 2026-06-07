@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Search, CheckCircle,
+  ChevronUp, FilePlus, Search, CheckCircle, Users,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -22,6 +22,7 @@ import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
 import AvatarDropdown from '@/components/AvatarDropdown';
+import NotificationBell from '@/components/NotificationBell';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
 import { createClient } from '@/lib/supabase/client';
@@ -1484,6 +1485,23 @@ export default function WorkspacePage() {
           <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title="Keyboard shortcuts (?)">
             <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
           </HdrBtn>
+
+          <a
+            href="/friends"
+            title="Friends"
+            style={{
+              width: 34, height: 34, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-2)', textDecoration: 'none',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
+          >
+            <Users size={16} />
+          </a>
+
+          <NotificationBell />
 
           <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
         </div>
