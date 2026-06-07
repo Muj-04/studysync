@@ -41,6 +41,7 @@ import {
   loadUserPreferences,
   saveDocumentOrder,
   loadDocumentOrder,
+  getProfile,
 } from '@/lib/supabase/db';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
@@ -456,6 +457,7 @@ export default function WorkspacePage() {
   // ── Auth ──────────────────────────────────────────────────────────────────
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
 
   // ── Current user (for Supabase sync) ─────────────────────────────────────
   // userId as state so effects that depend on it re-run once the async
@@ -463,12 +465,14 @@ export default function WorkspacePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const userIdRef = useRef<string | null>(null);
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
+    createClient().auth.getUser().then(async ({ data: { user } }) => {
       const uid = user?.id ?? null;
       userIdRef.current = uid;
       setUserId(uid);
       setUserEmail(user?.email ?? '');
-      setUserDisplayName(user?.user_metadata?.display_name ?? '');
+      const profile = await getProfile();
+      setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
+      setUserAvatarUrl(profile?.avatarUrl ?? null);
       console.log('[StudySync] userId resolved:', uid ?? 'NOT LOGGED IN');
     });
   }, []);
@@ -1481,7 +1485,7 @@ export default function WorkspacePage() {
             <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
           </HdrBtn>
 
-          <AvatarDropdown email={userEmail} displayName={userDisplayName} />
+          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
         </div>
       </header>
 

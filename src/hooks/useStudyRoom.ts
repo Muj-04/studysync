@@ -19,6 +19,12 @@ export interface RoomBlankPagePayload {
   createdAt: number;
 }
 
+export interface RoomMember {
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
 
 export function useStudyRoom(
@@ -28,11 +34,11 @@ export function useStudyRoom(
   onIncomingVoiceNoteAdded?: (noteId: string) => void,
   onIncomingVoiceNoteDelete?: (noteId: string) => void,
   onIncomingBlankPage?: (page: RoomBlankPagePayload) => void,
-  myDisplayName?: string,
+  myPresence?: { userId?: string; name?: string; avatarUrl?: string },
   onIncomingBlankDrawing?: (pageId: string, data: string) => void,
 ) {
   const [memberCount, setMemberCount] = useState(1);
-  const [memberNames, setMemberNames] = useState<string[]>([]);
+  const [members, setMembers] = useState<RoomMember[]>([]);
   const channelRef           = useRef<RealtimeChannel | null>(null);
   const onDrawingRef         = useRef(onIncomingDrawing);
   const onReconnectRef       = useRef(onReconnect);
@@ -40,7 +46,7 @@ export function useStudyRoom(
   const onVoiceNoteDeleteRef = useRef(onIncomingVoiceNoteDelete);
   const onBlankPageRef       = useRef(onIncomingBlankPage);
   const onBlankDrawingRef    = useRef(onIncomingBlankDrawing);
-  const myDisplayNameRef     = useRef(myDisplayName);
+  const myPresenceRef        = useRef(myPresence);
   const retryRef             = useRef(0);
   const timerRef             = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadRef              = useRef(false);
@@ -53,15 +59,21 @@ export function useStudyRoom(
   useEffect(() => { onVoiceNoteDeleteRef.current = onIncomingVoiceNoteDelete; });
   useEffect(() => { onBlankPageRef.current = onIncomingBlankPage; });
   useEffect(() => { onBlankDrawingRef.current = onIncomingBlankDrawing; });
-  useEffect(() => { myDisplayNameRef.current = myDisplayName; });
+  useEffect(() => { myPresenceRef.current = myPresence; });
 
-  // Re-track presence when the display name becomes available (loads async after connect)
+  // Re-track presence when name or avatar becomes available (loads async after connect)
   useEffect(() => {
-    if (!myDisplayName) return;
+    if (!myPresence?.name) return;
     const ch = channelRef.current;
     if (!ch) return;
-    ch.track({ ts: Date.now(), name: myDisplayName }).catch(() => {});
-  }, [myDisplayName]);
+    ch.track({
+      ts: Date.now(),
+      userId: myPresence.userId ?? '',
+      name: myPresence.name,
+      avatarUrl: myPresence.avatarUrl ?? '',
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myPresence?.name, myPresence?.avatarUrl]);
 
   useEffect(() => {
     deadRef.current = false;
@@ -119,12 +131,24 @@ export function useStudyRoom(
         })
         .on('presence', { event: 'sync' }, () => {
           if (generation !== generationRef.current) return;
-          type PresenceEntry = { ts: number; name?: string };
+          type PresenceEntry = { ts: number; userId?: string; name?: string; avatarUrl?: string };
           const state = channel.presenceState<PresenceEntry>();
           const entries = Object.values(state).flat();
-          const names = entries.map((e) => e.name ?? '').filter(Boolean);
-          setMemberNames(names);
-          setMemberCount(entries.length || 1);
+          // Deduplicate by userId — same user in multiple tabs counts once
+          const byUserId = new Map<string, PresenceEntry>();
+          for (const e of entries) {
+            const uid = e.userId || `anon-${Math.random()}`;
+            if (!byUserId.has(uid) || (e.ts ?? 0) > (byUserId.get(uid)!.ts ?? 0)) {
+              byUserId.set(uid, e);
+            }
+          }
+          const unique = [...byUserId.values()];
+          setMembers(
+            unique
+              .filter((e) => e.name)
+              .map((e) => ({ userId: e.userId ?? '', name: e.name!, avatarUrl: e.avatarUrl || undefined }))
+          );
+          setMemberCount(unique.length || 1);
         })
         .subscribe(async (status) => {
           if (deadRef.current || generation !== generationRef.current) return;
@@ -133,8 +157,14 @@ export function useStudyRoom(
 
           if (status === 'SUBSCRIBED') {
             retryRef.current = 0;
-            // Track with whatever name we have now; re-tracked via the myDisplayName effect
-            await channel.track({ ts: Date.now(), name: myDisplayNameRef.current ?? '' });
+            // Track with whatever presence we have now; re-tracked via the myPresence effect
+            const p = myPresenceRef.current;
+            await channel.track({
+              ts: Date.now(),
+              userId: p?.userId ?? '',
+              name: p?.name ?? '',
+              avatarUrl: p?.avatarUrl ?? '',
+            });
             if (connectedOnceRef.current) {
               console.log('[StudyRoom] reconnected — calling onReconnect');
               onReconnectRef.current?.();
@@ -201,6 +231,6 @@ export function useStudyRoom(
     broadcastDrawing, broadcastBlankDrawing,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
     broadcastBlankPageAdded,
-    memberCount, memberNames,
+    memberCount, members,
   };
 }
