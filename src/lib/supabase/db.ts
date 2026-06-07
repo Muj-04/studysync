@@ -575,6 +575,39 @@ export async function fetchSingleRoomVoiceNote(noteId: string, roomId: string): 
   };
 }
 
+export async function saveRoomBlankPage(
+  roomId: string,
+  page: { id: string; insertAfterPage: number; bgTheme: 'white' | 'dark'; createdAt: number },
+): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const { error } = await sb().from('room_blank_pages').upsert({
+    id: page.id,
+    room_id: roomId,
+    insert_after_page: page.insertAfterPage,
+    bg_theme: page.bgTheme,
+    created_at: page.createdAt,
+    created_by: uid,
+  }, { onConflict: 'id' });
+  if (error) console.error('[DB] saveRoomBlankPage error:', error.message);
+}
+
+export async function fetchRoomBlankPages(
+  roomId: string,
+): Promise<Array<{ id: string; insertAfterPage: number; bgTheme: 'white' | 'dark'; createdAt: number }>> {
+  const { data, error } = await sb()
+    .from('room_blank_pages')
+    .select('id, insert_after_page, bg_theme, created_at')
+    .eq('room_id', roomId)
+    .order('created_at', { ascending: true });
+  if (error) { console.error('[DB] fetchRoomBlankPages error:', error.message); return []; }
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    insertAfterPage: r.insert_after_page as number,
+    bgTheme: (r.bg_theme === 'dark' ? 'dark' : 'white') as 'white' | 'dark',
+    createdAt: r.created_at as number,
+  }));
+}
+
 export async function deleteRoomVoiceNote(noteId: string, roomId: string): Promise<void> {
   for (const ext of ['webm', 'ogg', 'mp4']) {
     await sb().storage.from('voice-notes').remove([`rooms/${roomId}/${noteId}.${ext}`]);
