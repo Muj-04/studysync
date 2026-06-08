@@ -73,9 +73,8 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid var(--border)',
-            borderRadius: 12,
-            boxShadow: '0 16px 48px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.04)',
-            zIndex: 300,
+            borderRadius: 4,
+                        zIndex: 300,
             overflow: 'hidden',
           }}
         >
@@ -116,7 +115,7 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
               onClick={() => setOpen(false)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 9,
-                padding: '8px 10px', borderRadius: 7,
+                padding: '8px 10px', borderRadius: 4,
                 fontSize: 13, fontWeight: 500, color: 'var(--text-2)',
                 textDecoration: 'none', cursor: 'pointer',
                 transition: 'background 0.12s, color 0.12s',
@@ -134,7 +133,7 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
               onClick={handleLogout}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-                padding: '8px 10px', borderRadius: 7,
+                padding: '8px 10px', borderRadius: 4,
                 fontSize: 13, fontWeight: 500, color: '#ef4444',
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontFamily: 'inherit', textAlign: 'left',

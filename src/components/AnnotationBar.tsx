@@ -40,7 +40,7 @@ function ToolBtn({
       style={{
         display: 'flex', alignItems: 'center', gap: 5,
         height: 30, padding: '0 9px',
-        borderRadius: 6, flexShrink: 0,
+        borderRadius: 4, flexShrink: 0,
         border: `1px solid ${active ? 'var(--border-strong)' : 'transparent'}`,
         background: active ? 'var(--bg-active)' : 'transparent',
         color: active ? 'var(--text-1)' : 'var(--text-2)',
@@ -198,7 +198,7 @@ export default function AnnotationBar({
               key={value}
               onClick={() => setStrokeSize(value)}
               style={{
-                width: 30, height: 28, borderRadius: 6, flexShrink: 0,
+                width: 30, height: 28, borderRadius: 4, flexShrink: 0,
                 border: `1px solid ${strokeSize === value ? 'var(--border-strong)' : 'var(--border)'}`,
                 background: strokeSize === value ? 'var(--bg-active)' : 'transparent',
                 color: strokeSize === value ? 'var(--text-1)' : 'var(--text-2)',
@@ -228,7 +228,7 @@ export default function AnnotationBar({
             onClick={onClear}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
-              height: 30, padding: '0 10px', borderRadius: 6, flexShrink: 0,
+              height: 30, padding: '0 10px', borderRadius: 4, flexShrink: 0,
               border: '1px solid transparent',
               background: 'transparent', color: 'var(--red)',
               cursor: 'pointer', fontSize: 12, fontWeight: 500,

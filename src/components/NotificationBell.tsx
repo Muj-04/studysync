@@ -87,7 +87,7 @@ export default function NotificationBell() {
         aria-label={t('notif_title')}
         style={{
           position: 'relative',
-          width: 34, height: 34, borderRadius: 8,
+          width: 34, height: 34, borderRadius: 4,
           background: open ? 'var(--bg-hover)' : 'transparent',
           border: '1px solid transparent',
           color: 'var(--text-2)',
@@ -123,9 +123,8 @@ export default function NotificationBell() {
             width: 340, maxHeight: 480, overflow: 'hidden',
             transformOrigin: lang === 'ar' ? 'top left' : 'top right',
             background: 'var(--bg-panel)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid var(--border)', borderRadius: 12,
-            boxShadow: '0 16px 48px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.04)',
-            zIndex: 300, display: 'flex', flexDirection: 'column',
+            border: '1px solid var(--border)', borderRadius: 4,
+                        zIndex: 300, display: 'flex', flexDirection: 'column',
           }}
         >
           {/* Header */}
@@ -140,7 +139,7 @@ export default function NotificationBell() {
                 onClick={markAllRead}
                 style={{
                   fontSize: 11.5, color: 'var(--accent)', background: 'none', border: 'none',
-                  cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px', borderRadius: 5,
+                  cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px', borderRadius: 4,
                   transition: 'background 0.12s',
                 }}
                 onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-muted)'; }}
@@ -213,7 +212,7 @@ export default function NotificationBell() {
                               onClick={() => handleAccept(n.id, String(d.friendship_id))}
                               disabled={isPending}
                               style={{
-                                height: 26, padding: '0 10px', borderRadius: 6,
+                                height: 26, padding: '0 10px', borderRadius: 4,
                                 background: 'var(--accent)', color: '#fff',
                                 border: 'none', fontSize: 11.5, fontWeight: 600,
                                 cursor: isPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
@@ -226,7 +225,7 @@ export default function NotificationBell() {
                               onClick={() => handleReject(n.id, String(d.friendship_id))}
                               disabled={isPending}
                               style={{
-                                height: 26, padding: '0 10px', borderRadius: 6,
+                                height: 26, padding: '0 10px', borderRadius: 4,
                                 background: 'var(--bg-elevated)', color: 'var(--text-2)',
                                 border: '1px solid var(--border)', fontSize: 11.5, fontWeight: 500,
                                 cursor: isPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
@@ -242,7 +241,7 @@ export default function NotificationBell() {
                             <button
                               onClick={() => handleJoinRoom(n.id, String(d.room_id))}
                               style={{
-                                height: 26, padding: '0 10px', borderRadius: 6,
+                                height: 26, padding: '0 10px', borderRadius: 4,
                                 background: 'var(--accent)', color: '#fff',
                                 border: 'none', fontSize: 11.5, fontWeight: 600,
                                 cursor: 'pointer', fontFamily: 'inherit',
@@ -254,7 +253,7 @@ export default function NotificationBell() {
                             <button
                               onClick={() => handleDeclineInvite(n.id)}
                               style={{
-                                height: 26, padding: '0 10px', borderRadius: 6,
+                                height: 26, padding: '0 10px', borderRadius: 4,
                                 background: 'var(--bg-elevated)', color: 'var(--text-2)',
                                 border: '1px solid var(--border)', fontSize: 11.5, fontWeight: 500,
                                 cursor: 'pointer', fontFamily: 'inherit',
@@ -268,7 +267,7 @@ export default function NotificationBell() {
                           <button
                             onClick={() => markRead(n.id)}
                             style={{
-                              height: 22, padding: '0 8px', borderRadius: 5,
+                              height: 22, padding: '0 8px', borderRadius: 4,
                               background: 'none', color: 'var(--text-3)', border: 'none',
                               fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
                             }}

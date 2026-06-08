@@ -26,7 +26,7 @@ function ToolRow({
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
         width: '100%', height: 32, padding: '0 8px',
-        borderRadius: 7,
+        borderRadius: 4,
         border: `1px solid ${active ? 'var(--border-strong)' : 'transparent'}`,
         background: active ? 'var(--bg-active)' : 'transparent',
         color: active ? 'var(--text-1)' : 'var(--text-2)',
@@ -295,16 +295,13 @@ export default function FloatingAnnotationToolbar({
       {/* ── Expanding panel ── */}
       {isOpen && (
         <div
-          className="animate-scale-in"
+          className="animate-scale-in glass"
           style={{
             position: 'absolute',
             ...panelEdge,
             right: 0,
             width: PANEL_W,
-            background: 'var(--bg-panel)',
-            border: '1px solid var(--border)',
-            borderRadius: 12,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.25)',
+            borderRadius: 4,
             transformOrigin,
           }}
         >
@@ -353,7 +350,7 @@ export default function FloatingAnnotationToolbar({
               style={{
                 width: 22, height: 22,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 5, background: 'transparent', border: '1px solid transparent',
+                borderRadius: 4, background: 'transparent', border: '1px solid transparent',
                 color: 'var(--text-3)', cursor: 'pointer',
                 transition: 'background 0.12s, color 0.12s, border-color 0.12s',
               }}
@@ -470,7 +467,7 @@ export default function FloatingAnnotationToolbar({
                   style={{
                     flex: 1, height: 28,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 6,
+                    borderRadius: 4,
                     border: `1px solid ${strokeSize === value ? 'var(--border-strong)' : 'var(--border)'}`,
                     background: strokeSize === value ? 'var(--bg-active)' : 'transparent',
                     color: strokeSize === value ? 'var(--text-1)' : 'var(--text-2)',
@@ -503,7 +500,7 @@ export default function FloatingAnnotationToolbar({
               style={{
                 width: '100%', height: 30,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                borderRadius: 7, border: '1px solid transparent',
+                borderRadius: 4, border: '1px solid transparent',
                 background: 'transparent', color: 'var(--text-2)',
                 cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
                 transition: 'background 0.12s, color 0.12s, border-color 0.12s',
@@ -523,7 +520,7 @@ export default function FloatingAnnotationToolbar({
               style={{
                 width: '100%', height: 30,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                borderRadius: 7, border: '1px solid transparent',
+                borderRadius: 4, border: '1px solid transparent',
                 background: 'transparent', color: 'var(--red)',
                 cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
                 transition: 'background 0.12s, border-color 0.12s',
@@ -548,14 +545,15 @@ export default function FloatingAnnotationToolbar({
           position: 'absolute',
           bottom: BTN + 10,
           left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--bg-panel)',
+          background: 'rgba(9,9,11,0.85)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
           border: '1px solid var(--border)',
           color: 'var(--text-1)',
           fontSize: 11.5, fontWeight: 500,
           whiteSpace: 'nowrap',
           padding: '5px 11px',
-          borderRadius: 7,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          borderRadius: 4,
           pointerEvents: 'none',
           zIndex: 1,
         }}>
@@ -587,11 +585,10 @@ export default function FloatingAnnotationToolbar({
             background: 'var(--accent)',
             color: '#fff',
             padding: '6px 13px',
-            borderRadius: 20,
+            borderRadius: 4,
             fontSize: 12.5, fontWeight: 600,
             whiteSpace: 'nowrap',
-            boxShadow: '0 4px 18px rgba(37,99,235,0.45)',
-          }}>
+                      }}>
             Tap to annotate
           </div>
           {/* Arrow pointing right toward the button */}
@@ -617,11 +614,12 @@ export default function FloatingAnnotationToolbar({
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            background: tool === 'cursor' ? 'var(--bg-elevated)' : 'rgba(10,10,10,0.82)',
-            border: `1px solid ${tool === 'cursor' ? 'var(--border-strong)' : 'rgba(255,255,255,0.12)'}`,
-            borderRadius: 20,
+            background: 'rgba(9,9,11,0.7)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            border: '1px solid var(--border)',
+            borderRadius: 4,
             padding: '4px 9px 4px 7px',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
             whiteSpace: 'nowrap',
           }}
         >
@@ -640,8 +638,7 @@ export default function FloatingAnnotationToolbar({
             <div style={{
               width: 8, height: 8, borderRadius: '50%',
               background: color, flexShrink: 0,
-              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.18)',
-            }} />
+                          }} />
           )}
           <span style={{
             fontSize: 11, fontWeight: 500,
@@ -678,9 +675,6 @@ export default function FloatingAnnotationToolbar({
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           // Pulse only when closed and not being dragged
           animation: !isOpen && !isDragging ? 'fab-pulse 2.6s ease-in-out infinite' : 'none',
-          boxShadow: isDragging
-            ? '0 8px 28px rgba(0,0,0,0.55)'
-            : '0 4px 20px rgba(0,0,0,0.45)',
           transition: isDragging
             ? 'box-shadow 0.1s'
             : 'background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s',

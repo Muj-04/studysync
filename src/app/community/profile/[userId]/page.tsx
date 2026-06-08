@@ -45,7 +45,7 @@ function MiniPostCard({ post, myUserId, onLike, onDelete }: {
   return (
     <div style={{
       background: 'var(--bg-panel)', border: '1px solid var(--border)',
-      borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10,
+      borderRadius: 4, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10,
     }}>
       {post.title && (
         <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: 'var(--text-1)' }}>{post.title}</h3>
@@ -57,7 +57,7 @@ function MiniPostCard({ post, myUserId, onLike, onDelete }: {
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {post.tags.map((tag) => (
             <span key={tag} style={{
-              padding: '2px 8px', borderRadius: 20,
+              padding: '2px 8px', borderRadius: 4,
               background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: 11.5, fontWeight: 500,
             }}>{tag}</span>
           ))}
@@ -180,7 +180,7 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
               <a key={label} href={href} style={{
                 fontSize: 13, fontWeight: 400,
                 color: active ? 'var(--accent)' : 'var(--text-2)',
-                textDecoration: 'none', padding: '4px 10px', borderRadius: 6,
+                textDecoration: 'none', padding: '4px 10px', borderRadius: 4,
                 borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent',
                 transition: 'color 0.15s',
               }}
@@ -192,7 +192,7 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <a href="/friends" title="Friends" style={{
-            width: 34, height: 34, borderRadius: 8,
+            width: 34, height: 34, borderRadius: 4,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'var(--text-2)', textDecoration: 'none', transition: 'background 0.12s, color 0.12s',
           }}
@@ -225,7 +225,7 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
             {/* Profile header */}
             <div style={{
               background: 'var(--bg-panel)', border: '1px solid var(--border)',
-              borderRadius: 16, padding: '28px', marginBottom: 28,
+              borderRadius: 4, padding: '28px', marginBottom: 28,
               display: 'flex', alignItems: 'flex-start', gap: 20,
             }}>
               <Avatar name={profile.username ?? profile.userId} url={profile.avatarUrl} size={72} />
@@ -239,7 +239,7 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
                       onClick={handleFollow}
                       disabled={followPending}
                       style={{
-                        height: 34, padding: '0 16px', borderRadius: 8,
+                        height: 34, padding: '0 16px', borderRadius: 4,
                         background: profile.isFollowedByMe ? 'var(--bg-elevated)' : 'var(--accent)',
                         color: profile.isFollowedByMe ? 'var(--text-2)' : '#fff',
                         border: profile.isFollowedByMe ? '1px solid var(--border)' : 'none',

@@ -96,7 +96,7 @@ function AppInput({
       onMouseOut={onMouseOut}
       style={{
         width: '100%', height: 38, padding: '0 12px',
-        borderRadius: 8, border: '1px solid var(--border)',
+        borderRadius: 4, border: '1px solid var(--border)',
         background: 'var(--bg-elevated)', color: 'var(--text-1)',
         fontSize: 13, fontFamily: 'inherit',
         boxSizing: 'border-box',
@@ -124,7 +124,7 @@ function PrimaryBtn({
         background: disabled || loading ? 'var(--bg-elevated)' : 'var(--accent)',
         color: disabled || loading ? 'var(--text-3)' : '#fff',
         border: disabled || loading ? '1px solid var(--border)' : 'none',
-        borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+        borderRadius: 4, fontSize: 12.5, fontWeight: 600,
         cursor: disabled || loading ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit', transition: 'background 0.13s',
         display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -161,7 +161,7 @@ function GhostBtn({
         background: 'var(--bg-elevated)',
         color: danger ? '#ef4444' : 'var(--text-2)',
         border: `1px solid ${danger ? 'rgba(239,68,68,0.35)' : 'var(--border)'}`,
-        borderRadius: 8, fontSize: 12.5, fontWeight: 500,
+        borderRadius: 4, fontSize: 12.5, fontWeight: 500,
         cursor: disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit', transition: 'background 0.13s, color 0.13s',
         display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -218,7 +218,7 @@ function PasswordInput({ value, onChange, placeholder, disabled }: {
         className="app-input"
         style={{
           width: '100%', height: 38, padding: '0 38px 0 12px',
-          borderRadius: 8, border: '1px solid var(--border)',
+          borderRadius: 4, border: '1px solid var(--border)',
           background: 'var(--bg-elevated)', color: 'var(--text-1)',
           fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box',
           opacity: disabled ? 0.5 : 1,
@@ -250,7 +250,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       aria-checked={on}
       role="switch"
       style={{
-        width: 40, height: 22, borderRadius: 11, padding: 2,
+        width: 40, height: 22, borderRadius: 4, padding: 2,
         background: on ? 'var(--accent)' : 'var(--border-strong)',
         border: 'none', cursor: 'pointer', position: 'relative',
         transition: 'background 0.2s', flexShrink: 0,
@@ -261,7 +261,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
         background: '#fff',
         transform: on ? 'translateX(18px)' : 'translateX(0)',
         transition: 'transform 0.2s',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+        
       }} />
     </button>
   );
@@ -284,7 +284,7 @@ function Chip({ active, onClick, children }: {
       style={{
         flex: 1, height: 34,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        borderRadius: 8,
+        borderRadius: 4,
         background: active ? 'var(--accent-muted)' : 'var(--bg-elevated)',
         border: `1.5px solid ${active ? 'rgba(37,99,235,0.35)' : 'var(--border)'}`,
         color: active ? 'var(--accent-hover)' : 'var(--text-2)',
@@ -336,8 +336,8 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, loading 
       <div style={{
         width: '100%', maxWidth: 400,
         background: 'var(--bg-panel)', border: '1px solid var(--border)',
-        borderRadius: 14, padding: 24,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        borderRadius: 4, padding: 24,
+        
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <AlertTriangle size={18} style={{ color: '#ef4444', flexShrink: 0 }} />
@@ -352,7 +352,7 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, loading 
             style={{
               height: 36, padding: '0 16px',
               background: '#ef4444', color: '#fff',
-              border: 'none', borderRadius: 8,
+              border: 'none', borderRadius: 4,
               fontSize: 12.5, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
               fontFamily: 'inherit', opacity: loading ? 0.7 : 1,
               display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -537,7 +537,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
           <PasswordInput value={curPwd} onChange={setCurPwd} placeholder={t('set_acc_current_pw')} />
           <PasswordInput value={newPwd} onChange={setNewPwd} placeholder={t('set_acc_new_pw')} />
           <div>
-            <div style={{ border: `1px solid ${cfmPwd && cfmPwd !== newPwd ? '#ef4444' : 'var(--border)'}`, borderRadius: 8 }}>
+            <div style={{ border: `1px solid ${cfmPwd && cfmPwd !== newPwd ? '#ef4444' : 'var(--border)'}`, borderRadius: 4 }}>
               <PasswordInput value={cfmPwd} onChange={setCfmPwd} placeholder={t('set_acc_confirm_pw')} />
             </div>
             {cfmPwd && cfmPwd !== newPwd && (
@@ -622,11 +622,11 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
           onClick={() => inputRef.current?.click()}
           title="Pick color"
           style={{
-            width: 38, height: 38, borderRadius: 9,
+            width: 38, height: 38, borderRadius: 4,
             background: value,
             border: '2px solid var(--border-strong)',
             cursor: 'pointer', flexShrink: 0,
-            boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.15)',
+            
             transition: 'box-shadow 0.15s',
           }}
           onMouseOver={(e) => { e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.15), 0 0 0 3px var(--accent-muted)'; }}
@@ -651,7 +651,7 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
           title="Reset to default"
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
-            padding: '4px 10px', borderRadius: 7,
+            padding: '4px 10px', borderRadius: 4,
             background: 'var(--bg-elevated)', border: '1px solid var(--border)',
             color: 'var(--text-3)', fontSize: 11.5, fontWeight: 500,
             cursor: 'pointer', fontFamily: 'inherit',
@@ -947,7 +947,7 @@ function StudySection() {
         <FieldLabel>{t('set_study_streak')}</FieldLabel>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 14,
-          background: 'var(--bg-elevated)', borderRadius: 12,
+          background: 'var(--bg-elevated)', borderRadius: 4,
           padding: '16px 20px', border: '1px solid var(--border)',
         }}>
           <div style={{ fontSize: 36 }}>🔥</div>
@@ -958,7 +958,7 @@ function StudySection() {
             </p>
           </div>
           {streak >= 7 && (
-            <span style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: 12, fontWeight: 600 }}>
+            <span style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 4, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: 12, fontWeight: 600 }}>
               🎯 {streak}+ {t('set_study_days')}!
             </span>
           )}
@@ -979,8 +979,8 @@ function StudySection() {
           </span>
           <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{t('set_study_goal_label')}: {goal}h</span>
         </div>
-        <div style={{ height: 10, borderRadius: 6, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${goalProgress * 100}%`, background: goalProgress >= 1 ? '#22c55e' : 'var(--accent)', borderRadius: 6, transition: 'width 0.4s ease' }} />
+        <div style={{ height: 10, borderRadius: 4, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${goalProgress * 100}%`, background: goalProgress >= 1 ? '#22c55e' : 'var(--accent)', borderRadius: 4, transition: 'width 0.4s ease' }} />
         </div>
         {goalProgress >= 1 && (
           <p style={{ margin: '6px 0 0', fontSize: 12, color: '#22c55e', fontWeight: 500 }}>
@@ -998,7 +998,7 @@ function StudySection() {
               key={h}
               onClick={() => setGoal(h)}
               style={{
-                height: 36, padding: '0 16px', borderRadius: 8,
+                height: 36, padding: '0 16px', borderRadius: 4,
                 background: goal === h ? 'var(--accent)' : 'var(--bg-elevated)',
                 color: goal === h ? '#fff' : 'var(--text-2)',
                 border: `1px solid ${goal === h ? 'var(--accent)' : 'var(--border)'}`,
@@ -1010,7 +1010,7 @@ function StudySection() {
           <button
             onClick={() => setGoal(5)}
             style={{
-              height: 36, padding: '0 16px', borderRadius: 8,
+              height: 36, padding: '0 16px', borderRadius: 4,
               background: goal >= 5 ? 'var(--accent)' : 'var(--bg-elevated)',
               color: goal >= 5 ? '#fff' : 'var(--text-2)',
               border: `1px solid ${goal >= 5 ? 'var(--accent)' : 'var(--border)'}`,
@@ -1071,7 +1071,7 @@ function PrivacySection() {
               disabled={loading}
               style={{
                 display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 16px', borderRadius: 10, textAlign: 'left',
+                padding: '12px 16px', borderRadius: 4, textAlign: 'left',
                 background: visibility === value ? 'var(--accent-muted)' : 'var(--bg-elevated)',
                 border: `1.5px solid ${visibility === value ? 'var(--accent)' : 'var(--border)'}`,
                 cursor: 'pointer', fontFamily: 'inherit',
@@ -1290,7 +1290,7 @@ function DataSection() {
             { label: t('set_data_drawings'),  key: 'drawings' },
           ] as const).map(({ label, key }) => (
             <div key={key} style={{
-              padding: '12px 14px', borderRadius: 10,
+              padding: '12px 14px', borderRadius: 4,
               background: 'var(--bg-elevated)', border: '1px solid var(--border)',
               textAlign: 'center',
             }}>
@@ -1454,7 +1454,7 @@ export default function SettingsPage() {
               style={{
                 width: '100%', height: 34,
                 display: 'flex', alignItems: 'center', gap: 9,
-                borderRadius: 7, padding: '0 10px',
+                borderRadius: 4, padding: '0 10px',
                 background: active === id ? 'var(--bg-active)' : 'transparent',
                 border: `1px solid ${active === id ? 'var(--border-strong)' : 'transparent'}`,
                 color: active === id ? 'var(--text-1)' : 'var(--text-2)',

@@ -105,7 +105,7 @@ function ToolBtn({
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: 30, padding: '0 9px', gap: 5,
-        borderRadius: 6, fontSize: 12, fontWeight: 500,
+        borderRadius: 4, fontSize: 12, fontWeight: 500,
         background: active ? 'var(--accent)' : 'var(--bg-elevated)',
         color: active ? '#fff' : 'var(--text-2)',
         border: `1px solid ${active ? 'transparent' : 'var(--border)'}`,
@@ -136,7 +136,7 @@ function IconBtn({
       title={title}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        width: 30, height: 30, borderRadius: 6,
+        width: 30, height: 30, borderRadius: 4,
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border)',
         color: disabled ? 'var(--text-3)' : 'var(--text-2)',
@@ -553,7 +553,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         <button
           onClick={() => router.replace('/workspace')}
           style={{
-            marginTop: 8, padding: '8px 20px', borderRadius: 8, fontSize: 13,
+            marginTop: 8, padding: '8px 20px', borderRadius: 4, fontSize: 13,
             background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer',
           }}
         >
@@ -627,7 +627,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           title="Invite a friend"
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
-            padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            padding: '4px 11px', borderRadius: 4, fontSize: 12, fontWeight: 500,
             background: 'var(--bg-elevated)', color: 'var(--text-2)',
             border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.15s',
           }}
@@ -642,7 +642,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           title="Copy room link"
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
-            padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            padding: '4px 11px', borderRadius: 4, fontSize: 12, fontWeight: 500,
             background: copied ? 'var(--green-muted, #14532d22)' : 'var(--bg-elevated)',
             color: copied ? 'var(--green, #4ade80)' : 'var(--text-2)',
             border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.15s',
@@ -656,7 +656,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         <button
           onClick={() => { try { localStorage.removeItem('activeRoom'); } catch { /* */ } router.replace('/workspace'); }}
           style={{
-            padding: '4px 11px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            padding: '4px 11px', borderRadius: 4, fontSize: 12, fontWeight: 500,
             background: 'rgba(239,68,68,0.12)',
             color: '#ef4444',
             border: '1px solid rgba(239,68,68,0.35)',
@@ -783,7 +783,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             <Minus size={12} />
           </IconBtn>
           <span style={{
-            fontSize: 11.5, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums',
+            fontSize: 11.5, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
             minWidth: 36, textAlign: 'center', flexShrink: 0,
           }}>
             {Math.round(zoom * 100)}%
@@ -813,7 +813,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               height: 30, padding: '0 9px',
-              borderRadius: 6, fontSize: 12, fontWeight: 500,
+              borderRadius: 4, fontSize: 12, fontWeight: 500,
               background: blankMenuOpen ? 'var(--bg-hover)' : 'var(--bg-elevated)',
               color: 'var(--text-2)',
               border: '1px solid var(--border)',
@@ -832,9 +832,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             <div style={{
               position: 'absolute', top: '100%', left: 0, marginTop: 4,
               background: 'var(--bg-panel)', border: '1px solid var(--border)',
-              borderRadius: 9, padding: 10,
-              boxShadow: '0 8px 28px rgba(0,0,0,0.45)',
-              zIndex: 200,
+              borderRadius: 4, padding: 10,
+                            zIndex: 200,
             }}>
               <p style={{
                 fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
@@ -850,7 +849,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                     title={`Add ${label} blank page`}
                     style={{
                       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-                      border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px',
+                      border: '1px solid var(--border)', borderRadius: 4, padding: '5px 6px',
                       cursor: 'pointer', background: 'transparent', fontFamily: 'inherit',
                       minWidth: 60, transition: 'background 0.13s, border-color 0.13s',
                     }}
@@ -948,7 +947,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           disabled={virtualIndex <= 0}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)',
+            width: 30, height: 30, borderRadius: 4, border: '1px solid var(--border)',
             background: 'var(--bg-elevated)',
             color: virtualIndex <= 0 ? 'var(--text-3)' : 'var(--text-2)',
             cursor: virtualIndex <= 0 ? 'not-allowed' : 'pointer',
@@ -964,7 +963,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           disabled={virtualIndex >= virtualSequence.length - 1}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 30, height: 30, borderRadius: 7, border: '1px solid var(--border)',
+            width: 30, height: 30, borderRadius: 4, border: '1px solid var(--border)',
             background: 'var(--bg-elevated)',
             color: virtualIndex >= virtualSequence.length - 1 ? 'var(--text-3)' : 'var(--text-2)',
             cursor: virtualIndex >= virtualSequence.length - 1 ? 'not-allowed' : 'pointer',
@@ -990,9 +989,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             style={{
               width: '100%', maxWidth: 400,
               background: 'var(--bg-panel)', border: '1px solid var(--border)',
-              borderRadius: 14, overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-            }}
+              borderRadius: 4, overflow: 'hidden',
+                          }}
           >
             {/* Modal header */}
             <div style={{
@@ -1046,7 +1044,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                         onClick={() => handleInviteFriend(f.userId)}
                         disabled={sent}
                         style={{
-                          height: 28, padding: '0 12px', borderRadius: 7,
+                          height: 28, padding: '0 12px', borderRadius: 4,
                           background: sent ? 'var(--bg-elevated)' : 'var(--accent)',
                           color: sent ? 'var(--text-3)' : '#fff',
                           border: sent ? '1px solid var(--border)' : 'none',
