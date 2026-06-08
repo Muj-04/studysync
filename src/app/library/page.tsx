@@ -15,6 +15,7 @@ import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -59,6 +60,7 @@ const PRESET_TAGS = ['Math', 'CS', 'Physics', 'Biology', 'Chemistry', 'History',
 function DeleteModal({ doc, onConfirm, onCancel }: {
   doc: LibraryDocument; onConfirm: () => void; onCancel: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 500,
@@ -70,13 +72,13 @@ function DeleteModal({ doc, onConfirm, onCancel }: {
         borderRadius: 14, padding: '28px 28px 24px', width: 360,
         boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
       }}>
-        <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Delete document?</h3>
+        <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{t('lib_delete_title')}</h3>
         <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>
-          <strong style={{ color: 'var(--text-1)' }}>{doc.name}</strong> and all its notes, drawings, bookmarks, and voice recordings will be permanently deleted.
+          <strong style={{ color: 'var(--text-1)' }}>{doc.name}</strong> {t('lib_delete_body')}
         </p>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{ height: 34, padding: '0 16px', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-2)', border: '1px solid var(--border)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-          <button onClick={onConfirm} style={{ height: 34, padding: '0 16px', borderRadius: 8, background: '#ef4444', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+          <button onClick={onCancel} style={{ height: 34, padding: '0 16px', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-2)', border: '1px solid var(--border)', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit' }}>{t('common_cancel')}</button>
+          <button onClick={onConfirm} style={{ height: 34, padding: '0 16px', borderRadius: 8, background: '#ef4444', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{t('lib_delete_btn')}</button>
         </div>
       </div>
     </div>
@@ -91,6 +93,7 @@ function TagEditor({ docId, currentTags, allTags, onAdd, onRemove, onClose }: {
   onRemove: (docId: string, tag: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const [input, setInput] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
@@ -103,7 +106,7 @@ function TagEditor({ docId, currentTags, allTags, onAdd, onRemove, onClose }: {
   }, [onClose]);
 
   const suggestions = [...new Set([...PRESET_TAGS, ...allTags])]
-    .filter((t) => !currentTags.includes(t) && t.toLowerCase().includes(input.toLowerCase()));
+    .filter((tag) => !currentTags.includes(tag) && tag.toLowerCase().includes(input.toLowerCase()));
 
   const handleAdd = (tag: string) => {
     const trimmed = tag.trim();
@@ -119,17 +122,16 @@ function TagEditor({ docId, currentTags, allTags, onAdd, onRemove, onClose }: {
       borderRadius: 10, padding: '12px', width: 240, marginTop: 4,
       boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
     }}>
-      {/* Current tags */}
       {currentTags.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
-          {currentTags.map((t) => (
-            <span key={t} style={{
+          {currentTags.map((tag) => (
+            <span key={tag} style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               padding: '2px 7px', borderRadius: 20,
               background: 'var(--accent)', color: '#fff', fontSize: 11.5, fontWeight: 500,
             }}>
-              {t}
-              <button onClick={() => onRemove(docId, t)} style={{
+              {tag}
+              <button onClick={() => onRemove(docId, tag)} style={{
                 background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 0,
                 display: 'flex', fontSize: 10, lineHeight: 1,
               }}>×</button>
@@ -137,13 +139,12 @@ function TagEditor({ docId, currentTags, allTags, onAdd, onRemove, onClose }: {
           ))}
         </div>
       )}
-      {/* Input */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(input); }}
-          placeholder="Add tag…"
+          placeholder={t('lib_add_tag_placeholder')}
           style={{
             flex: 1, height: 28, padding: '0 8px',
             background: 'var(--bg-elevated)', border: '1px solid var(--border)',
@@ -158,7 +159,6 @@ function TagEditor({ docId, currentTags, allTags, onAdd, onRemove, onClose }: {
           <Plus size={12} />
         </button>
       </div>
-      {/* Suggestions */}
       {suggestions.slice(0, 6).map((s) => (
         <button key={s} onClick={() => handleAdd(s)} style={{
           display: 'block', width: '100%', textAlign: 'left', padding: '5px 8px',
@@ -188,6 +188,7 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
   onRemoveTag: (docId: string, tag: string) => void;
   onToggleFavorite: (docId: string) => void;
 }) {
+  const { t } = useLanguage();
   const [hover, setHover] = useState(false);
   const [showTagEditor, setShowTagEditor] = useState(false);
 
@@ -203,7 +204,6 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
         position: 'relative', display: 'flex', flexDirection: 'column', gap: 10,
       }}
     >
-      {/* Icon + name row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }} onClick={() => onOpen(doc)}>
         <div style={{
           width: 40, height: 40, borderRadius: 10, flexShrink: 0,
@@ -217,18 +217,17 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
             {doc.name}
           </p>
           <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>
-            Last opened {timeAgo(doc.updatedAt)}{doc.pageCount ? ` · ${doc.pageCount} pages` : ''}
+            {t('lib_last_opened')} {timeAgo(doc.updatedAt)}{doc.pageCount ? ` · ${doc.pageCount} ${t('lib_pages')}` : ''}
           </p>
         </div>
       </div>
 
-      {/* Tags */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, position: 'relative' }}>
-        {tags.map((t) => (
-          <span key={t} style={{
+        {tags.map((tag) => (
+          <span key={tag} style={{
             padding: '2px 8px', borderRadius: 20,
             background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: 11.5, fontWeight: 500,
-          }}>{t}</span>
+          }}>{tag}</span>
         ))}
         <button
           onClick={(e) => { e.stopPropagation(); setShowTagEditor((v) => !v); }}
@@ -240,7 +239,7 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
           onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--accent)', color: 'var(--accent)' })}
           onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', color: 'var(--text-3)' })}
         >
-          <Tag size={10} /> {tags.length === 0 ? 'Add tag' : '+'}
+          <Tag size={10} /> {tags.length === 0 ? t('lib_add_tag_btn') : '+'}
         </button>
         {showTagEditor && (
           <TagEditor
@@ -251,7 +250,6 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
         )}
       </div>
 
-      {/* Stats */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         {studySeconds > 0 && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--accent)', fontWeight: 500 }}>
@@ -260,29 +258,28 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
         )}
         {doc.voiceNoteCount > 0 && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--text-3)' }}>
-            <Mic size={11} /> {doc.voiceNoteCount} recording{doc.voiceNoteCount !== 1 ? 's' : ''}
+            <Mic size={11} /> {doc.voiceNoteCount} {doc.voiceNoteCount !== 1 ? t('lib_recordings') : t('lib_recording')}
           </span>
         )}
         {doc.drawingCount > 0 && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--text-3)' }}>
-            <PenTool size={11} /> {doc.drawingCount} drawing{doc.drawingCount !== 1 ? 's' : ''}
+            <PenTool size={11} /> {doc.drawingCount} {doc.drawingCount !== 1 ? t('lib_drawings') : t('lib_drawing')}
           </span>
         )}
         {doc.textNoteCount > 0 && (
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--text-3)' }}>
-            <StickyNote size={11} /> {doc.textNoteCount} note{doc.textNoteCount !== 1 ? 's' : ''}
+            <StickyNote size={11} /> {doc.textNoteCount} {doc.textNoteCount !== 1 ? t('lib_notes') : t('lib_note')}
           </span>
         )}
         {studySeconds === 0 && doc.voiceNoteCount === 0 && doc.drawingCount === 0 && doc.textNoteCount === 0 && (
-          <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>No annotations yet</span>
+          <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{t('lib_no_annotations')}</span>
         )}
       </div>
 
-      {/* Action buttons */}
       <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
         <button
           onClick={(e) => { e.stopPropagation(); onToggleFavorite(doc.id); }}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          title={isFavorite ? t('lib_fav_remove') : t('lib_fav_add')}
           style={{
             width: 28, height: 28, borderRadius: 6, background: 'transparent', border: 'none',
             color: isFavorite ? '#f59e0b' : hover ? 'var(--text-3)' : 'transparent',
@@ -296,7 +293,7 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(doc); }}
-          title="Delete document"
+          title={t('lib_delete_tooltip')}
           style={{
             width: 28, height: 28, borderRadius: 6, background: 'transparent', border: 'none',
             color: hover ? '#ef4444' : 'transparent',
@@ -314,8 +311,9 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
 // ── Re-open modal ─────────────────────────────────────────────────────────────
 
 function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => void }) {
+  const { t } = useLanguage();
   const fileRef = useRef<HTMLInputElement>(null);
-  const handleFile = (file: File) => {
+  const handleFile = (_file: File) => {
     sessionStorage.setItem('reopen_doc_id', doc.id);
     sessionStorage.setItem('reopen_doc_name', doc.name);
     window.location.href = '/workspace';
@@ -324,7 +322,7 @@ function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => vo
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, padding: '28px', width: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Open Document</h3>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{t('lib_open_doc')}</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}><X size={16} /></button>
         </div>
         <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -332,16 +330,16 @@ function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => vo
           <div>
             <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{doc.name}</p>
             <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>
-              {doc.voiceNoteCount} recording{doc.voiceNoteCount !== 1 ? 's' : ''} · {doc.drawingCount} drawing{doc.drawingCount !== 1 ? 's' : ''} · {doc.textNoteCount} note{doc.textNoteCount !== 1 ? 's' : ''}
+              {doc.voiceNoteCount} {doc.voiceNoteCount !== 1 ? t('lib_recordings') : t('lib_recording')} · {doc.drawingCount} {doc.drawingCount !== 1 ? t('lib_drawings') : t('lib_drawing')} · {doc.textNoteCount} {doc.textNoteCount !== 1 ? t('lib_notes') : t('lib_note')}
             </p>
           </div>
         </div>
         <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.55 }}>
-          Upload the file again to restore all your notes, drawings, bookmarks, and voice recordings.
+          {t('lib_upload_restore')}
         </p>
         <input ref={fileRef} type="file" accept=".pdf,.pptx" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
         <button onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 42, borderRadius: 10, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Upload size={15} /> Upload File
+          <Upload size={15} /> {t('lib_upload_file')}
         </button>
       </div>
     </div>
@@ -351,6 +349,7 @@ function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => vo
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LibraryPage() {
+  const { t } = useLanguage();
   const [docs, setDocs] = useState<LibraryDocument[]>([]);
   const [tagsMap, setTagsMap] = useState<Record<string, string[]>>({});
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -425,7 +424,7 @@ export default function LibraryPage() {
 
   const handleRemoveTag = useCallback(async (docId: string, tag: string) => {
     await removeDocumentTag(docId, tag);
-    setTagsMap((prev) => ({ ...prev, [docId]: (prev[docId] ?? []).filter((t) => t !== tag) }));
+    setTagsMap((prev) => ({ ...prev, [docId]: (prev[docId] ?? []).filter((item) => item !== tag) }));
   }, []);
 
   const handleToggleFavorite = useCallback(async (docId: string) => {
@@ -437,7 +436,6 @@ export default function LibraryPage() {
     });
   }, []);
 
-  // Used tag counts for filter chips
   const usedTags = [...new Set(Object.values(tagsMap).flat())].sort();
 
   const filtered = sortDocs(
@@ -451,11 +449,18 @@ export default function LibraryPage() {
   );
 
   const navLinks = [
-    { label: 'Dashboard', href: '/dashboard', active: false },
-    { label: 'Workspace', href: '/workspace', active: false },
-    { label: 'Library', href: '/library', active: true },
-    { label: 'Community', href: '/community', active: false },
-    { label: 'Settings', href: '/settings', active: false },
+    { label: t('nav_dashboard'), href: '/dashboard', active: false },
+    { label: t('nav_workspace'), href: '/workspace', active: false },
+    { label: t('nav_library'), href: '/library', active: true },
+    { label: t('nav_community'), href: '/community', active: false },
+    { label: t('nav_settings'), href: '/settings', active: false },
+  ];
+
+  const sortOptions: [SortKey, string][] = [
+    ['recent', t('lib_sort_recent')],
+    ['name', t('lib_sort_az')],
+    ['notes', t('lib_sort_notes')],
+    ['study', t('lib_sort_time')],
   ];
 
   return (
@@ -465,7 +470,7 @@ export default function LibraryPage() {
           <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-1)' }}>StudySync</span>
           <nav style={{ display: 'flex', gap: 2 }}>
             {navLinks.map(({ label, href, active }) => (
-              <a key={label} href={href} style={{ fontSize: 13, fontWeight: 400, color: active ? 'var(--accent)' : 'var(--text-2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 6, borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent', transition: 'color 0.15s' }}
+              <a key={href} href={href} style={{ fontSize: 13, fontWeight: 400, color: active ? 'var(--accent)' : 'var(--text-2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 6, borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent', transition: 'color 0.15s' }}
                 onMouseOver={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
                 onMouseOut={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-2)'; }}
               >{label}</a>
@@ -473,7 +478,7 @@ export default function LibraryPage() {
           </nav>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <a href="/friends" title="Friends" style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', textDecoration: 'none', transition: 'background 0.12s, color 0.12s' }}
+          <a href="/friends" title={t('nav_friends')} style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', textDecoration: 'none', transition: 'background 0.12s, color 0.12s' }}
             onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
             onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
           ><Users size={16} /></a>
@@ -484,19 +489,17 @@ export default function LibraryPage() {
 
       <main style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 60px' }}>
 
-        {/* Page title + controls */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: 'var(--text-1)' }}>
               <BookOpen size={20} style={{ verticalAlign: 'middle', marginRight: 8, color: 'var(--accent)' }} />
-              My Library
+              {t('lib_title')}
             </h1>
             <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)' }}>
-              {docs.length} document{docs.length !== 1 ? 's' : ''} · all your notes and recordings are saved
+              {docs.length} {docs.length !== 1 ? t('lib_documents') : t('lib_document')} {t('lib_saved_hint')}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Favorites toggle */}
             <button
               onClick={() => setFilterFavorites((v) => !v)}
               style={{
@@ -508,25 +511,22 @@ export default function LibraryPage() {
                 display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.12s',
               }}
             >
-              <Star size={13} fill={filterFavorites ? 'currentColor' : 'none'} /> Favorites
+              <Star size={13} fill={filterFavorites ? 'currentColor' : 'none'} /> {t('lib_favorites')}
             </button>
-            {/* Sort */}
             <div style={{ display: 'flex', gap: 2, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 8, padding: 3 }}>
-              {([['recent', 'Recent'], ['name', 'A–Z'], ['notes', 'Most notes'], ['study', 'Study time']] as [SortKey, string][]).map(([key, label]) => (
+              {sortOptions.map(([key, label]) => (
                 <button key={key} onClick={() => setSort(key)} style={{ height: 28, padding: '0 10px', borderRadius: 6, background: sort === key ? 'var(--accent)' : 'transparent', color: sort === key ? '#fff' : 'var(--text-2)', border: 'none', fontSize: 12, fontWeight: sort === key ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 0.12s, color 0.12s' }}>
                   {label}
                 </button>
               ))}
             </div>
-            {/* Search */}
             <div style={{ position: 'relative' }}>
               <Search size={13} style={{ position: 'absolute', left: 9, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search documents…" style={{ height: 34, paddingLeft: 30, paddingRight: 12, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', width: 200 }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('lib_search_placeholder')} style={{ height: 34, paddingLeft: 30, paddingRight: 12, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', width: 200 }} />
             </div>
           </div>
         </div>
 
-        {/* Tag filter chips */}
         {usedTags.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
             {usedTags.map((tag) => (
@@ -541,29 +541,29 @@ export default function LibraryPage() {
             ))}
             {filterTag && (
               <button onClick={() => setFilterTag(null)} style={{ padding: '4px 10px', borderRadius: 20, background: 'none', border: 'none', fontSize: 12, color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                Clear ×
+                {t('lib_clear_filters')} ×
               </button>
             )}
           </div>
         )}
 
-        {loading && <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)', fontSize: 13 }}>Loading library…</div>}
+        {loading && <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)', fontSize: 13 }}>{t('lib_loading')}</div>}
 
         {!loading && filtered.length === 0 && (
           <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-3)' }}>
             {search || filterTag || filterFavorites ? (
               <>
                 <Search size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
-                <p style={{ fontSize: 14, margin: 0 }}>No documents match your filter</p>
-                <button onClick={() => { setSearch(''); setFilterTag(null); setFilterFavorites(false); }} style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>Clear filters</button>
+                <p style={{ fontSize: 14, margin: 0 }}>{t('lib_empty_filter')}</p>
+                <button onClick={() => { setSearch(''); setFilterTag(null); setFilterFavorites(false); }} style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>{t('lib_clear_filters')}</button>
               </>
             ) : (
               <>
                 <BookOpen size={36} style={{ opacity: 0.25, marginBottom: 12 }} />
-                <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px', color: 'var(--text-2)' }}>Your library is empty</p>
-                <p style={{ fontSize: 13, margin: 0 }}>Open a PDF or PPTX in the Workspace — it will appear here automatically.</p>
+                <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px', color: 'var(--text-2)' }}>{t('lib_empty_title')}</p>
+                <p style={{ fontSize: 13, margin: 0 }}>{t('lib_empty_desc')}</p>
                 <a href="/workspace" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 20, height: 40, padding: '0 20px', borderRadius: 10, background: 'var(--accent)', color: '#fff', textDecoration: 'none', fontSize: 13.5, fontWeight: 600 }}>
-                  Go to Workspace
+                  {t('lib_go_workspace')}
                 </a>
               </>
             )}
