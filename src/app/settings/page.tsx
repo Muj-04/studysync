@@ -1247,6 +1247,8 @@ function DataSection() {
   const doClearDrawings = useCallback(async () => {
     setClearDrawState('loading');
     await deleteAllDrawingsForUser();
+    storageSet(KEYS.DRAWINGS, {});
+    storageSet(KEYS.PAGE_IMAGES, {});
     setClearDrawState('idle');
     refreshStats();
   }, [refreshStats]);
@@ -1254,6 +1256,7 @@ function DataSection() {
   const doClearNotes = useCallback(async () => {
     setClearNotesState('loading');
     await deleteAllVoiceNotesForUser();
+    storageSet(KEYS.VOICE_NOTES, []);
     setClearNotesState('idle');
     refreshStats();
   }, [refreshStats]);
