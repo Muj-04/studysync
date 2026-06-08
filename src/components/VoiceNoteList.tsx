@@ -72,7 +72,7 @@ function NoteItem({
   return (
     <div
       style={{
-        borderRadius: 7,
+        borderRadius: 4,
         background: isActive ? 'var(--bg-elevated)' : 'transparent',
         border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
         marginBottom: 2,
@@ -92,7 +92,7 @@ function NoteItem({
             flexShrink: 0,
             width: 26, height: 26,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 5,
+            borderRadius: 4,
             background: 'var(--bg-active)',
             border: '1px solid var(--border)',
             color: 'var(--text-1)',

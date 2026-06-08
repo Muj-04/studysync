@@ -101,7 +101,7 @@ export default function VoiceNotesSheet({
               <span style={{
                 fontSize: 11, fontWeight: 600,
                 color: 'var(--red)',
-                fontVariantNumeric: 'tabular-nums',
+                fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
               }}>
                 {Math.floor(recordingDuration / 60)}:{String(Math.floor(recordingDuration % 60)).padStart(2, '0')}
               </span>
@@ -114,7 +114,7 @@ export default function VoiceNotesSheet({
               background: 'var(--bg-elevated)',
               border: '1px solid var(--border)',
               color: 'var(--text-2)',
-              fontVariantNumeric: 'tabular-nums',
+              fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
             }}>
               {notes.length}
             </span>

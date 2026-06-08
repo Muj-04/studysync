@@ -203,13 +203,13 @@ export default function FriendsPage() {
   // ── Shared button styles ──────────────────────────────────────────────────
 
   const primaryBtnStyle: React.CSSProperties = {
-    height: 30, padding: '0 12px', borderRadius: 7, border: 'none',
+    height: 30, padding: '0 12px', borderRadius: 4, border: 'none',
     background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5,
     transition: 'background 0.12s', whiteSpace: 'nowrap', flexShrink: 0,
   };
   const ghostBtnStyle: React.CSSProperties = {
-    height: 30, padding: '0 12px', borderRadius: 7, border: '1px solid var(--border)',
+    height: 30, padding: '0 12px', borderRadius: 4, border: '1px solid var(--border)',
     background: 'var(--bg-elevated)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500,
     cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5,
     transition: 'background 0.12s, color 0.12s', whiteSpace: 'nowrap', flexShrink: 0,
@@ -423,7 +423,7 @@ export default function FriendsPage() {
             className="app-input"
             style={{
               width: '100%', height: 40, padding: '0 36px',
-              borderRadius: 10, border: '1px solid var(--border)',
+              borderRadius: 4, border: '1px solid var(--border)',
               background: 'var(--bg-elevated)', color: 'var(--text-1)',
               fontSize: 13.5, fontFamily: 'inherit', boxSizing: 'border-box',
             }}
@@ -445,7 +445,7 @@ export default function FriendsPage() {
         {/* Content area */}
         {query.trim() ? (
           /* ── Search results ── */
-          <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden' }}>
             <p style={{ margin: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', borderBottom: '1px solid var(--border-subtle)' }}>
               {t('fr_search_results')}
             </p>
@@ -476,9 +476,9 @@ export default function FriendsPage() {
                   }}
                 >
                   {tabId === 'friends' ? (
-                    <><Users size={13} /> {t('fr_tab_friends')} {friends.length > 0 && <span style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{friends.length}</span>}</>
+                    <><Users size={13} /> {t('fr_tab_friends')} {friends.length > 0 && <span style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{friends.length}</span>}</>
                   ) : (
-                    <><Clock size={13} /> {t('fr_tab_requests')} {requestCount > 0 && <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{requestCount}</span>}</>
+                    <><Clock size={13} /> {t('fr_tab_requests')} {requestCount > 0 && <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{requestCount}</span>}</>
                   )}
                 </button>
               ))}

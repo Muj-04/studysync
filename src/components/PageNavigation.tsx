@@ -44,7 +44,7 @@ function NavBtn({
       style={{
         width: 28, height: 28, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 6,
+        borderRadius: 4,
         background: 'transparent', border: '1px solid transparent',
         color: disabled ? 'var(--text-3)' : 'var(--text-2)',
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -82,7 +82,7 @@ function SmBtn({
       style={{
         width: 24, height: 24, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 5,
+        borderRadius: 4,
         background: 'transparent', border: '1px solid transparent',
         color: disabled ? 'var(--text-3)' : 'var(--text-2)',
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -162,7 +162,7 @@ export default function PageNavigation({
           style={{
             display: 'flex', alignItems: 'center', gap: 3,
             height: 26, padding: '0 7px',
-            borderRadius: 6,
+            borderRadius: 4,
             background: showBgPicker ? 'var(--bg-hover)' : 'transparent',
             border: '1px solid var(--border)',
             color: 'var(--text-2)',
@@ -190,9 +190,8 @@ export default function PageNavigation({
           <div style={{
             position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
             background: 'var(--bg-panel)', border: '1px solid var(--border)',
-            borderRadius: 9, padding: '10px',
-            boxShadow: '0 8px 28px rgba(0,0,0,0.5)',
-            zIndex: 100,
+            borderRadius: 4, padding: '10px',
+                        zIndex: 100,
           }}>
             <p style={{
               fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
@@ -208,7 +207,7 @@ export default function PageNavigation({
                   title={`Add ${label} blank page`}
                   style={{
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-                    border: '1px solid var(--border)', borderRadius: 6, padding: '5px 6px',
+                    border: '1px solid var(--border)', borderRadius: 4, padding: '5px 6px',
                     cursor: 'pointer', background: 'transparent', fontFamily: 'inherit',
                     minWidth: 60, transition: 'background 0.13s, border-color 0.13s',
                   }}
@@ -248,7 +247,7 @@ export default function PageNavigation({
           style={{
             width: 28, height: 28, flexShrink: 0,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 6, border: `1px solid ${isBookmarked ? 'rgba(251,191,36,0.5)' : 'transparent'}`,
+            borderRadius: 4, border: `1px solid ${isBookmarked ? 'rgba(251,191,36,0.5)' : 'transparent'}`,
             background: isBookmarked ? 'rgba(251,191,36,0.12)' : 'transparent',
             color: isBookmarked ? '#f59e0b' : 'var(--text-2)',
             cursor: 'pointer',
@@ -327,7 +326,7 @@ export default function PageNavigation({
               style={{
                 width: 26, height: 26, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 5, border: 'none', cursor: 'pointer',
+                borderRadius: 4, border: 'none', cursor: 'pointer',
                 background: viewMode === 'page' ? 'var(--accent-muted)' : 'transparent',
                 color: viewMode === 'page' ? 'var(--accent-hover)' : 'var(--text-3)',
                 transition: 'background 0.13s, color 0.13s',
@@ -352,7 +351,7 @@ export default function PageNavigation({
               style={{
                 width: 26, height: 26, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 5, border: 'none', cursor: 'pointer',
+                borderRadius: 4, border: 'none', cursor: 'pointer',
                 background: viewMode === 'scroll' ? 'var(--accent-muted)' : 'transparent',
                 color: viewMode === 'scroll' ? 'var(--accent-hover)' : 'var(--text-3)',
                 transition: 'background 0.13s, color 0.13s',
@@ -395,7 +394,7 @@ export default function PageNavigation({
           />
           <span style={{
             fontSize: 11, fontWeight: 500, minWidth: 30, textAlign: 'right',
-            color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums',
+            color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
           }}>
             {`${Math.round(zoom * 100)}%`}
           </span>
@@ -417,7 +416,7 @@ export default function PageNavigation({
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               height: 26, padding: '0 8px',
-              borderRadius: 6, flexShrink: 0,
+              borderRadius: 4, flexShrink: 0,
               background: isDrawing ? 'var(--accent-muted)' : 'transparent',
               border: `1px solid ${isDrawing ? 'rgba(37,99,235,.35)' : 'var(--border)'}`,
               color: isDrawing ? 'var(--accent-hover)' : 'var(--text-2)',
