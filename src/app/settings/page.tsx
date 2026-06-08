@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   User, Palette, Layout, Bell, Database,
   ChevronLeft, Sun, Moon, Check, Trash2, Download,
@@ -29,13 +30,13 @@ import type { UserAppSettings } from '@/lib/supabase/db';
 import { applyPreferences, ACCENT_PRESETS, FONT_STACKS } from '@/lib/preferences';
 
 const NAV = [
-  { id: 'account',    label: 'Account',        Icon: User },
-  { id: 'appearance', label: 'Appearance',      Icon: Palette },
-  { id: 'workspace',  label: 'Workspace',       Icon: Layout },
-  { id: 'study',      label: 'Study & Goals',   Icon: BookOpen },
-  { id: 'privacy',    label: 'Privacy',         Icon: Shield },
-  { id: 'notifications', label: 'Notifications', Icon: Bell },
-  { id: 'data',       label: 'Data & Storage',  Icon: Database },
+  { id: 'account',       tKey: 'set_nav_account',       Icon: User },
+  { id: 'appearance',    tKey: 'set_nav_appearance',    Icon: Palette },
+  { id: 'workspace',     tKey: 'set_nav_workspace',     Icon: Layout },
+  { id: 'study',         tKey: 'set_nav_study',         Icon: BookOpen },
+  { id: 'privacy',       tKey: 'set_nav_privacy',       Icon: Shield },
+  { id: 'notifications', tKey: 'set_nav_notifications', Icon: Bell },
+  { id: 'data',          tKey: 'set_nav_data',          Icon: Database },
 ] as const;
 
 type Section = typeof NAV[number]['id'];
@@ -376,6 +377,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
   avatarUrl?: string | null;
   onAvatarChange?: (url: string) => void;
 }) {
+  const { t } = useLanguage();
   const sb = createClient();
 
   const [name, setName] = useState(displayName);
@@ -461,11 +463,11 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
 
   return (
     <div>
-      <SectionTitle>Account</SectionTitle>
+      <SectionTitle>{t('set_acc_title')}</SectionTitle>
 
       {/* Profile picture */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Profile picture</FieldLabel>
+        <FieldLabel>{t('set_acc_photo')}</FieldLabel>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{
             width: 56, height: 56, borderRadius: '50%',
@@ -487,11 +489,11 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
               style={{ display: 'none' }}
             />
             <PrimaryBtn onClick={() => fileInputRef.current?.click()} loading={uploadSt === 'loading'}>
-              {uploadSt === 'loading' ? 'Uploading…' : 'Upload photo'}
+              {uploadSt === 'loading' ? t('set_acc_uploading') : t('set_acc_upload_photo')}
             </PrimaryBtn>
-            {uploadSt === 'ok' && <StatusMsg type="ok">Photo updated</StatusMsg>}
-            {uploadSt === 'err' && <StatusMsg type="err">Upload failed — try again</StatusMsg>}
-            <SubLabel>JPG, PNG, WebP, or GIF · Max 5 MB</SubLabel>
+            {uploadSt === 'ok' && <StatusMsg type="ok">{t('set_acc_photo_updated')}</StatusMsg>}
+            {uploadSt === 'err' && <StatusMsg type="err">{t('set_acc_upload_failed')}</StatusMsg>}
+            <SubLabel>{t('set_acc_photo_hint')}</SubLabel>
           </div>
         </div>
       </div>
@@ -500,14 +502,14 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
 
       {/* Display Name */}
       <div style={{ marginBottom: 20 }}>
-        <FieldLabel>Display name</FieldLabel>
+        <FieldLabel>{t('set_acc_name')}</FieldLabel>
         <div style={{ display: 'flex', gap: 8 }}>
-          <AppInput value={name} onChange={setName} placeholder="Your name" />
+          <AppInput value={name} onChange={setName} placeholder={t('set_acc_name_placeholder')} />
           <PrimaryBtn onClick={saveName} loading={nameSt === 'loading'} disabled={name.trim() === displayName}>
-            Save
+            {t('set_acc_save')}
           </PrimaryBtn>
         </div>
-        {nameSt === 'ok' && <StatusMsg type="ok">Name updated</StatusMsg>}
+        {nameSt === 'ok' && <StatusMsg type="ok">{t('set_acc_name_updated')}</StatusMsg>}
         {nameSt === 'err' && <StatusMsg type="err">{nameErr}</StatusMsg>}
       </div>
 
@@ -515,14 +517,14 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
 
       {/* Email */}
       <div style={{ marginBottom: 20 }}>
-        <FieldLabel>Email address</FieldLabel>
+        <FieldLabel>{t('set_acc_email')}</FieldLabel>
         <div style={{ display: 'flex', gap: 8 }}>
-          <AppInput value={email} onChange={setEmail} type="email" placeholder="your@email.com" />
+          <AppInput value={email} onChange={setEmail} type="email" placeholder={t('set_acc_email_placeholder')} />
           <PrimaryBtn onClick={saveEmail} loading={emailSt === 'loading'} disabled={email.trim() === userEmail}>
-            Save
+            {t('set_acc_save')}
           </PrimaryBtn>
         </div>
-        {emailSt === 'ok' && <StatusMsg type="ok">Confirmation sent to new address</StatusMsg>}
+        {emailSt === 'ok' && <StatusMsg type="ok">{t('set_acc_email_sent')}</StatusMsg>}
         {emailSt === 'err' && <StatusMsg type="err">{emailErr}</StatusMsg>}
       </div>
 
@@ -530,16 +532,16 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
 
       {/* Password */}
       <div>
-        <FieldLabel>Change password</FieldLabel>
+        <FieldLabel>{t('set_acc_change_pw')}</FieldLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360 }}>
-          <PasswordInput value={curPwd} onChange={setCurPwd} placeholder="Current password" />
-          <PasswordInput value={newPwd} onChange={setNewPwd} placeholder="New password (min 8 chars)" />
+          <PasswordInput value={curPwd} onChange={setCurPwd} placeholder={t('set_acc_current_pw')} />
+          <PasswordInput value={newPwd} onChange={setNewPwd} placeholder={t('set_acc_new_pw')} />
           <div>
             <div style={{ border: `1px solid ${cfmPwd && cfmPwd !== newPwd ? '#ef4444' : 'var(--border)'}`, borderRadius: 8 }}>
-              <PasswordInput value={cfmPwd} onChange={setCfmPwd} placeholder="Confirm new password" />
+              <PasswordInput value={cfmPwd} onChange={setCfmPwd} placeholder={t('set_acc_confirm_pw')} />
             </div>
             {cfmPwd && cfmPwd !== newPwd && (
-              <p style={{ margin: '4px 0 0', fontSize: 11.5, color: '#ef4444' }}>Passwords don't match</p>
+              <p style={{ margin: '4px 0 0', fontSize: 11.5, color: '#ef4444' }}>{t('set_acc_pw_mismatch')}</p>
             )}
           </div>
           <PrimaryBtn
@@ -547,9 +549,9 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
             loading={pwdSt === 'loading'}
             disabled={!curPwd || !newPwd || !cfmPwd || newPwd !== cfmPwd}
           >
-            Update password
+            {t('set_acc_update_pw')}
           </PrimaryBtn>
-          {pwdSt === 'ok' && <StatusMsg type="ok">Password updated</StatusMsg>}
+          {pwdSt === 'ok' && <StatusMsg type="ok">{t('set_acc_pw_updated')}</StatusMsg>}
           {pwdSt === 'err' && <StatusMsg type="err">{pwdErr}</StatusMsg>}
         </div>
       </div>
@@ -558,7 +560,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
 
       {/* Sign out */}
       <div style={{ marginBottom: 20 }}>
-        <FieldLabel>Session</FieldLabel>
+        <FieldLabel>{t('set_acc_session')}</FieldLabel>
         <GhostBtn
           onClick={async () => {
             await sb.auth.signOut();
@@ -566,28 +568,28 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
           }}
         >
           <LogOut size={13} />
-          Sign out
+          {t('set_acc_signout')}
         </GhostBtn>
-        <SubLabel>You'll be redirected to the login page.</SubLabel>
+        <SubLabel>{t('set_acc_signout_hint')}</SubLabel>
       </div>
 
       <Divider />
 
       {/* Delete account */}
       <div>
-        <FieldLabel>Danger zone</FieldLabel>
+        <FieldLabel>{t('set_acc_danger')}</FieldLabel>
         <GhostBtn danger onClick={() => setDeleteConfirm(true)}>
           <Trash2 size={13} />
-          Delete account
+          {t('set_acc_delete')}
         </GhostBtn>
-        <SubLabel>Permanently deletes your account and all associated data.</SubLabel>
+        <SubLabel>{t('set_acc_delete_hint')}</SubLabel>
       </div>
 
       {deleteConfirm && (
         <ConfirmModal
-          title="Delete your account?"
-          body="This will permanently delete your account, all documents, voice notes, drawings, and annotations. This action cannot be undone."
-          confirmLabel="Delete my account"
+          title={t('set_acc_delete_title')}
+          body={t('set_acc_delete_body')}
+          confirmLabel={t('set_acc_delete_btn')}
           onConfirm={handleDelete}
           onCancel={() => setDeleteConfirm(false)}
           loading={delLoading}
@@ -668,8 +670,8 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
 }
 
 function AppearanceSection() {
+  const { lang: language, setLang, t } = useLanguage();
   const [loading, setLoading] = useState(true);
-  const [language, setLanguage] = useState<'en' | 'ar'>('en');
 
   const [isDark, setIsDark] = useState(true);
   const [fontSize, setFontSize]     = useState<'small' | 'medium' | 'large'>('medium');
@@ -686,9 +688,7 @@ function AppearanceSection() {
   // Load from Supabase on mount
   useEffect(() => {
     getUserSettings().then((s) => {
-      setLanguage(s.language);
-      document.documentElement.classList.toggle('lang-ar', s.language === 'ar');
-      document.documentElement.setAttribute('lang', s.language);
+      setLang(s.language as 'en' | 'ar');
     });
     loadUserPreferences().then((prefs) => {
       const dark = (prefs?.theme ?? storageGet<string>(KEYS.THEME) ?? 'dark') !== 'light';
@@ -774,11 +774,9 @@ function AppearanceSection() {
   }, [defaultSidebar, save]);
 
   const handleLanguage = useCallback((lang: 'en' | 'ar') => {
-    setLanguage(lang);
-    document.documentElement.classList.toggle('lang-ar', lang === 'ar');
-    document.documentElement.setAttribute('lang', lang);
+    setLang(lang);
     saveUserSettings({ language: lang });
-  }, []);
+  }, [setLang]);
 
   if (loading) {
     return (
@@ -790,33 +788,33 @@ function AppearanceSection() {
 
   return (
     <div>
-      <SectionTitle>Appearance</SectionTitle>
+      <SectionTitle>{t('set_app_title')}</SectionTitle>
 
       {/* ── Language ── */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Language</FieldLabel>
+        <FieldLabel>{t('set_app_language')}</FieldLabel>
         <ChipRow>
           <Chip active={language === 'en'} onClick={() => handleLanguage('en')}>
-            <Globe2 size={13} /> English
+            <Globe2 size={13} /> {t('set_app_lang_en')}
           </Chip>
           <Chip active={language === 'ar'} onClick={() => handleLanguage('ar')}>
-            <Globe2 size={13} /> العربية (Arabic)
+            <Globe2 size={13} /> {t('set_app_lang_ar')}
           </Chip>
         </ChipRow>
-        <SubLabel>Arabic enables right-to-left layout across the app.</SubLabel>
+        <SubLabel>{t('set_app_lang_hint')}</SubLabel>
       </div>
 
       <Divider />
 
       {/* ── Theme ── */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Theme</FieldLabel>
+        <FieldLabel>{t('set_app_theme')}</FieldLabel>
         <ChipRow>
           <Chip active={!isDark} onClick={() => handleTheme(false)}>
-            <Sun size={13} /> Light
+            <Sun size={13} /> {t('set_app_light')}
           </Chip>
           <Chip active={isDark} onClick={() => handleTheme(true)}>
-            <Moon size={13} /> Dark
+            <Moon size={13} /> {t('set_app_dark')}
           </Chip>
         </ChipRow>
       </div>
@@ -824,22 +822,22 @@ function AppearanceSection() {
       {/* ── Background color ── */}
       <div style={{ marginBottom: 24 }}>
         <ColorPickerField
-          label="Background color"
+          label={t('set_app_bg_color')}
           value={bgColor}
           onChange={handleBgColor}
           onReset={handleBgReset}
-          sub="The main app background. Click the swatch to open the color picker."
+          sub={t('set_app_bg_hint')}
         />
       </div>
 
       {/* ── Sidebar color ── */}
       <div style={{ marginBottom: 24 }}>
         <ColorPickerField
-          label="Panel / sidebar color"
+          label={t('set_app_panel_color')}
           value={sidebarColor}
           onChange={handleSidebarColor}
           onReset={handleSidebarReset}
-          sub="Used for sidebars, headers, and floating panels."
+          sub={t('set_app_panel_hint')}
         />
       </div>
 
@@ -847,43 +845,35 @@ function AppearanceSection() {
 
       {/* ── Font size ── */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Font size</FieldLabel>
+        <FieldLabel>{t('set_app_font_size')}</FieldLabel>
         <ChipRow>
-          {(['small', 'medium', 'large'] as const).map((s) => (
-            <Chip key={s} active={fontSize === s} onClick={() => handleFontSize(s)}>
-              {s.charAt(0).toUpperCase() + s.slice(1)}
-            </Chip>
-          ))}
+          <Chip active={fontSize === 'small'} onClick={() => handleFontSize('small')}>{t('set_app_small')}</Chip>
+          <Chip active={fontSize === 'medium'} onClick={() => handleFontSize('medium')}>{t('set_app_medium')}</Chip>
+          <Chip active={fontSize === 'large'} onClick={() => handleFontSize('large')}>{t('set_app_large')}</Chip>
         </ChipRow>
-        <SubLabel>Adjusts text size across the app where possible.</SubLabel>
+        <SubLabel>{t('set_app_font_size_hint')}</SubLabel>
       </div>
 
       {/* ── Font family ── */}
       <div style={{ marginBottom: 0 }}>
-        <FieldLabel>Font family</FieldLabel>
+        <FieldLabel>{t('set_app_font_family')}</FieldLabel>
         <ChipRow>
           {(Object.keys(FONT_STACKS) as ('default' | 'serif' | 'mono')[]).map((ff) => (
             <Chip key={ff} active={fontFamily === ff} onClick={() => handleFontFamily(ff)}>
-              <span style={{
-                fontFamily: FONT_STACKS[ff],
-                fontSize: ff === 'mono' ? 11 : 13,
-              }}>
-                {ff === 'default' ? 'Default' : ff === 'serif' ? 'Serif' : 'Mono'}
+              <span style={{ fontFamily: FONT_STACKS[ff], fontSize: ff === 'mono' ? 11 : 13 }}>
+                {ff === 'default' ? t('set_app_font_default') : ff === 'serif' ? t('set_app_font_serif') : t('set_app_font_mono')}
               </span>
             </Chip>
           ))}
         </ChipRow>
-        <SubLabel>
-          Default (Geist) · Serif (Georgia) · Mono (JetBrains Mono)
-        </SubLabel>
+        <SubLabel>{t('set_app_font_hint')}</SubLabel>
       </div>
 
       <Divider />
 
       {/* ── Accent color ── */}
       <div>
-        <FieldLabel>Accent color</FieldLabel>
-        {/* Preset swatches */}
+        <FieldLabel>{t('set_app_accent')}</FieldLabel>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
           {Object.entries(ACCENT_PRESETS).map(([key, c]) => {
             const isActive = accent === key;
@@ -905,10 +895,8 @@ function AppearanceSection() {
             );
           })}
         </div>
-
-        {/* Custom color picker */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>Custom:</span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>{t('set_app_custom')}</span>
           <ColorPickerField
             label=""
             value={customAccent}
@@ -916,7 +904,7 @@ function AppearanceSection() {
             onReset={() => { handleAccentPreset('Blue'); setCustomAccent('#2563eb'); }}
           />
         </div>
-        <SubLabel>Changes buttons, links, and highlights throughout the app. Synced across devices.</SubLabel>
+        <SubLabel>{t('set_app_accent_hint')}</SubLabel>
       </div>
     </div>
   );
@@ -927,15 +915,16 @@ function AppearanceSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function StudySection() {
+  const { t } = useLanguage();
   const [streak, setStreak] = useState(0);
   const [todaySeconds, setTodaySeconds] = useState(0);
   const [goal, setGoal] = useState(2);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    Promise.all([getStudyStreak(), getTodayStudySeconds(), getUserSettings()]).then(([s, t, settings]) => {
+    Promise.all([getStudyStreak(), getTodayStudySeconds(), getUserSettings()]).then(([s, secs, settings]) => {
       setStreak(s);
-      setTodaySeconds(t);
+      setTodaySeconds(secs);
       setGoal(settings.dailyStudyGoalHours);
     });
   }, []);
@@ -951,11 +940,11 @@ function StudySection() {
 
   return (
     <div>
-      <SectionTitle>Study & Goals</SectionTitle>
+      <SectionTitle>{t('set_study_title')}</SectionTitle>
 
       {/* Streak */}
       <div style={{ marginBottom: 28 }}>
-        <FieldLabel>Current Study Streak</FieldLabel>
+        <FieldLabel>{t('set_study_streak')}</FieldLabel>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 14,
           background: 'var(--bg-elevated)', borderRadius: 12,
@@ -965,44 +954,44 @@ function StudySection() {
           <div>
             <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{streak}</p>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
-              {streak === 1 ? 'day in a row' : 'days in a row'}
+              {streak === 1 ? t('set_study_day') : t('set_study_days')}
             </p>
           </div>
           {streak >= 7 && (
             <span style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 20, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontSize: 12, fontWeight: 600 }}>
-              🎯 {streak}+ day streak!
+              🎯 {streak}+ {t('set_study_days')}!
             </span>
           )}
         </div>
-        <SubLabel>Study every day to keep your streak alive. Open any document in the Workspace to log a session.</SubLabel>
+        <SubLabel>{t('set_study_streak_hint')}</SubLabel>
       </div>
 
       {/* Today's progress */}
       <div style={{ marginBottom: 28 }}>
-        <FieldLabel>Today&apos;s Progress</FieldLabel>
+        <FieldLabel>{t('set_study_today')}</FieldLabel>
         <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 13, color: 'var(--text-2)' }}>
             {todaySeconds < 60
               ? `${todaySeconds}s`
               : todaySeconds < 3600
                 ? `${Math.floor(todaySeconds / 60)}m`
-                : `${(todaySeconds / 3600).toFixed(1)}h`} studied today
+                : `${(todaySeconds / 3600).toFixed(1)}h`} {t('set_study_studied')}
           </span>
-          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>Goal: {goal}h</span>
+          <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{t('set_study_goal_label')}: {goal}h</span>
         </div>
         <div style={{ height: 10, borderRadius: 6, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${goalProgress * 100}%`, background: goalProgress >= 1 ? '#22c55e' : 'var(--accent)', borderRadius: 6, transition: 'width 0.4s ease' }} />
         </div>
         {goalProgress >= 1 && (
           <p style={{ margin: '6px 0 0', fontSize: 12, color: '#22c55e', fontWeight: 500 }}>
-            Daily goal achieved!
+            {t('set_study_goal_achieved')}
           </p>
         )}
       </div>
 
       {/* Daily goal setting */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Daily Study Goal</FieldLabel>
+        <FieldLabel>{t('set_study_daily_goal')}</FieldLabel>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           {[1, 2, 3, 4].map((h) => (
             <button
@@ -1031,7 +1020,7 @@ function StudySection() {
           >4h+</button>
         </div>
         <PrimaryBtn onClick={handleSaveGoal} loading={false} disabled={false}>
-          {saved ? <><Check size={13} /> Saved</> : 'Save Goal'}
+          {saved ? <><Check size={13} /> {t('common_done')}</> : t('set_study_save_goal')}
         </PrimaryBtn>
       </div>
     </div>
@@ -1043,6 +1032,7 @@ function StudySection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PrivacySection() {
+  const { t } = useLanguage();
   const [visibility, setVisibility] = useState<'everyone' | 'friends' | 'only_me'>('everyone');
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -1060,19 +1050,19 @@ function PrivacySection() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const options: Array<{ value: 'everyone' | 'friends' | 'only_me'; label: string; desc: string }> = [
-    { value: 'everyone', label: 'Everyone', desc: 'Your community posts are visible to all users' },
-    { value: 'friends', label: 'Friends only', desc: 'Only users you are friends with can see your posts' },
-    { value: 'only_me', label: 'Only me', desc: 'Your posts are private — only you can see them' },
+  const options = [
+    { value: 'everyone' as const, label: t('set_priv_everyone'), desc: t('set_priv_everyone_hint') },
+    { value: 'friends' as const,  label: t('set_priv_friends'),  desc: t('set_priv_friends_hint') },
+    { value: 'only_me' as const,  label: t('set_priv_only_me'),  desc: t('set_priv_only_me_hint') },
   ];
 
   return (
     <div>
-      <SectionTitle>Privacy</SectionTitle>
+      <SectionTitle>{t('set_priv_title')}</SectionTitle>
 
       <div style={{ marginBottom: 28 }}>
-        <FieldLabel>Who can see your community posts?</FieldLabel>
-        <SubLabel>This controls the visibility of content you share to the Community feed.</SubLabel>
+        <FieldLabel>{t('set_priv_who_sees')}</FieldLabel>
+        <SubLabel>{t('set_priv_hint')}</SubLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
           {options.map(({ value, label, desc }) => (
             <button
@@ -1105,7 +1095,7 @@ function PrivacySection() {
         </div>
         <div style={{ marginTop: 16 }}>
           <PrimaryBtn onClick={handleSave} disabled={loading}>
-            {saved ? <><Check size={13} /> Saved</> : 'Save Privacy Settings'}
+            {saved ? <><Check size={13} /> {t('common_done')}</> : t('set_priv_save')}
           </PrimaryBtn>
         </div>
       </div>
@@ -1118,6 +1108,7 @@ function PrivacySection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WorkspaceSection() {
+  const { t } = useLanguage();
   const [bgTheme, setBgTheme]     = useState<'white' | 'dark'>('dark');
   const [defaultZoom, setDefaultZoom] = useState<number>(100);
   const [viewMode, setViewMode]   = useState<'page' | 'scroll'>('page');
@@ -1149,37 +1140,37 @@ function WorkspaceSection() {
 
   return (
     <div>
-      <SectionTitle>Workspace</SectionTitle>
+      <SectionTitle>{t('set_ws_title')}</SectionTitle>
 
       {/* Default blank page */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Default blank page style</FieldLabel>
+        <FieldLabel>{t('set_ws_blank_style')}</FieldLabel>
         <ChipRow>
           <Chip active={bgTheme === 'white'} onClick={() => setBg('white')}>
             <span style={{ width: 14, height: 11, borderRadius: 2, background: '#ffffff', border: '1px solid rgba(0,0,0,0.18)', flexShrink: 0 }} />
-            White dots
+            {t('set_ws_white_dots')}
           </Chip>
           <Chip active={bgTheme === 'dark'} onClick={() => setBg('dark')}>
             <span style={{ width: 14, height: 11, borderRadius: 2, background: '#1e1e2e', border: '1px solid rgba(255,255,255,0.12)', flexShrink: 0 }} />
-            Dark dots
+            {t('set_ws_dark_dots')}
           </Chip>
         </ChipRow>
-        <SubLabel>Used when a blank page is added in the workspace.</SubLabel>
+        <SubLabel>{t('set_ws_blank_hint')}</SubLabel>
       </div>
 
       {/* Default view mode */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Default view mode</FieldLabel>
+        <FieldLabel>{t('set_ws_view_mode')}</FieldLabel>
         <ChipRow>
-          <Chip active={viewMode === 'page'} onClick={() => setVm('page')}>Page by page</Chip>
-          <Chip active={viewMode === 'scroll'} onClick={() => setVm('scroll')}>Scroll</Chip>
+          <Chip active={viewMode === 'page'} onClick={() => setVm('page')}>{t('set_ws_page_by_page')}</Chip>
+          <Chip active={viewMode === 'scroll'} onClick={() => setVm('scroll')}>{t('set_ws_scroll')}</Chip>
         </ChipRow>
-        <SubLabel>Applied when you open a new document.</SubLabel>
+        <SubLabel>{t('set_ws_view_hint')}</SubLabel>
       </div>
 
       {/* Default zoom */}
       <div>
-        <FieldLabel>Default zoom level</FieldLabel>
+        <FieldLabel>{t('set_ws_zoom')}</FieldLabel>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <input
             type="range" min={25} max={200} step={5}
@@ -1191,7 +1182,7 @@ function WorkspaceSection() {
             {defaultZoom}%
           </span>
         </div>
-        <SubLabel>The zoom level used when you first open a document.</SubLabel>
+        <SubLabel>{t('set_ws_zoom_hint')}</SubLabel>
       </div>
     </div>
   );
@@ -1202,6 +1193,7 @@ function WorkspaceSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function NotificationsSection() {
+  const { t } = useLanguage();
   const [roomJoin, setRoomJoin] = useState(true);
 
   useEffect(() => {
@@ -1219,10 +1211,10 @@ function NotificationsSection() {
 
   return (
     <div>
-      <SectionTitle>Notifications</SectionTitle>
+      <SectionTitle>{t('set_notif_title')}</SectionTitle>
       <SettingRow
-        label="Study room member joined"
-        sub="Show a notification when someone joins your study room."
+        label={t('set_notif_room')}
+        sub={t('set_notif_room_hint')}
       >
         <Toggle on={roomJoin} onToggle={toggle} />
       </SettingRow>
@@ -1235,6 +1227,7 @@ function NotificationsSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DataSection() {
+  const { t } = useLanguage();
   const [stats, setStats] = useState<{ documents: number; voiceNotes: number; drawings: number } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
@@ -1280,18 +1273,18 @@ function DataSection() {
 
   return (
     <div>
-      <SectionTitle>Data & Storage</SectionTitle>
+      <SectionTitle>{t('set_data_title')}</SectionTitle>
 
       {/* Usage stats */}
       <div style={{ marginBottom: 24 }}>
-        <FieldLabel>Usage overview</FieldLabel>
+        <FieldLabel>{t('set_data_usage')}</FieldLabel>
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10,
         }}>
           {([
-            { label: 'Documents', key: 'documents' },
-            { label: 'Voice notes', key: 'voiceNotes' },
-            { label: 'Drawings', key: 'drawings' },
+            { label: t('set_data_documents'), key: 'documents' },
+            { label: t('set_data_voice'),     key: 'voiceNotes' },
+            { label: t('set_data_drawings'),  key: 'drawings' },
           ] as const).map(({ label, key }) => (
             <div key={key} style={{
               padding: '12px 14px', borderRadius: 10,
@@ -1311,42 +1304,42 @@ function DataSection() {
 
       {/* Clear drawings */}
       <div style={{ marginBottom: 20 }}>
-        <FieldLabel>Drawings</FieldLabel>
+        <FieldLabel>{t('set_data_drawings')}</FieldLabel>
         <GhostBtn danger onClick={() => setClearDrawState('confirm')} disabled={clearDrawState === 'loading'}>
           <Trash2 size={13} />
-          Clear all drawings
+          {t('set_data_clear_drawings')}
         </GhostBtn>
-        <SubLabel>Removes all annotation drawings across every document.</SubLabel>
+        <SubLabel>{t('set_data_clear_drawings_hint')}</SubLabel>
       </div>
 
       {/* Clear voice notes */}
       <div style={{ marginBottom: 20 }}>
-        <FieldLabel>Voice notes</FieldLabel>
+        <FieldLabel>{t('set_data_voice')}</FieldLabel>
         <GhostBtn danger onClick={() => setClearNotesState('confirm')} disabled={clearNotesState === 'loading'}>
           <Trash2 size={13} />
-          Delete all voice notes
+          {t('set_data_delete_voice')}
         </GhostBtn>
-        <SubLabel>Permanently deletes all your recorded voice notes.</SubLabel>
+        <SubLabel>{t('set_data_delete_voice_hint')}</SubLabel>
       </div>
 
       <Divider />
 
       {/* Export */}
       <div>
-        <FieldLabel>Export data</FieldLabel>
+        <FieldLabel>{t('set_data_export')}</FieldLabel>
         <GhostBtn onClick={doExport} disabled={exportLoading}>
           <Download size={13} />
-          {exportLoading ? 'Exporting…' : 'Export as JSON'}
+          {exportLoading ? t('set_data_exporting') : t('set_data_export_json')}
         </GhostBtn>
-        <SubLabel>Downloads all your documents, notes, bookmarks, and key terms as a JSON file.</SubLabel>
+        <SubLabel>{t('set_data_export_hint')}</SubLabel>
       </div>
 
       {/* Confirm modals */}
       {(clearDrawState === 'confirm' || clearDrawState === 'loading') && (
         <ConfirmModal
-          title="Clear all drawings?"
-          body="This will permanently delete every annotation drawing across all your documents. This cannot be undone."
-          confirmLabel="Clear drawings"
+          title={t('set_data_clear_title')}
+          body={t('set_data_clear_body')}
+          confirmLabel={t('set_data_clear_btn')}
           onConfirm={doClearDrawings}
           onCancel={() => setClearDrawState('idle')}
           loading={clearDrawState === 'loading'}
@@ -1354,9 +1347,9 @@ function DataSection() {
       )}
       {(clearNotesState === 'confirm' || clearNotesState === 'loading') && (
         <ConfirmModal
-          title="Delete all voice notes?"
-          body="This will permanently delete all your recorded voice notes. This cannot be undone."
-          confirmLabel="Delete voice notes"
+          title={t('set_data_del_voice_title')}
+          body={t('set_data_del_voice_body')}
+          confirmLabel={t('set_data_del_voice_btn')}
           onConfirm={doClearNotes}
           onCancel={() => setClearNotesState('idle')}
           loading={clearNotesState === 'loading'}
@@ -1371,6 +1364,7 @@ function DataSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const { t } = useLanguage();
   const [active, setActive] = useState<Section>('account');
   const [userEmail, setUserEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -1432,11 +1426,11 @@ export default function SettingsPage() {
           onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-3)'; }}
         >
           <ChevronLeft size={14} />
-          Back
+          {t('set_back')}
         </a>
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
         <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.02em' }}>
-          Settings
+          {t('set_title')}
         </span>
       </div>
 
@@ -1450,7 +1444,7 @@ export default function SettingsPage() {
           background: 'var(--bg-panel)',
           overflowY: 'auto',
         }}>
-          {NAV.map(({ id, label, Icon }) => (
+          {NAV.map(({ id, tKey, Icon }) => (
             <button
               key={id}
               onClick={() => setActive(id)}
@@ -1469,7 +1463,7 @@ export default function SettingsPage() {
               onMouseOut={(e) => { if (active !== id) Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' }); }}
             >
               <Icon size={14} style={{ flexShrink: 0, opacity: 0.8 }} />
-              {label}
+              {t(tKey)}
             </button>
           ))}
         </nav>

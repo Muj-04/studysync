@@ -7,6 +7,7 @@ import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface DocEntry {
   id: string;
@@ -40,6 +41,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
 }
 
 export default function DashboardPage() {
+  const { t } = useLanguage();
   const [docs, setDocs] = useState<DocEntry[]>([]);
   const [totalVoiceNotes, setTotalVoiceNotes] = useState(0);
   const [totalTextNotes, setTotalTextNotes] = useState(0);
@@ -114,11 +116,11 @@ export default function DashboardPage() {
           </span>
           <nav style={{ display: 'flex', gap: 2 }}>
             {[
-              { label: 'Dashboard', href: '/dashboard', active: true },
-              { label: 'Workspace', href: '/workspace', active: false },
-              { label: 'Library',   href: '/library',   active: false },
-              { label: 'Community', href: '/community', active: false },
-              { label: 'Settings',  href: '/settings',  active: false },
+              { label: t('nav_dashboard'), href: '/dashboard', active: true },
+              { label: t('nav_workspace'), href: '/workspace', active: false },
+              { label: t('nav_library'),   href: '/library',   active: false },
+              { label: t('nav_community'), href: '/community', active: false },
+              { label: t('nav_settings'),  href: '/settings',  active: false },
             ].map(({ label, href, active }) => (
               <a
                 key={label}
@@ -141,7 +143,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <a
             href="/friends"
-            title="Friends"
+            title={t('nav_friends')}
             style={{
               width: 34, height: 34, borderRadius: 8,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -162,7 +164,7 @@ export default function DashboardPage() {
 
         {loading && (
           <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)', fontSize: 13 }}>
-            Loading…
+            {t('common_loading')}
           </div>
         )}
 
@@ -177,14 +179,14 @@ export default function DashboardPage() {
               }}>
                 <div>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 6, letterSpacing: '0.02em' }}>
-                    Continue where you left off
+                    {t('dash_continue')}
                   </p>
                   <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-1)', marginBottom: lastDocName ? 4 : 0 }}>
-                    {lastDocName ?? 'Last session'}
+                    {lastDocName ?? t('dash_last_session')}
                   </p>
                   {session.virtualIndex > 0 && (
                     <p style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                      Page {session.virtualIndex + 1}
+                      {t('dash_page')} {session.virtualIndex + 1}
                     </p>
                   )}
                 </div>
@@ -201,23 +203,23 @@ export default function DashboardPage() {
                   onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--accent)'; }}
                 >
                   <Play size={14} fill="currentColor" />
-                  Continue Studying
+                  {t('dash_continue_btn')}
                 </a>
               </div>
             )}
 
             {/* ── Stats ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 28 }}>
-              <StatCard label="Documents"   value={docs.length}      icon={<FileText size={20} />}     color="var(--accent)" />
-              <StatCard label="Voice Notes" value={totalVoiceNotes}  icon={<Mic size={20} />}           color="#a78bfa" />
-              <StatCard label="Text Notes"  value={totalTextNotes}   icon={<MessageSquare size={20} />} color="#34d399" />
-              <StatCard label="Bookmarks"   value={totalBookmarks}   icon={<BookmarkIcon size={20} />}  color="#f59e0b" />
+              <StatCard label={t('dash_stat_documents')} value={docs.length}      icon={<FileText size={20} />}     color="var(--accent)" />
+              <StatCard label={t('dash_stat_voice')}     value={totalVoiceNotes}  icon={<Mic size={20} />}           color="#a78bfa" />
+              <StatCard label={t('dash_stat_text')}      value={totalTextNotes}   icon={<MessageSquare size={20} />} color="#34d399" />
+              <StatCard label={t('dash_stat_bookmarks')} value={totalBookmarks}   icon={<BookmarkIcon size={20} />}  color="#f59e0b" />
               <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 20px' }}>
                 <div style={{ fontSize: 24, marginBottom: 10 }}>🔥</div>
                 <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1, marginBottom: 6, fontVariantNumeric: 'tabular-nums' }}>
                   {studyStreak}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Day streak</div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{t('dash_stat_streak')}</div>
               </div>
             </div>
 
@@ -230,21 +232,21 @@ export default function DashboardPage() {
                   padding: '15px 18px', borderBottom: '1px solid var(--border-subtle)',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Recent Documents</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{t('dash_recent')}</span>
                   <a
                     href="/workspace"
                     style={{ fontSize: 11.5, color: 'var(--accent)', textDecoration: 'none' }}
                     onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'underline'; }}
                     onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.textDecoration = 'none'; }}
                   >
-                    Open workspace →
+                    {t('dash_open_workspace')}
                   </a>
                 </div>
                 <div style={{ padding: '6px 8px', maxHeight: 340, overflowY: 'auto' }}>
                   {docs.length === 0 ? (
                     <div style={{ padding: '28px 16px', textAlign: 'center' }}>
                       <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
-                        No documents yet.<br />Open the workspace to upload files.
+                        {t('dash_no_docs')}
                       </p>
                     </div>
                   ) : docs.map((doc) => (
@@ -289,7 +291,7 @@ export default function DashboardPage() {
                             </span>
                           )}
                           {doc.voiceNoteCount === 0 && doc.textNoteCount === 0 && doc.bookmarkCount === 0 && (
-                            <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>No notes yet</span>
+                            <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{t('lib_no_annotations')}</span>
                           )}
                         </div>
                       </div>
@@ -301,13 +303,13 @@ export default function DashboardPage() {
               {/* Quick Bookmarks */}
               <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
                 <div style={{ padding: '15px 18px', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Quick Bookmarks</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{t('dash_quick_bookmarks')}</span>
                 </div>
                 <div style={{ padding: '6px 8px', maxHeight: 340, overflowY: 'auto' }}>
                   {allBookmarks.length === 0 ? (
                     <div style={{ padding: '28px 16px', textAlign: 'center' }}>
                       <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.6 }}>
-                        No bookmarks yet.<br />Bookmark pages while studying to access them here.
+                        {t('dash_no_bookmarks')}
                       </p>
                     </div>
                   ) : allBookmarks.map((bm) => (
@@ -348,9 +350,9 @@ export default function DashboardPage() {
                 }}>
                   <BookOpen size={24} style={{ color: 'var(--text-2)' }} />
                 </div>
-                <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-1)', marginBottom: 8 }}>Start studying today</p>
+                <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-1)', marginBottom: 8 }}>{t('dash_start_title')}</p>
                 <p style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6, marginBottom: 22 }}>
-                  Upload a PDF or PowerPoint in the workspace to get started.
+                  {t('dash_start_desc')}
                 </p>
                 <a
                   href="/workspace"
@@ -364,7 +366,7 @@ export default function DashboardPage() {
                   onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--accent)'; }}
                 >
                   <BookOpen size={14} />
-                  Open Workspace
+                  {t('dash_open_workspace_btn')}
                 </a>
               </div>
             )}

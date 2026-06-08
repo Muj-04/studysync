@@ -4,6 +4,7 @@ import { Bell, Check, X, Users, BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useNotifications } from '@/hooks/useNotifications';
 import { respondFriendRequest } from '@/lib/supabase/db';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -34,6 +35,7 @@ function Avatar({ name, url, size = 32 }: { name?: string | null; url?: string |
 }
 
 export default function NotificationBell() {
+  const { t } = useLanguage();
   const router = useRouter();
   const { notifications, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
   const [open, setOpen] = useState(false);
@@ -81,8 +83,8 @@ export default function NotificationBell() {
       {/* Bell button */}
       <button
         onClick={() => setOpen((o) => !o)}
-        title="Notifications"
-        aria-label="Notifications"
+        title={t('notif_title')}
+        aria-label={t('notif_title')}
         style={{
           position: 'relative',
           width: 34, height: 34, borderRadius: 8,
@@ -131,7 +133,7 @@ export default function NotificationBell() {
             padding: '12px 14px 10px', borderBottom: '1px solid var(--border-subtle)',
             flexShrink: 0,
           }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Notifications</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{t('notif_title')}</span>
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
@@ -143,7 +145,7 @@ export default function NotificationBell() {
                 onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-muted)'; }}
                 onMouseOut={(e) => { e.currentTarget.style.background = 'none'; }}
               >
-                Mark all read
+                {t('notif_mark_read')}
               </button>
             )}
           </div>
@@ -152,7 +154,7 @@ export default function NotificationBell() {
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {notifications.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                No notifications yet
+                {t('notif_empty')}
               </div>
             ) : (
               notifications.map((n) => {
@@ -192,13 +194,13 @@ export default function NotificationBell() {
                         {/* Text */}
                         <p style={{ margin: '0 0 4px', fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.4 }}>
                           {n.type === 'friend_request' && (
-                            <><strong>{senderName}</strong> sent you a friend request</>
+                            <><strong>{senderName}</strong> {t('notif_friend_request')}</>
                           )}
                           {n.type === 'friend_accepted' && (
-                            <><strong>{senderName}</strong> accepted your friend request</>
+                            <><strong>{senderName}</strong> {t('notif_friend_accepted')}</>
                           )}
                           {n.type === 'room_invite' && (
-                            <><strong>{senderName}</strong> invited you to join <strong>{String(d.room_name ?? 'a study room')}</strong></>
+                            <><strong>{senderName}</strong> {t('notif_room_invite')} <strong>{String(d.room_name ?? 'a study room')}</strong></>
                           )}
                         </p>
                         <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(n.createdAt)}</p>
@@ -217,7 +219,7 @@ export default function NotificationBell() {
                                 display: 'flex', alignItems: 'center', gap: 4,
                               }}
                             >
-                              <Check size={11} /> Accept
+                              <Check size={11} /> {t('notif_accept')}
                             </button>
                             <button
                               onClick={() => handleReject(n.id, String(d.friendship_id))}
@@ -230,7 +232,7 @@ export default function NotificationBell() {
                                 display: 'flex', alignItems: 'center', gap: 4,
                               }}
                             >
-                              <X size={11} /> Reject
+                              <X size={11} /> {t('notif_reject')}
                             </button>
                           </div>
                         )}
@@ -246,7 +248,7 @@ export default function NotificationBell() {
                                 display: 'flex', alignItems: 'center', gap: 4,
                               }}
                             >
-                              <BookOpen size={11} /> Join Room
+                              <BookOpen size={11} /> {t('notif_join_room')}
                             </button>
                             <button
                               onClick={() => handleDeclineInvite(n.id)}
@@ -257,7 +259,7 @@ export default function NotificationBell() {
                                 cursor: 'pointer', fontFamily: 'inherit',
                               }}
                             >
-                              Decline
+                              {t('notif_decline')}
                             </button>
                           </div>
                         )}
@@ -270,7 +272,7 @@ export default function NotificationBell() {
                               fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
                             }}
                           >
-                            Dismiss
+                            {t('notif_dismiss')}
                           </button>
                         )}
                       </div>
@@ -305,7 +307,7 @@ export default function NotificationBell() {
               onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
               onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-2)'; }}
             >
-              <Users size={13} /> Manage Friends
+              <Users size={13} /> {t('notif_manage_friends')}
             </a>
           </div>
         </div>
