@@ -15,6 +15,7 @@ import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ function CommentSection({ post, myUserId, onAddComment, onDeleteComment }: {
   onAddComment: (postId: string, content: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
 }) {
+  const { t } = useLanguage();
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -93,7 +95,7 @@ function CommentSection({ post, myUserId, onAddComment, onDeleteComment }: {
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input value={text} onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
-            placeholder="Write a comment…" disabled={submitting}
+            placeholder={t('com_comment_placeholder')} disabled={submitting}
             style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
           <button onClick={handleSubmit} disabled={!text.trim() || submitting} style={{ width: 32, height: 32, borderRadius: 8, background: text.trim() ? 'var(--accent)' : 'var(--bg-elevated)', border: 'none', color: text.trim() ? '#fff' : 'var(--text-3)', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.12s, color 0.12s', flexShrink: 0 }}>
             <Send size={13} />
@@ -114,6 +116,7 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
   onDelete: (id: string) => void;
   onFollowToggle: (userId: string, isFollowing: boolean) => void;
 }) {
+  const { t } = useLanguage();
   const [showComments, setShowComments] = useState(false);
   const isFollowing = followingIds.has(post.userId);
   const isOwn = post.userId === myUserId;
@@ -122,7 +125,6 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
 
   return (
     <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Author row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <a href={`/community/profile/${post.userId}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
           <Avatar name={post.username ?? post.userId} url={post.avatarUrl} size={36} />
@@ -144,7 +146,7 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
               fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
               display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.12s',
             }}>
-              {isFollowing ? <><UserMinus size={11} /> Following</> : <><UserPlus size={11} /> Follow</>}
+              {isFollowing ? <><UserMinus size={11} /> {t('com_following')}</> : <><UserPlus size={11} /> {t('com_follow')}</>}
             </button>
           )}
           {isOwn && (
@@ -156,11 +158,9 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
         </div>
       </div>
 
-      {/* Title & description */}
       {post.title && <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{post.title}</h3>}
       {post.description && <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.55 }}>{post.description}</p>}
 
-      {/* Tags */}
       {post.tags.length > 0 && (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {post.tags.map((tag) => (
@@ -169,7 +169,6 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
         </div>
       )}
 
-      {/* Shared notes */}
       {hasContent && (
         <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {post.pages.slice(0, 3).map((page, i) => (
@@ -177,14 +176,17 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
               {page.textNotes?.slice(0, 3).map((note, j) => (
                 <p key={j} style={{ margin: '0 0 4px', fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.45, fontStyle: 'italic', borderLeft: '2px solid var(--accent)', paddingLeft: 8 }}>{note.content}</p>
               ))}
-              {page.canvasData && <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>+ drawing attached</p>}
+              {page.canvasData && <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>{t('com_drawing_attached')}</p>}
             </div>
           ))}
-          {post.pages.length > 3 && <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>+ {post.pages.length - 3} more page{post.pages.length - 3 !== 1 ? 's' : ''}</p>}
+          {post.pages.length > 3 && (
+            <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)' }}>
+              + {post.pages.length - 3} {post.pages.length - 3 !== 1 ? t('com_more_pages') : t('com_more_page')}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <button onClick={() => onLike(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, padding: 0, fontFamily: 'inherit', color: post.likedByMe ? '#ef4444' : 'var(--text-3)', transition: 'color 0.12s' }}
           onMouseOver={(e) => { if (!post.likedByMe) (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
@@ -205,16 +207,10 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
   );
 }
 
-const TABS: { id: CommunityFeedTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'latest', label: 'Latest', icon: <Clock size={13} /> },
-  { id: 'top', label: 'Top', icon: <TrendingUp size={13} /> },
-  { id: 'trending', label: 'Trending', icon: <Flame size={13} /> },
-  { id: 'following', label: 'Following', icon: <Users size={13} /> },
-];
-
 const COMMON_TAGS = ['Math', 'CS', 'Physics', 'Biology', 'Chemistry', 'History', 'Literature', 'Economics', 'Psychology', 'Law'];
 
 export default function CommunityPage() {
+  const { t } = useLanguage();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<CommunityFeedTab>('latest');
@@ -225,6 +221,13 @@ export default function CommunityPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+
+  const tabs: { id: CommunityFeedTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'latest', label: t('com_tab_latest'), icon: <Clock size={13} /> },
+    { id: 'top', label: t('com_tab_top'), icon: <TrendingUp size={13} /> },
+    { id: 'trending', label: t('com_tab_trending'), icon: <Flame size={13} /> },
+    { id: 'following', label: t('com_tab_following'), icon: <Users size={13} /> },
+  ];
 
   useEffect(() => {
     createClient().auth.getUser().then(async ({ data: { user } }) => {
@@ -302,15 +305,15 @@ export default function CommunityPage() {
   const visiblePosts = posts.filter((p) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
-    return p.title.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || (p.username ?? '').toLowerCase().includes(q) || p.tags.some((t) => t.toLowerCase().includes(q));
+    return p.title.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || (p.username ?? '').toLowerCase().includes(q) || p.tags.some((tag) => tag.toLowerCase().includes(q));
   });
 
   const navLinks = [
-    { label: 'Dashboard', href: '/dashboard', active: false },
-    { label: 'Workspace', href: '/workspace', active: false },
-    { label: 'Library', href: '/library', active: false },
-    { label: 'Community', href: '/community', active: true },
-    { label: 'Settings', href: '/settings', active: false },
+    { label: t('nav_dashboard'), href: '/dashboard', active: false },
+    { label: t('nav_workspace'), href: '/workspace', active: false },
+    { label: t('nav_library'), href: '/library', active: false },
+    { label: t('nav_community'), href: '/community', active: true },
+    { label: t('nav_settings'), href: '/settings', active: false },
   ];
 
   return (
@@ -320,7 +323,7 @@ export default function CommunityPage() {
           <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-1)' }}>StudySync</span>
           <nav style={{ display: 'flex', gap: 2 }}>
             {navLinks.map(({ label, href, active }) => (
-              <a key={label} href={href} style={{ fontSize: 13, fontWeight: 400, color: active ? 'var(--accent)' : 'var(--text-2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 6, borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent', transition: 'color 0.15s' }}
+              <a key={href} href={href} style={{ fontSize: 13, fontWeight: 400, color: active ? 'var(--accent)' : 'var(--text-2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 6, borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent', transition: 'color 0.15s' }}
                 onMouseOver={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
                 onMouseOut={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-2)'; }}
               >{label}</a>
@@ -328,7 +331,7 @@ export default function CommunityPage() {
           </nav>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <a href="/friends" title="Friends" style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', textDecoration: 'none', transition: 'background 0.12s, color 0.12s' }}
+          <a href="/friends" title={t('nav_friends')} style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', textDecoration: 'none', transition: 'background 0.12s, color 0.12s' }}
             onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
             onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
           ><Users size={16} /></a>
@@ -339,19 +342,17 @@ export default function CommunityPage() {
 
       <main style={{ maxWidth: 700, margin: '0 auto', padding: '32px 24px 60px' }}>
 
-        {/* Page title */}
         <div style={{ marginBottom: 20 }}>
           <h1 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: 'var(--text-1)' }}>
             <Globe size={20} style={{ verticalAlign: 'middle', marginRight: 8, color: 'var(--accent)' }} />
-            Community
+            {t('com_title')}
           </h1>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)' }}>Notes and insights shared by students</p>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-3)' }}>{t('com_subtitle')}</p>
         </div>
 
-        {/* Search bar */}
         <div style={{ position: 'relative', marginBottom: 16 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search posts by title, tag, or username…" style={{ width: '100%', height: 40, paddingLeft: 36, paddingRight: search ? 36 : 12, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('com_search_placeholder')} style={{ width: '100%', height: 40, paddingLeft: 36, paddingRight: search ? 36 : 12, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
           {search && (
             <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
               <X size={14} />
@@ -359,16 +360,14 @@ export default function CommunityPage() {
           )}
         </div>
 
-        {/* Tabs */}
         <div style={{ display: 'flex', gap: 2, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 10, padding: 4, marginBottom: 16 }}>
-          {TABS.map(({ id, label, icon }) => (
+          {tabs.map(({ id, label, icon }) => (
             <button key={id} onClick={() => setTab(id)} style={{ flex: 1, height: 32, borderRadius: 7, background: tab === id ? 'var(--accent)' : 'transparent', color: tab === id ? '#fff' : 'var(--text-2)', border: 'none', fontSize: 12.5, fontWeight: tab === id ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background 0.12s, color 0.12s' }}>
               {icon} {label}
             </button>
           ))}
         </div>
 
-        {/* Tag filter chips */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
           {COMMON_TAGS.map((tag) => (
             <button key={tag} onClick={() => setFilterTag(filterTag === tag ? null : tag)} style={{ padding: '4px 10px', borderRadius: 20, background: filterTag === tag ? 'var(--accent)' : 'var(--bg-panel)', color: filterTag === tag ? '#fff' : 'var(--text-2)', border: `1px solid ${filterTag === tag ? 'var(--accent)' : 'var(--border)'}`, fontSize: 11.5, fontWeight: filterTag === tag ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
@@ -380,24 +379,23 @@ export default function CommunityPage() {
           )}
         </div>
 
-        {/* Share CTA */}
         <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)' }}>Want to share your notes?</p>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)' }}>{t('com_share_cta')}</p>
           <a href="/workspace" style={{ flexShrink: 0, height: 34, padding: '0 14px', background: 'var(--accent)', color: '#fff', borderRadius: 8, fontSize: 12.5, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
-            Open Workspace
+            {t('com_open_workspace')}
           </a>
         </div>
 
-        {loading && <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)', fontSize: 13 }}>Loading posts…</div>}
+        {loading && <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)', fontSize: 13 }}>{t('com_loading')}</div>}
 
         {!loading && visiblePosts.length === 0 && (
           <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-3)' }}>
             <Globe size={36} style={{ opacity: 0.25, marginBottom: 12 }} />
             <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px', color: 'var(--text-2)' }}>
-              {tab === 'following' ? 'No posts from people you follow' : search ? 'No posts match your search' : 'No posts yet'}
+              {tab === 'following' ? t('com_no_following') : search ? t('com_no_search') : t('com_no_posts_yet')}
             </p>
             <p style={{ fontSize: 13, margin: 0 }}>
-              {tab === 'following' ? 'Follow some users to see their posts here.' : 'Be the first to share your study notes!'}
+              {tab === 'following' ? t('com_no_following_hint') : t('com_no_posts')}
             </p>
           </div>
         )}
