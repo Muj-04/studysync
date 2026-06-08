@@ -582,8 +582,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 16px', borderBottom: '1px solid var(--border)',
-        background: 'var(--bg-panel)', flexShrink: 0,
+        padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--bg-panel)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        flexShrink: 0,
       }}>
         <span style={{
           fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
@@ -679,8 +681,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       {/* ── Drawing toolbar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 14px', borderBottom: '1px solid var(--border)',
-        background: 'var(--bg-panel)', flexShrink: 0, flexWrap: 'wrap',
+        padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--bg-panel)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        flexShrink: 0, flexWrap: 'wrap',
         rowGap: 6,
       }}>
 
@@ -831,9 +835,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           {blankMenuOpen && (
             <div style={{
               position: 'absolute', top: '100%', left: 0, marginTop: 4,
-              background: 'var(--bg-panel)', border: '1px solid var(--border)',
+              background: 'var(--bg-panel)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 4, padding: 10,
-                            zIndex: 200,
+              zIndex: 200,
             }}>
               <p style={{
                 fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
@@ -939,8 +945,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       {/* ── Page navigation ── */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
-        padding: '9px 16px', borderTop: '1px solid var(--border)',
-        background: 'var(--bg-panel)', flexShrink: 0,
+        padding: '9px 16px', borderTop: '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--bg-panel)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        flexShrink: 0,
       }}>
         <button
           onClick={prevPage}
@@ -988,9 +996,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             className="animate-scale-in"
             style={{
               width: '100%', maxWidth: 400,
-              background: 'var(--bg-panel)', border: '1px solid var(--border)',
+              background: 'var(--bg-panel)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 4, overflow: 'hidden',
-                          }}
+            }}
           >
             {/* Modal header */}
             <div style={{

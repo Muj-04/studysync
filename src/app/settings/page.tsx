@@ -335,9 +335,10 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, loading 
     }}>
       <div style={{
         width: '100%', maxWidth: 400,
-        background: 'var(--bg-panel)', border: '1px solid var(--border)',
+        background: 'var(--bg-panel)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255,255,255,0.1)',
         borderRadius: 4, padding: 24,
-        
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <AlertTriangle size={18} style={{ color: '#ef4444', flexShrink: 0 }} />

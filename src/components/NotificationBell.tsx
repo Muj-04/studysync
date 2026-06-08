@@ -122,8 +122,8 @@ export default function NotificationBell() {
             ...(lang === 'ar' ? { left: 0 } : { right: 0 }),
             width: 340, maxHeight: 480, overflow: 'hidden',
             transformOrigin: lang === 'ar' ? 'top left' : 'top right',
-            background: 'var(--bg-panel)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid var(--border)', borderRadius: 4,
+            background: 'var(--bg-panel)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4,
                         zIndex: 300, display: 'flex', flexDirection: 'column',
           }}
         >

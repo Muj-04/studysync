@@ -68,9 +68,10 @@ function DeleteModal({ doc, onConfirm, onCancel }: {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        background: 'var(--bg-panel)', border: '1px solid var(--border)',
+        background: 'var(--bg-panel)',
+        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255,255,255,0.1)',
         borderRadius: 4, padding: '28px 28px 24px', width: 360,
-        
       }}>
         <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{t('lib_delete_title')}</h3>
         <p style={{ margin: '0 0 20px', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>
@@ -118,9 +119,10 @@ function TagEditor({ docId, currentTags, allTags, onAdd, onRemove, onClose }: {
   return (
     <div ref={ref} style={{
       position: 'absolute', top: '100%', left: 0, zIndex: 200,
-      background: 'var(--bg-panel)', border: '1px solid var(--border)',
+      background: 'var(--bg-panel)',
+      backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+      border: '1px solid rgba(255,255,255,0.1)',
       borderRadius: 4, padding: '12px', width: 240, marginTop: 4,
-      
     }}>
       {currentTags.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 10 }}>
@@ -320,7 +322,7 @@ function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => vo
   };
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, padding: '28px', width: 400,  }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ background: 'var(--bg-panel)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '28px', width: 400 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{t('lib_open_doc')}</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}><X size={16} /></button>
