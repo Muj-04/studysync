@@ -84,7 +84,7 @@ function TemplateTile({ icon, label, onClick }: { icon: React.ReactNode; label: 
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
         padding: '10px 10px',
-        borderRadius: 8,
+        borderRadius: 4,
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border)',
         color: 'var(--text-2)',
@@ -130,7 +130,7 @@ function BgSwatches({
               flex: 1,
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
               border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
-              borderRadius: 7, padding: '6px 4px',
+              borderRadius: 4, padding: '6px 4px',
               cursor: disabled ? 'not-allowed' : 'pointer',
               background: isActive ? 'var(--accent-muted)' : 'transparent',
               fontFamily: 'inherit',
@@ -239,9 +239,8 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
           maxHeight: '82vh',
           background: 'var(--bg-panel)',
           border: '1px solid var(--border)',
-          borderRadius: 14,
-          boxShadow: '0 24px 80px rgba(0,0,0,0.65)',
-          display: 'flex', flexDirection: 'column',
+          borderRadius: 4,
+                    display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
@@ -261,7 +260,7 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
             style={{
               width: 26, height: 26,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 6, border: '1px solid transparent',
+              borderRadius: 4, border: '1px solid transparent',
               background: 'transparent', color: 'var(--text-3)',
               cursor: 'pointer',
               transition: 'background 0.12s, color 0.12s, border-color 0.12s',
@@ -294,7 +293,7 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               height: 32, padding: '0 16px',
-              borderRadius: 7,
+              borderRadius: 4,
               background: copied ? 'var(--green)' : 'var(--bg-elevated)',
               border: `1px solid ${copied ? 'transparent' : 'var(--border)'}`,
               color: copied ? '#fff' : 'var(--text-2)',
@@ -330,7 +329,7 @@ function ActionBtn({
       disabled={disabled || loading}
       style={{
         height: 22, padding: '0 9px',
-        borderRadius: 5, fontSize: 10.5, fontWeight: 500,
+        borderRadius: 4, fontSize: 10.5, fontWeight: 500,
         background: active ? 'var(--accent)' : 'var(--bg-active)',
         border: 'none',
         color: active ? '#fff' : 'var(--text-3)',
@@ -723,7 +722,7 @@ export default function DocumentToolsPanel({
                 <div style={{
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '10px 11px',
+                  borderRadius: 4, padding: '10px 11px',
                 }}>
                   <div style={{
                     display: 'flex', alignItems: 'center',
@@ -791,7 +790,7 @@ export default function DocumentToolsPanel({
                 <div style={{
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '10px 11px',
+                  borderRadius: 4, padding: '10px 11px',
                 }}>
                   <div style={{
                     display: 'flex', alignItems: 'center',
@@ -897,7 +896,7 @@ export default function DocumentToolsPanel({
               <div style={{
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border)',
-                borderRadius: 8, padding: '10px 11px',
+                borderRadius: 4, padding: '10px 11px',
               }}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -915,7 +914,7 @@ export default function DocumentToolsPanel({
                       onClick={() => setTranslateLang(lang)}
                       style={{
                         flex: 1, height: 24,
-                        borderRadius: 5, fontSize: 10, fontWeight: 600,
+                        borderRadius: 4, fontSize: 10, fontWeight: 600,
                         background: translateLang === lang ? 'var(--accent-muted)' : 'transparent',
                         border: `1px solid ${translateLang === lang ? 'var(--accent)' : 'var(--border)'}`,
                         color: translateLang === lang ? 'var(--accent-hover)' : 'var(--text-3)',
@@ -932,7 +931,7 @@ export default function DocumentToolsPanel({
                 {selectedText.trim() ? (
                   <div style={{
                     fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.45,
-                    background: 'var(--bg-active)', borderRadius: 5,
+                    background: 'var(--bg-active)', borderRadius: 4,
                     padding: '5px 8px', marginBottom: 8,
                     border: '1px solid var(--border-subtle)',
                     fontStyle: 'italic',
@@ -955,7 +954,7 @@ export default function DocumentToolsPanel({
                   disabled={!canTranslate}
                   style={{
                     width: '100%', height: 28,
-                    borderRadius: 6, fontSize: 11.5, fontWeight: 500,
+                    borderRadius: 4, fontSize: 11.5, fontWeight: 500,
                     background: canTranslate ? 'var(--accent)' : 'var(--bg-active)',
                     border: 'none',
                     color: canTranslate ? '#fff' : 'var(--text-3)',
@@ -995,7 +994,7 @@ export default function DocumentToolsPanel({
                     <div style={{
                       background: 'var(--bg-active)',
                       border: '1px solid var(--border-subtle)',
-                      borderRadius: 6, padding: '8px 9px',
+                      borderRadius: 4, padding: '8px 9px',
                     }}>
                       <p style={{ fontSize: 11.5, color: 'var(--text-1)', lineHeight: 1.6, margin: 0 }}>
                         {translateResult}
@@ -1039,7 +1038,7 @@ export default function DocumentToolsPanel({
                     style={{
                       width: '100%',
                       display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '9px 11px', borderRadius: 8,
+                      padding: '9px 11px', borderRadius: 4,
                       background: 'transparent',
                       border: '1px solid var(--border)',
                       color: 'var(--text-2)',
@@ -1063,7 +1062,7 @@ export default function DocumentToolsPanel({
                       style={{
                         width: '100%',
                         display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '9px 11px', borderRadius: 8,
+                        padding: '9px 11px', borderRadius: 4,
                         background: 'transparent',
                         border: '1px solid var(--border)',
                         color: 'var(--text-2)',
@@ -1102,7 +1101,7 @@ export default function DocumentToolsPanel({
               style={{
                 width: '100%',
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '9px 11px', borderRadius: 8,
+                padding: '9px 11px', borderRadius: 4,
                 background: 'transparent',
                 border: `1px solid ${(!isBlankPage || !onInsertImage) ? 'var(--border-subtle)' : 'var(--border)'}`,
                 color: (!isBlankPage || !onInsertImage) ? 'var(--text-3)' : 'var(--text-2)',
@@ -1142,7 +1141,7 @@ export default function DocumentToolsPanel({
                 style={{
                   width: '100%',
                   display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '9px 11px', borderRadius: 8,
+                  padding: '9px 11px', borderRadius: 4,
                   background: 'transparent',
                   border: '1px solid var(--border)',
                   color: 'var(--red)',
@@ -1169,7 +1168,7 @@ export default function DocumentToolsPanel({
                 style={{
                   width: '100%',
                   display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '9px 11px', borderRadius: 8,
+                  padding: '9px 11px', borderRadius: 4,
                   background: 'transparent',
                   border: '1px solid var(--border)',
                   color: 'var(--red)',
@@ -1194,7 +1193,7 @@ export default function DocumentToolsPanel({
               style={{
                 width: '100%',
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '9px 11px', borderRadius: 8,
+                padding: '9px 11px', borderRadius: 4,
                 background: 'transparent',
                 border: '1px solid var(--border-subtle)',
                 color: 'var(--text-3)',
@@ -1216,7 +1215,7 @@ export default function DocumentToolsPanel({
                 style={{
                   width: '100%',
                   display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', borderRadius: 8,
+                  padding: '10px 12px', borderRadius: 4,
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border)',
                   color: 'var(--text-1)',
@@ -1257,7 +1256,7 @@ export default function DocumentToolsPanel({
               style={{
                 width: '100%',
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '10px 12px', borderRadius: 8,
+                padding: '10px 12px', borderRadius: 4,
                 background: isRecording ? 'rgba(229,72,77,0.1)' : 'var(--bg-elevated)',
                 border: `1px solid ${isRecording ? 'rgba(229,72,77,0.3)' : 'var(--border)'}`,
                 color: 'var(--text-1)',
@@ -1352,7 +1351,7 @@ export default function DocumentToolsPanel({
         >
           <div
             className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 420, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.65)', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 420, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  overflow: 'hidden' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -1360,7 +1359,7 @@ export default function DocumentToolsPanel({
                 <Table2 size={15} style={{ color: 'var(--accent)' }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_table')}</span>
               </div>
-              <button onClick={() => setDataTableOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
+              <button onClick={() => setDataTableOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
             </div>
 
             <div style={{ padding: '20px 20px 8px' }}>
@@ -1368,7 +1367,7 @@ export default function DocumentToolsPanel({
                 <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_rows')}</p>
                 <div style={{ display: 'flex', gap: 5 }}>
                   {[2,3,4,5,6,7,8].map((n) => (
-                    <button key={n} onClick={() => setTableRows(n)} style={{ width: 34, height: 30, borderRadius: 6, border: `1px solid ${tableRows === n ? 'var(--accent)' : 'var(--border)'}`, background: tableRows === n ? 'var(--accent-muted)' : 'transparent', color: tableRows === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
+                    <button key={n} onClick={() => setTableRows(n)} style={{ width: 34, height: 30, borderRadius: 4, border: `1px solid ${tableRows === n ? 'var(--accent)' : 'var(--border)'}`, background: tableRows === n ? 'var(--accent-muted)' : 'transparent', color: tableRows === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
                   ))}
                 </div>
               </div>
@@ -1377,14 +1376,14 @@ export default function DocumentToolsPanel({
                 <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_cols')}</p>
                 <div style={{ display: 'flex', gap: 5 }}>
                   {[2,3,4,5,6,7,8].map((n) => (
-                    <button key={n} onClick={() => setTableCols(n)} style={{ width: 34, height: 30, borderRadius: 6, border: `1px solid ${tableCols === n ? 'var(--accent)' : 'var(--border)'}`, background: tableCols === n ? 'var(--accent-muted)' : 'transparent', color: tableCols === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
+                    <button key={n} onClick={() => setTableCols(n)} style={{ width: 34, height: 30, borderRadius: 4, border: `1px solid ${tableCols === n ? 'var(--accent)' : 'var(--border)'}`, background: tableCols === n ? 'var(--accent-muted)' : 'transparent', color: tableCols === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
                   ))}
                 </div>
               </div>
 
               <div style={{ marginBottom: 20 }}>
                 <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_preview')}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tableCols}, 1fr)`, border: '1px solid var(--border-strong)', borderRadius: 6, overflow: 'hidden', height: Math.min(tableRows * 24, 168) }}>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tableCols}, 1fr)`, border: '1px solid var(--border-strong)', borderRadius: 4, overflow: 'hidden', height: Math.min(tableRows * 24, 168) }}>
                   {Array.from({ length: tableRows * tableCols }).map((_, i) => (
                     <div key={i} style={{ borderRight: (i % tableCols < tableCols - 1) ? '1px solid var(--border)' : 'none', borderBottom: Math.floor(i / tableCols) < tableRows - 1 ? '1px solid var(--border)' : 'none', background: Math.floor(i / tableCols) === 0 ? 'var(--bg-active)' : 'transparent' }} />
                   ))}
@@ -1397,7 +1396,7 @@ export default function DocumentToolsPanel({
               <button
                 onClick={() => { onInsertBlankPageWithGrid?.(tableRows, tableCols); setDataTableOpen(false); }}
                 disabled={!onInsertBlankPageWithGrid}
-                style={{ height: 32, padding: '0 18px', borderRadius: 7, background: onInsertBlankPageWithGrid ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: onInsertBlankPageWithGrid ? '#fff' : 'var(--text-3)', cursor: onInsertBlankPageWithGrid ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
+                style={{ height: 32, padding: '0 18px', borderRadius: 4, background: onInsertBlankPageWithGrid ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: onInsertBlankPageWithGrid ? '#fff' : 'var(--text-3)', cursor: onInsertBlankPageWithGrid ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
               >
                 Insert Table
               </button>
@@ -1414,7 +1413,7 @@ export default function DocumentToolsPanel({
         >
           <div
             className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 480, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.65)', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 480, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  overflow: 'hidden' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -1422,7 +1421,7 @@ export default function DocumentToolsPanel({
                 <Quote size={15} style={{ color: 'var(--accent)' }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_citation')}</span>
               </div>
-              <button onClick={() => setCitationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
+              <button onClick={() => setCitationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
             </div>
 
             <div style={{ padding: '20px' }}>
@@ -1434,14 +1433,14 @@ export default function DocumentToolsPanel({
               ] as { label: string; value: string; setter: (v: string) => void; placeholder: string }[]).map(({ label, value, setter, placeholder }) => (
                 <div key={label} style={{ marginBottom: 12 }}>
                   <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</label>
-                  <input type="text" value={value} onChange={(e) => setter(e.target.value)} placeholder={placeholder} className="app-input" style={{ width: '100%', height: 32, fontSize: 12.5, padding: '0 10px', borderRadius: 6, boxSizing: 'border-box' }} />
+                  <input type="text" value={value} onChange={(e) => setter(e.target.value)} placeholder={placeholder} className="app-input" style={{ width: '100%', height: 32, fontSize: 12.5, padding: '0 10px', borderRadius: 4, boxSizing: 'border-box' }} />
                 </div>
               ))}
 
               {formatAPA() && (
                 <div style={{ marginTop: 16 }}>
                   <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--accent)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Formatted (APA)</p>
-                  <div style={{ background: 'var(--bg-active)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '10px 12px' }}>
+                  <div style={{ background: 'var(--bg-active)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '10px 12px' }}>
                     <p style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.6, margin: 0 }}>{formatAPA()}</p>
                   </div>
                 </div>
@@ -1452,7 +1451,7 @@ export default function DocumentToolsPanel({
               <button
                 onClick={handleCopyCitation}
                 disabled={!formatAPA()}
-                style={{ height: 32, padding: '0 14px', borderRadius: 7, background: citCopied ? 'var(--green)' : 'var(--bg-elevated)', border: `1px solid ${citCopied ? 'transparent' : 'var(--border)'}`, color: citCopied ? '#fff' : 'var(--text-2)', cursor: formatAPA() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, opacity: formatAPA() ? 1 : 0.5 }}
+                style={{ height: 32, padding: '0 14px', borderRadius: 4, background: citCopied ? 'var(--green)' : 'var(--bg-elevated)', border: `1px solid ${citCopied ? 'transparent' : 'var(--border)'}`, color: citCopied ? '#fff' : 'var(--text-2)', cursor: formatAPA() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, opacity: formatAPA() ? 1 : 0.5 }}
               >
                 {citCopied ? <Check size={12} /> : <Copy size={12} />}
                 {citCopied ? t('dtp_copied') : t('dtp_copy')}
@@ -1460,7 +1459,7 @@ export default function DocumentToolsPanel({
               <button
                 onClick={handleInsertCitation}
                 disabled={!formatAPA() || !onInsertTextNote}
-                style={{ height: 32, padding: '0 14px', borderRadius: 7, background: (formatAPA() && onInsertTextNote) ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: (formatAPA() && onInsertTextNote) ? '#fff' : 'var(--text-3)', cursor: (formatAPA() && onInsertTextNote) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 500 }}
+                style={{ height: 32, padding: '0 14px', borderRadius: 4, background: (formatAPA() && onInsertTextNote) ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: (formatAPA() && onInsertTextNote) ? '#fff' : 'var(--text-3)', cursor: (formatAPA() && onInsertTextNote) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 500 }}
               >
                 Insert as Note
               </button>
@@ -1477,7 +1476,7 @@ export default function DocumentToolsPanel({
         >
           <div
             className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 420, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.65)', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 420, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  overflow: 'hidden' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
@@ -1485,7 +1484,7 @@ export default function DocumentToolsPanel({
                 <FunctionSquare size={15} style={{ color: 'var(--accent)' }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_equation')}</span>
               </div>
-              <button onClick={() => setEquationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
+              <button onClick={() => setEquationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
             </div>
 
             <div style={{ padding: '20px' }}>
@@ -1497,14 +1496,14 @@ export default function DocumentToolsPanel({
                 onKeyDown={(e) => { if (e.key === 'Enter' && equationText.trim()) handleInsertEquation(); }}
                 placeholder="e.g., E = mc², ∫₀^∞ e^-x dx = 1"
                 className="app-input"
-                style={{ width: '100%', height: 40, fontSize: 15, padding: '0 12px', borderRadius: 6, fontFamily: 'monospace', boxSizing: 'border-box' }}
+                style={{ width: '100%', height: 40, fontSize: 15, padding: '0 12px', borderRadius: 4, fontFamily: 'monospace', boxSizing: 'border-box' }}
                 autoFocus
               />
               <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
                 Use Unicode math symbols: ², ³, √, ∫, ∑, π, ±, ≈, ≠, ∞, α, β, θ…
               </p>
               {equationText.trim() && (
-                <div style={{ marginTop: 14, background: 'var(--bg-active)', border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '14px', textAlign: 'center' }}>
+                <div style={{ marginTop: 14, background: 'var(--bg-active)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '14px', textAlign: 'center' }}>
                   <p style={{ fontSize: 18, color: 'var(--text-1)', margin: 0, fontFamily: 'monospace', letterSpacing: '0.03em' }}>{equationText}</p>
                 </div>
               )}
@@ -1514,7 +1513,7 @@ export default function DocumentToolsPanel({
               <button
                 onClick={handleInsertEquation}
                 disabled={!equationText.trim() || !onInsertTextNote}
-                style={{ height: 32, padding: '0 18px', borderRadius: 7, background: (equationText.trim() && onInsertTextNote) ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: (equationText.trim() && onInsertTextNote) ? '#fff' : 'var(--text-3)', cursor: (equationText.trim() && onInsertTextNote) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
+                style={{ height: 32, padding: '0 18px', borderRadius: 4, background: (equationText.trim() && onInsertTextNote) ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: (equationText.trim() && onInsertTextNote) ? '#fff' : 'var(--text-3)', cursor: (equationText.trim() && onInsertTextNote) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
               >
                 Insert as Note
               </button>
@@ -1540,9 +1539,8 @@ export default function DocumentToolsPanel({
               width: '100%', maxWidth: 400,
               background: 'var(--bg-panel)',
               border: '1px solid var(--border)',
-              borderRadius: 14,
-              boxShadow: '0 24px 80px rgba(0,0,0,0.65)',
-              overflow: 'hidden',
+              borderRadius: 4,
+                            overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1562,7 +1560,7 @@ export default function DocumentToolsPanel({
                 onClick={() => setAddImageData(null)}
                 style={{
                   width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 6, border: '1px solid transparent',
+                  borderRadius: 4, border: '1px solid transparent',
                   background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
                 }}
               >
@@ -1583,9 +1581,8 @@ export default function DocumentToolsPanel({
                 alt="Selected"
                 style={{
                   maxWidth: '100%', maxHeight: 160,
-                  borderRadius: 6,
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                  objectFit: 'contain',
+                  borderRadius: 4,
+                                    objectFit: 'contain',
                 }}
               />
             </div>
@@ -1602,7 +1599,7 @@ export default function DocumentToolsPanel({
                   style={{
                     width: '100%', textAlign: 'left',
                     display: 'flex', alignItems: 'flex-start', gap: 12,
-                    padding: '12px 14px', borderRadius: 9,
+                    padding: '12px 14px', borderRadius: 4,
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border)',
                     cursor: 'pointer', fontFamily: 'inherit',
@@ -1616,7 +1613,7 @@ export default function DocumentToolsPanel({
                   })}
                 >
                   <div style={{
-                    width: 32, height: 32, borderRadius: 8,
+                    width: 32, height: 32, borderRadius: 4,
                     background: 'var(--accent-muted)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}>
@@ -1639,7 +1636,7 @@ export default function DocumentToolsPanel({
                   style={{
                     width: '100%', textAlign: 'left',
                     display: 'flex', alignItems: 'flex-start', gap: 12,
-                    padding: '12px 14px', borderRadius: 9,
+                    padding: '12px 14px', borderRadius: 4,
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border)',
                     cursor: 'pointer', fontFamily: 'inherit',
@@ -1653,7 +1650,7 @@ export default function DocumentToolsPanel({
                   })}
                 >
                   <div style={{
-                    width: 32, height: 32, borderRadius: 8,
+                    width: 32, height: 32, borderRadius: 4,
                     background: 'var(--bg-active)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}>
@@ -1691,9 +1688,8 @@ export default function DocumentToolsPanel({
               width: '100%', maxWidth: 400,
               background: 'var(--bg-panel)',
               border: '1px solid var(--border)',
-              borderRadius: 14,
-              boxShadow: '0 24px 80px rgba(0,0,0,0.65)',
-              overflow: 'hidden',
+              borderRadius: 4,
+                            overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1713,7 +1709,7 @@ export default function DocumentToolsPanel({
                 onClick={() => setConfirmClearOpen(false)}
                 style={{
                   width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 6, border: '1px solid transparent',
+                  borderRadius: 4, border: '1px solid transparent',
                   background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
                 }}
               >
@@ -1740,7 +1736,7 @@ export default function DocumentToolsPanel({
               <button
                 onClick={() => setConfirmClearOpen(false)}
                 style={{
-                  height: 32, padding: '0 16px', borderRadius: 7,
+                  height: 32, padding: '0 16px', borderRadius: 4,
                   background: 'transparent',
                   border: '1px solid var(--border)',
                   color: 'var(--text-2)',
@@ -1755,7 +1751,7 @@ export default function DocumentToolsPanel({
                   setConfirmClearOpen(false);
                 }}
                 style={{
-                  height: 32, padding: '0 16px', borderRadius: 7,
+                  height: 32, padding: '0 16px', borderRadius: 4,
                   background: 'var(--red)',
                   border: 'none',
                   color: '#fff',
@@ -1779,7 +1775,7 @@ export default function DocumentToolsPanel({
         >
           <div
             className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.65)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -1788,7 +1784,7 @@ export default function DocumentToolsPanel({
                 <ImagePlus size={15} style={{ color: 'var(--accent)' }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Page Images</span>
               </div>
-              <button onClick={() => setRemoveImgOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}>
+              <button onClick={() => setRemoveImgOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}>
                 <X size={14} />
               </button>
             </div>
@@ -1815,7 +1811,7 @@ export default function DocumentToolsPanel({
                         key={`${pageNumber}:${img.id}`}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 12,
-                          padding: '10px 12px', borderRadius: 9,
+                          padding: '10px 12px', borderRadius: 4,
                           background: isCurrentPage ? 'var(--accent-muted)' : 'var(--bg-elevated)',
                           border: `1px solid ${isCurrentPage ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
                         }}
@@ -1825,7 +1821,7 @@ export default function DocumentToolsPanel({
                         <img
                           src={img.src}
                           alt=""
-                          style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 5, flexShrink: 0, border: '1px solid var(--border)' }}
+                          style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }}
                         />
                         {/* Info */}
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -1846,7 +1842,7 @@ export default function DocumentToolsPanel({
                           onClick={() => { onDeletePageImage?.(pageNumber, img.id); }}
                           style={{
                             width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            borderRadius: 6, border: '1px solid transparent',
+                            borderRadius: 4, border: '1px solid transparent',
                             background: 'transparent', color: '#ef4444',
                             cursor: 'pointer', flexShrink: 0,
                             transition: 'background 0.12s',
@@ -1874,7 +1870,7 @@ export default function DocumentToolsPanel({
         >
           <div
             className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 24px 80px rgba(0,0,0,0.65)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
@@ -1882,26 +1878,26 @@ export default function DocumentToolsPanel({
                 <BookMarked size={15} style={{ color: 'var(--accent)' }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Key Terms</span>
                 {keyTerms.length > 0 && (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 10, padding: '1px 7px' }}>{keyTerms.length}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 7px' }}>{keyTerms.length}</span>
                 )}
               </div>
-              <button onClick={() => setKeyTermOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
+              <button onClick={() => setKeyTermOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
               <div style={{ marginBottom: keyTerms.length > 0 ? 24 : 0 }}>
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Term</label>
-                  <input type="text" value={ktTerm} onChange={(e) => setKtTerm(e.target.value)} placeholder="e.g., Mitosis" className="app-input" style={{ width: '100%', height: 32, fontSize: 13, padding: '0 10px', borderRadius: 6, boxSizing: 'border-box' }} />
+                  <input type="text" value={ktTerm} onChange={(e) => setKtTerm(e.target.value)} placeholder="e.g., Mitosis" className="app-input" style={{ width: '100%', height: 32, fontSize: 13, padding: '0 10px', borderRadius: 4, boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Definition</label>
-                  <textarea value={ktDef} onChange={(e) => setKtDef(e.target.value)} placeholder="Describe the term…" className="app-input" rows={3} style={{ width: '100%', fontSize: 12.5, padding: '8px 10px', borderRadius: 6, resize: 'vertical', minHeight: 72, fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                  <textarea value={ktDef} onChange={(e) => setKtDef(e.target.value)} placeholder="Describe the term…" className="app-input" rows={3} style={{ width: '100%', fontSize: 12.5, padding: '8px 10px', borderRadius: 4, resize: 'vertical', minHeight: 72, fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }} />
                 </div>
                 <button
                   onClick={handleSaveKeyTerm}
                   disabled={!ktTerm.trim()}
-                  style={{ width: '100%', height: 32, borderRadius: 7, background: ktTerm.trim() ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: ktTerm.trim() ? '#fff' : 'var(--text-3)', cursor: ktTerm.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
+                  style={{ width: '100%', height: 32, borderRadius: 4, background: ktTerm.trim() ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: ktTerm.trim() ? '#fff' : 'var(--text-3)', cursor: ktTerm.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
                 >
                   Save & Insert as Note
                 </button>
@@ -1912,7 +1908,7 @@ export default function DocumentToolsPanel({
                   <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Saved Terms</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {keyTerms.map((kt) => (
-                      <div key={kt.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                      <div key={kt.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kt.term}</p>
                           {kt.definition && (
@@ -1922,7 +1918,7 @@ export default function DocumentToolsPanel({
                         <button
                           onClick={() => handleDeleteKeyTerm(kt.id)}
                           title="Delete"
-                          style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 5, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0, transition: 'color 0.12s, background 0.12s' }}
+                          style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0, transition: 'color 0.12s, background 0.12s' }}
                           onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'rgba(229,72,77,.2)' })}
                           onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)', borderColor: 'transparent' })}
                         >

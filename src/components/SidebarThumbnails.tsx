@@ -293,7 +293,7 @@ function DocRowContent({
       className="group"
       style={{
         display: 'flex', alignItems: 'center', gap: 4,
-        padding: '3px 6px 3px 3px', borderRadius: 5, marginBottom: 1,
+        padding: '3px 6px 3px 3px', borderRadius: 4, marginBottom: 1,
         background: isActive ? 'var(--bg-active)' : 'transparent',
         border: `1px solid ${isActive ? 'var(--border-strong)' : 'transparent'}`,
         color: isActive ? 'var(--text-1)' : 'var(--text-2)',
@@ -641,7 +641,7 @@ export default function SidebarThumbnails({
                     onClick={() => onNavigate(entry.virtualIdx)}
                     style={{
                       display: 'flex', alignItems: 'flex-start', gap: 7,
-                      padding: '6px 7px', borderRadius: 5, marginBottom: 2,
+                      padding: '6px 7px', borderRadius: 4, marginBottom: 2,
                       cursor: 'pointer', transition: 'background 0.1s',
                     }}
                     onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
@@ -734,9 +734,8 @@ export default function SidebarThumbnails({
                   <div style={{
                     background: 'var(--bg-panel)',
                     border: '1px solid var(--accent)',
-                    borderRadius: 5,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
-                    padding: '0 6px 0 3px',
+                    borderRadius: 4,
+                                        padding: '0 6px 0 3px',
                     opacity: 0.96,
                   }}>
                     <DocRowContent
@@ -774,7 +773,7 @@ export default function SidebarThumbnails({
                       className="group"
                       style={{
                         width: '100%', display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '4px 6px', borderRadius: 5, marginBottom: 1,
+                        padding: '4px 6px', borderRadius: 4, marginBottom: 1,
                         background: bm.virtualIndex === currentVirtualIndex ? 'rgba(251,191,36,0.1)' : 'transparent',
                         border: `1px solid ${bm.virtualIndex === currentVirtualIndex ? 'rgba(251,191,36,0.3)' : 'transparent'}`,
                         color: 'var(--text-2)',
@@ -849,7 +848,7 @@ export default function SidebarThumbnails({
                           width: '100%',
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           gap: 4, padding: '4px 3px',
-                          borderRadius: 6, marginBottom: 2,
+                          borderRadius: 4, marginBottom: 2,
                           border: `1px solid ${isActive ? 'rgba(89,101,217,.45)' : 'transparent'}`,
                           background: isActive ? 'var(--accent-muted)' : 'transparent',
                           cursor: 'pointer', fontFamily: 'inherit',

@@ -6,10 +6,10 @@ import { createClient } from '@/lib/supabase/client';
 const glassInput: React.CSSProperties = {
   width: '100%',
   padding: '0.75rem 2.8rem 0.75rem 1rem',
-  background: 'transparent',
-  border: '2px solid rgba(255,255,255,0.2)',
-  borderRadius: '9999px',
-  color: '#fff',
+  background: 'rgba(0,0,0,0.4)',
+  border: '1px solid #1e293b',
+  borderRadius: '4px',
+  color: '#f8fafc',
   fontSize: '0.875rem',
   boxSizing: 'border-box',
   transition: 'border-color 0.2s',
@@ -48,12 +48,12 @@ export default function LoginPage() {
           width: '100%',
           maxWidth: 360,
           padding: '2.5rem 2rem',
-          background: 'rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(15px)',
-          WebkitBackdropFilter: 'blur(15px)',
-          border: '2px solid rgba(255,255,255,0.2)',
-          borderRadius: '16px',
-          color: '#fff',
+          background: 'rgba(9,9,11,0.7)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid #1e293b',
+          borderRadius: '4px',
+          color: '#f8fafc',
         }}
       >
         <h1 style={{ textAlign: 'center', fontSize: '2rem', fontWeight: 600, marginBottom: 4 }}>
@@ -66,8 +66,8 @@ export default function LoginPage() {
         {error && (
           <div style={{
             marginBottom: '1rem', padding: '0.6rem 1rem',
-            background: 'rgba(229,72,77,0.18)', border: '1px solid rgba(229,72,77,0.4)',
-            borderRadius: 8, fontSize: '0.8rem', color: '#ff8a8e', textAlign: 'center',
+            background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 4, fontSize: '0.8rem', color: '#ef4444', textAlign: 'center',
           }}>
             {error}
           </div>
@@ -123,11 +123,12 @@ export default function LoginPage() {
           onClick={handleLogin}
           disabled={loading}
           style={{
-            display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
-            background: loading ? 'rgba(255,255,255,0.7)' : '#ffffff',
-            color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
+            display: 'block', width: '100%', padding: '0.75rem', borderRadius: '4px',
+            background: loading ? '#1e40af' : '#2563eb',
+            color: '#ffffff', fontWeight: 600, fontSize: '0.9rem',
             border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
             marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
+            transition: 'background 0.15s',
           }}
         >
           {loading ? 'Signing in…' : 'Login'}

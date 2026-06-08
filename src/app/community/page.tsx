@@ -96,8 +96,8 @@ function CommentSection({ post, myUserId, onAddComment, onDeleteComment }: {
           <input value={text} onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); } }}
             placeholder={t('com_comment_placeholder')} disabled={submitting}
-            style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
-          <button onClick={handleSubmit} disabled={!text.trim() || submitting} style={{ width: 32, height: 32, borderRadius: 8, background: text.trim() ? 'var(--accent)' : 'var(--bg-elevated)', border: 'none', color: text.trim() ? '#fff' : 'var(--text-3)', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.12s, color 0.12s', flexShrink: 0 }}>
+            style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
+          <button onClick={handleSubmit} disabled={!text.trim() || submitting} style={{ width: 32, height: 32, borderRadius: 4, background: text.trim() ? 'var(--accent)' : 'var(--bg-elevated)', border: 'none', color: text.trim() ? '#fff' : 'var(--text-3)', cursor: text.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.12s, color 0.12s', flexShrink: 0 }}>
             <Send size={13} />
           </button>
         </div>
@@ -124,7 +124,7 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
   const hasContent = post.pages.some((p) => (p.textNotes && p.textNotes.length > 0) || p.canvasData);
 
   return (
-    <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, padding: '18px 20px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <a href={`/community/profile/${post.userId}`} style={{ textDecoration: 'none', flexShrink: 0 }}>
           <Avatar name={post.username ?? post.userId} url={post.avatarUrl} size={36} />
@@ -139,7 +139,7 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
         <div style={{ display: 'flex', gap: 6 }}>
           {myUserId && !isOwn && (
             <button onClick={() => onFollowToggle(post.userId, isFollowing)} style={{
-              height: 28, padding: '0 10px', borderRadius: 7,
+              height: 28, padding: '0 10px', borderRadius: 4,
               background: isFollowing ? 'var(--bg-elevated)' : 'var(--accent-muted)',
               color: isFollowing ? 'var(--text-3)' : 'var(--accent)',
               border: `1px solid ${isFollowing ? 'var(--border)' : 'transparent'}`,
@@ -150,7 +150,7 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
             </button>
           )}
           {isOwn && (
-            <button onClick={() => onDelete(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4, borderRadius: 6 }}
+            <button onClick={() => onDelete(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 4, borderRadius: 4 }}
               onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
               onMouseOut={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-3)'; }}
             ><Trash2 size={14} /></button>
@@ -164,13 +164,13 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
       {post.tags.length > 0 && (
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {post.tags.map((tag) => (
-            <span key={tag} style={{ padding: '2px 8px', borderRadius: 20, background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: 11.5, fontWeight: 500 }}>{tag}</span>
+            <span key={tag} style={{ padding: '2px 8px', borderRadius: 4, background: 'var(--accent-muted)', color: 'var(--accent)', fontSize: 11.5, fontWeight: 500 }}>{tag}</span>
           ))}
         </div>
       )}
 
       {hasContent && (
-        <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {post.pages.slice(0, 3).map((page, i) => (
             <div key={i}>
               {page.textNotes?.slice(0, 3).map((note, j) => (
@@ -323,7 +323,7 @@ export default function CommunityPage() {
           <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-1)' }}>StudySync</span>
           <nav style={{ display: 'flex', gap: 2 }}>
             {navLinks.map(({ label, href, active }) => (
-              <a key={href} href={href} style={{ fontSize: 13, fontWeight: 400, color: active ? 'var(--accent)' : 'var(--text-2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 6, borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent', transition: 'color 0.15s' }}
+              <a key={href} href={href} style={{ fontSize: 13, fontWeight: 400, color: active ? 'var(--accent)' : 'var(--text-2)', textDecoration: 'none', padding: '4px 10px', borderRadius: 4, borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent', transition: 'color 0.15s' }}
                 onMouseOver={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
                 onMouseOut={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-2)'; }}
               >{label}</a>
@@ -331,7 +331,7 @@ export default function CommunityPage() {
           </nav>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <a href="/friends" title={t('nav_friends')} style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', textDecoration: 'none', transition: 'background 0.12s, color 0.12s' }}
+          <a href="/friends" title={t('nav_friends')} style={{ width: 34, height: 34, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', textDecoration: 'none', transition: 'background 0.12s, color 0.12s' }}
             onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
             onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
           ><Users size={16} /></a>
@@ -352,7 +352,7 @@ export default function CommunityPage() {
 
         <div style={{ position: 'relative', marginBottom: 16 }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none' }} />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('com_search_placeholder')} style={{ width: '100%', height: 40, paddingLeft: 36, paddingRight: search ? 36 : 12, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('com_search_placeholder')} style={{ width: '100%', height: 40, paddingLeft: 36, paddingRight: search ? 36 : 12, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
           {search && (
             <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
               <X size={14} />
@@ -360,9 +360,9 @@ export default function CommunityPage() {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 10, padding: 4, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 2, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, padding: 4, marginBottom: 16 }}>
           {tabs.map(({ id, label, icon }) => (
-            <button key={id} onClick={() => setTab(id)} style={{ flex: 1, height: 32, borderRadius: 7, background: tab === id ? 'var(--accent)' : 'transparent', color: tab === id ? '#fff' : 'var(--text-2)', border: 'none', fontSize: 12.5, fontWeight: tab === id ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background 0.12s, color 0.12s' }}>
+            <button key={id} onClick={() => setTab(id)} style={{ flex: 1, height: 32, borderRadius: 4, background: tab === id ? 'var(--accent)' : 'transparent', color: tab === id ? '#fff' : 'var(--text-2)', border: 'none', fontSize: 12.5, fontWeight: tab === id ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background 0.12s, color 0.12s' }}>
               {icon} {label}
             </button>
           ))}
@@ -370,18 +370,18 @@ export default function CommunityPage() {
 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
           {COMMON_TAGS.map((tag) => (
-            <button key={tag} onClick={() => setFilterTag(filterTag === tag ? null : tag)} style={{ padding: '4px 10px', borderRadius: 20, background: filterTag === tag ? 'var(--accent)' : 'var(--bg-panel)', color: filterTag === tag ? '#fff' : 'var(--text-2)', border: `1px solid ${filterTag === tag ? 'var(--accent)' : 'var(--border)'}`, fontSize: 11.5, fontWeight: filterTag === tag ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
+            <button key={tag} onClick={() => setFilterTag(filterTag === tag ? null : tag)} style={{ padding: '4px 10px', borderRadius: 4, background: filterTag === tag ? 'var(--accent)' : 'var(--bg-panel)', color: filterTag === tag ? '#fff' : 'var(--text-2)', border: `1px solid ${filterTag === tag ? 'var(--accent)' : 'var(--border)'}`, fontSize: 11.5, fontWeight: filterTag === tag ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.12s' }}>
               {tag}
             </button>
           ))}
           {filterTag && !COMMON_TAGS.includes(filterTag) && (
-            <span style={{ padding: '4px 10px', borderRadius: 20, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 11.5, fontWeight: 600 }}>{filterTag}</span>
+            <span style={{ padding: '4px 10px', borderRadius: 4, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 11.5, fontWeight: 600 }}>{filterTag}</span>
           )}
         </div>
 
-        <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)' }}>{t('com_share_cta')}</p>
-          <a href="/workspace" style={{ flexShrink: 0, height: 34, padding: '0 14px', background: 'var(--accent)', color: '#fff', borderRadius: 8, fontSize: 12.5, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+          <a href="/workspace" style={{ flexShrink: 0, height: 34, padding: '0 14px', background: 'var(--accent)', color: '#fff', borderRadius: 4, fontSize: 12.5, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
             {t('com_open_workspace')}
           </a>
         </div>

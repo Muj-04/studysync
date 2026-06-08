@@ -39,7 +39,7 @@ function OptionBtn({
       style={{
         flex: 1, height: 34,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        borderRadius: 8,
+        borderRadius: 4,
         background: active ? 'var(--accent-muted)' : 'var(--bg-elevated)',
         border: `1.5px solid ${active ? 'rgba(37,99,235,0.35)' : 'var(--border)'}`,
         color: active ? 'var(--accent-hover)' : 'var(--text-2)',
@@ -142,7 +142,7 @@ export default function SettingsDropdown({
         style={{
           width: 42, height: 42,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: 8, flexShrink: 0,
+          borderRadius: 4, flexShrink: 0,
           background: open ? 'var(--bg-active)' : 'transparent',
           border: `1px solid ${open ? 'var(--border-strong)' : 'transparent'}`,
           color: open ? 'var(--text-1)' : 'var(--text-2)',
@@ -183,9 +183,8 @@ export default function SettingsDropdown({
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid var(--border)',
-            borderRadius: 12,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5), inset 0 0 0 0.5px rgba(255,255,255,0.04)',
-            zIndex: 200,
+            borderRadius: 4,
+                        zIndex: 200,
             padding: '14px',
           }}
         >
@@ -204,7 +203,7 @@ export default function SettingsDropdown({
               onClick={() => setOpen(false)}
               aria-label="Close settings"
               style={{
-                width: 22, height: 22, borderRadius: 5,
+                width: 22, height: 22, borderRadius: 4,
                 border: '1px solid transparent',
                 background: 'transparent', color: 'var(--text-3)',
                 cursor: 'pointer',
@@ -278,7 +277,7 @@ export default function SettingsDropdown({
                   style={{
                     width: '100%', height: 34,
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    borderRadius: 8,
+                    borderRadius: 4,
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border)',
                     color: 'var(--text-2)',

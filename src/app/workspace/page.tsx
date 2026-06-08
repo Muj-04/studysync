@@ -111,7 +111,7 @@ function HdrBtn({
       style={{
         width: 42, height: 42,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 8, flexShrink: 0,
+        borderRadius: 4, flexShrink: 0,
         background: active ? 'var(--bg-active)' : 'transparent',
         border: `1px solid ${active ? 'var(--border-strong)' : 'transparent'}`,
         color: active ? 'var(--text-1)' : 'var(--text-2)',
@@ -210,7 +210,7 @@ function RightPaneHeader({
       <div style={{
         display: 'flex', gap: 1,
         background: 'var(--bg-elevated)',
-        borderRadius: 5, padding: 2, flexShrink: 0,
+        borderRadius: 4, padding: 2, flexShrink: 0,
       }}>
         {(['blank', 'document'] as const).map((m) => (
           <button
@@ -294,7 +294,7 @@ function RightPaneHeader({
       <span style={{
         fontSize: 10, color: 'var(--text-3)',
         minWidth: 30, textAlign: 'center', flexShrink: 0,
-        fontVariantNumeric: 'tabular-nums',
+        fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
       }}>
         {Math.round(rightZoom * 100)}%
       </span>
@@ -319,7 +319,7 @@ function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
       gap: 14, background: 'var(--bg-app)', padding: 32,
     }}>
       <div style={{
-        width: 48, height: 48, borderRadius: 12,
+        width: 48, height: 48, borderRadius: 4,
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -339,7 +339,7 @@ function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           height: 32, padding: '0 16px',
-          borderRadius: 7,
+          borderRadius: 4,
           background: 'var(--accent)',
           border: '1px solid transparent',
           color: '#fff',
@@ -429,9 +429,8 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
       <div
         style={{
           background: 'var(--bg-panel)', border: '1px solid var(--border)',
-          borderRadius: 14, padding: '28px', width: 420,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
-        }}
+          borderRadius: 4, padding: '28px', width: 420,
+                  }}
         onClick={(e) => e.stopPropagation()}
       >
         {done ? (
@@ -464,7 +463,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                   style={{
                     width: '100%', height: 36, padding: '0 10px', boxSizing: 'border-box',
                     background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                    borderRadius: 8, fontSize: 13, color: 'var(--text-1)',
+                    borderRadius: 4, fontSize: 13, color: 'var(--text-1)',
                     outline: 'none', fontFamily: 'inherit',
                   }}
                 />
@@ -480,7 +479,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                   style={{
                     width: '100%', padding: '8px 10px', boxSizing: 'border-box',
                     background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                    borderRadius: 8, fontSize: 13, color: 'var(--text-1)',
+                    borderRadius: 4, fontSize: 13, color: 'var(--text-1)',
                     outline: 'none', fontFamily: 'inherit', resize: 'vertical',
                   }}
                 />
@@ -491,7 +490,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                 {tags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7 }}>
                     {tags.map((t) => (
-                      <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'var(--accent)', color: '#fff', fontSize: 11.5, fontWeight: 500 }}>
+                      <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 4, background: 'var(--accent)', color: '#fff', fontSize: 11.5, fontWeight: 500 }}>
                         {t}
                         <button onClick={() => setTags((prev) => prev.filter((x) => x !== t))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 0, fontSize: 12 }}>×</button>
                       </span>
@@ -502,8 +501,8 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                   <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }}
                     placeholder={t('ws_share_tags_placeholder')} disabled={tags.length >= 5}
-                    style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
-                  <button onClick={() => addTag(tagInput)} disabled={!tagInput.trim() || tags.length >= 5} style={{ height: 32, padding: '0 10px', borderRadius: 7, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{t('common_add')}</button>
+                    style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
+                  <button onClick={() => addTag(tagInput)} disabled={!tagInput.trim() || tags.length >= 5} style={{ height: 32, padding: '0 10px', borderRadius: 4, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{t('common_add')}</button>
                 </div>
               </div>
 
@@ -515,7 +514,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                 onClick={handlePost}
                 disabled={!title.trim() || posting}
                 style={{
-                  height: 40, borderRadius: 10,
+                  height: 40, borderRadius: 4,
                   background: title.trim() ? 'var(--accent)' : 'var(--bg-elevated)',
                   color: title.trim() ? '#fff' : 'var(--text-3)',
                   border: 'none', fontSize: 13.5, fontWeight: 600,
@@ -657,9 +656,8 @@ function HelpModal({ onClose }: { onClose: () => void }) {
           display: 'flex', flexDirection: 'column',
           background: 'var(--bg-panel)',
           border: '1px solid var(--border)',
-          borderRadius: 14,
-          boxShadow: '0 20px 80px rgba(0,0,0,0.65)',
-          overflow: 'hidden',
+          borderRadius: 4,
+                    overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -675,7 +673,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={onClose}
             style={{
-              width: 26, height: 26, borderRadius: 6, border: '1px solid transparent',
+              width: 26, height: 26, borderRadius: 4, border: '1px solid transparent',
               background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'background 0.12s, color 0.12s',
@@ -692,7 +690,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
               key={tab}
               onClick={() => setActiveTab(i)}
               style={{
-                padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                padding: '5px 12px', borderRadius: 4, fontSize: 12, fontWeight: 600,
                 background: activeTab === i ? 'var(--bg-active)' : 'transparent',
                 border: `1px solid ${activeTab === i ? 'var(--border-strong)' : 'transparent'}`,
                 color: activeTab === i ? 'var(--text-1)' : 'var(--text-3)',
@@ -735,7 +733,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {tips.map(({ title, body }, i) => (
                 <div key={i} style={{
-                  padding: '10px 12px', borderRadius: 8,
+                  padding: '10px 12px', borderRadius: 4,
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border)',
                 }}>
@@ -756,7 +754,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
               )}
               {allDone ? (
                 <div style={{
-                  padding: '16px 14px', borderRadius: 10,
+                  padding: '16px 14px', borderRadius: 4,
                   background: 'rgba(89,101,217,0.1)',
                   border: '1px solid rgba(89,101,217,0.25)',
                   textAlign: 'center',
@@ -772,7 +770,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
                       onClick={() => toggleCheck(key)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '9px 12px', borderRadius: 8, width: '100%',
+                        padding: '9px 12px', borderRadius: 4, width: '100%',
                         background: checklist[key] ? 'rgba(89,101,217,0.07)' : 'var(--bg-elevated)',
                         border: `1px solid ${checklist[key] ? 'rgba(89,101,217,0.22)' : 'var(--border)'}`,
                         cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
@@ -780,7 +778,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
                       }}
                     >
                       <div style={{
-                        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                        width: 18, height: 18, borderRadius: 4, flexShrink: 0,
                         background: checklist[key] ? 'var(--accent)' : 'var(--bg-panel)',
                         border: `1.5px solid ${checklist[key] ? 'var(--accent)' : 'var(--border-strong)'}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -811,12 +809,12 @@ function HelpModal({ onClose }: { onClose: () => void }) {
               {wnItems.map(({ title, body }, i) => (
                 <div key={i} style={{
                   display: 'flex', gap: 12, alignItems: 'flex-start',
-                  padding: '10px 12px', borderRadius: 8,
+                  padding: '10px 12px', borderRadius: 4,
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border)',
                 }}>
                   <div style={{
-                    width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                    width: 22, height: 22, borderRadius: 4, flexShrink: 0,
                     background: 'var(--accent)', color: '#fff',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 11, fontWeight: 700, marginTop: 1,
@@ -1824,7 +1822,7 @@ export default function WorkspacePage() {
                   color: active ? 'var(--accent)' : 'var(--text-2)',
                   textDecoration: 'none',
                   padding: '4px 10px',
-                  borderRadius: 6,
+                  borderRadius: 4,
                   borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent',
                   transition: 'color 0.15s',
                   cursor: 'pointer',
@@ -1922,7 +1920,7 @@ export default function WorkspacePage() {
             href="/friends"
             title={t('nav_friends')}
             style={{
-              width: 34, height: 34, borderRadius: 8,
+              width: 34, height: 34, borderRadius: 4,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'var(--text-2)', textDecoration: 'none',
               transition: 'background 0.12s, color 0.12s',
@@ -1961,7 +1959,7 @@ export default function WorkspacePage() {
         >
           <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
             <div style={{
-              width: 56, height: 56, borderRadius: 14, margin: '0 auto 20px',
+              width: 56, height: 56, borderRadius: 4, margin: '0 auto 20px',
               background: 'var(--bg-elevated)', border: '1px solid var(--border)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
@@ -2196,13 +2194,12 @@ export default function WorkspacePage() {
                               position: 'absolute', top: 10, right: 10, zIndex: 10,
                               width: 28, height: 28,
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              borderRadius: 7,
+                              borderRadius: 4,
                               background: 'var(--bg-elevated)',
                               border: '1px solid var(--border)',
                               color: 'var(--text-2)',
                               cursor: 'pointer',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-                              transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                                                            transition: 'background 0.12s, color 0.12s, border-color 0.12s',
                             }}
                             onMouseOver={(e) => Object.assign(e.currentTarget.style, {
                               background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'rgba(229,72,77,.25)',
@@ -2340,14 +2337,13 @@ export default function WorkspacePage() {
                     className="animate-scale-in"
                     style={{
                       position: 'absolute', bottom: 14, right: 14, zIndex: 30,
-                      width: 34, height: 34, borderRadius: 8,
+                      width: 34, height: 34, borderRadius: 4,
                       background: 'var(--bg-elevated)',
                       border: '1px solid var(--border)',
                       color: 'var(--text-2)',
                       cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-                      transition: 'background 0.15s, color 0.15s',
+                                            transition: 'background 0.15s, color 0.15s',
                     }}
                     onMouseOver={(e) => Object.assign(e.currentTarget.style, {
                       background: 'var(--bg-active)', color: 'var(--text-1)',
@@ -2450,9 +2446,8 @@ export default function WorkspacePage() {
               width: '100%', maxWidth: 420,
               background: 'var(--bg-panel)',
               border: '1px solid var(--border)',
-              borderRadius: 14,
-              boxShadow: '0 24px 80px rgba(0,0,0,0.65)',
-              padding: '24px',
+              borderRadius: 4,
+                            padding: '24px',
               display: 'flex', flexDirection: 'column', gap: 16,
             }}
             onClick={(e) => e.stopPropagation()}
@@ -2489,7 +2484,7 @@ export default function WorkspacePage() {
                   display: 'flex', alignItems: 'center', gap: 8,
                   background: 'var(--bg-elevated)',
                   border: '1px solid var(--border)',
-                  borderRadius: 8, padding: '8px 12px',
+                  borderRadius: 4, padding: '8px 12px',
                 }}>
                   <span style={{
                     flex: 1, fontSize: 12, color: 'var(--text-2)',
@@ -2500,7 +2495,7 @@ export default function WorkspacePage() {
                   <button
                     onClick={() => { navigator.clipboard.writeText(roomUrl); }}
                     style={{
-                      padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                      padding: '4px 10px', borderRadius: 4, fontSize: 11, fontWeight: 500,
                       background: 'var(--bg-active)', color: 'var(--text-2)',
                       border: '1px solid var(--border)', cursor: 'pointer', flexShrink: 0,
                     }}
@@ -2512,7 +2507,7 @@ export default function WorkspacePage() {
                   <button
                     onClick={() => window.open(roomUrl, '_blank')}
                     style={{
-                      flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                      flex: 1, padding: '9px 0', borderRadius: 4, fontSize: 13, fontWeight: 500,
                       background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer',
                     }}
                   >
@@ -2521,7 +2516,7 @@ export default function WorkspacePage() {
                   <button
                     onClick={() => { setRoomModal('idle'); setRoomUrl(''); }}
                     style={{
-                      padding: '9px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                      padding: '9px 16px', borderRadius: 4, fontSize: 13, fontWeight: 500,
                       background: 'transparent', color: 'var(--text-2)',
                       border: '1px solid var(--border)', cursor: 'pointer',
                     }}
@@ -2543,11 +2538,10 @@ export default function WorkspacePage() {
             position: 'fixed', bottom: 24, right: 24, zIndex: 1000,
             display: 'flex', alignItems: 'center', gap: 10,
             padding: '11px 16px',
-            borderRadius: 10,
+            borderRadius: 4,
             background: 'var(--bg-panel)',
             border: '1px solid var(--border)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
-            color: 'var(--text-1)',
+                        color: 'var(--text-1)',
             fontSize: 13, fontWeight: 500,
             pointerEvents: 'none',
             userSelect: 'none',
