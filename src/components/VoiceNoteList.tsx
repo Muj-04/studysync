@@ -129,7 +129,7 @@ function NoteItem({
                 width: '100%',
                 background: 'transparent',
                 border: 'none',
-                borderBottom: '1px solid var(--accent)',
+                borderBottom: '1px solid rgba(255,255,255,0.3)',
                 outline: 'none',
                 color: 'var(--text-1)',
                 fontSize: 12,
@@ -222,7 +222,7 @@ function NoteItem({
             onMouseUp={(e) => { isScrubbing.current = false; if (audio) audio.currentTime = parseFloat((e.target as HTMLInputElement).value); }}
             onTouchEnd={(e) => { isScrubbing.current = false; if (audio) audio.currentTime = parseFloat((e.target as HTMLInputElement).value); }}
             onChange={handleSeek}
-            style={{ flex: 1, height: 3, cursor: 'pointer', accentColor: 'var(--accent)' }}
+            style={{ flex: 1, height: 3, cursor: 'pointer', accentColor: '#ffffff' }}
           />
           <span style={{
             fontSize: 10, fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
