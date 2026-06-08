@@ -121,22 +121,22 @@ function PrimaryBtn({
       disabled={disabled || loading}
       style={{
         height: 36, padding: '0 16px',
-        background: disabled || loading ? 'var(--bg-elevated)' : 'var(--accent)',
-        color: disabled || loading ? 'var(--text-3)' : '#fff',
-        border: disabled || loading ? '1px solid var(--border)' : 'none',
+        background: disabled || loading ? 'rgba(255,255,255,0.12)' : '#ffffff',
+        color: disabled || loading ? 'rgba(255,255,255,0.35)' : '#0f172a',
+        border: disabled || loading ? '1px solid rgba(255,255,255,0.15)' : 'none',
         borderRadius: 4, fontSize: 12.5, fontWeight: 600,
         cursor: disabled || loading ? 'not-allowed' : 'pointer',
         fontFamily: 'inherit', transition: 'background 0.13s',
         display: 'inline-flex', alignItems: 'center', gap: 6,
       }}
-      onMouseOver={(e) => { if (!disabled && !loading) e.currentTarget.style.background = 'var(--accent-hover)'; }}
-      onMouseOut={(e) => { if (!disabled && !loading) e.currentTarget.style.background = 'var(--accent)'; }}
+      onMouseOver={(e) => { if (!disabled && !loading) e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
+      onMouseOut={(e) => { if (!disabled && !loading) e.currentTarget.style.background = '#ffffff'; }}
     >
       {loading && (
         <span style={{
           width: 12, height: 12, borderRadius: '50%',
-          border: '2px solid rgba(255,255,255,0.3)',
-          borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', flexShrink: 0,
+          border: '2px solid rgba(15,23,42,0.2)',
+          borderTopColor: '#0f172a', animation: 'spin 0.7s linear infinite', flexShrink: 0,
         }} />
       )}
       {children}

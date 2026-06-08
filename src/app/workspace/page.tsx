@@ -340,15 +340,15 @@ function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
           display: 'flex', alignItems: 'center', gap: 6,
           height: 32, padding: '0 16px',
           borderRadius: 4,
-          background: 'var(--accent)',
+          background: '#ffffff',
           border: '1px solid transparent',
-          color: '#fff',
+          color: '#0f172a',
           cursor: 'pointer', fontFamily: 'inherit',
           fontSize: 12.5, fontWeight: 500,
           transition: 'background 0.13s',
         }}
-        onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-hover)'; }}
-        onMouseOut={(e) => { e.currentTarget.style.background = 'var(--accent)'; }}
+        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
+        onMouseOut={(e) => { e.currentTarget.style.background = '#ffffff'; }}
       >
         <FilePlus size={13} />
         Add Blank Page
@@ -2508,7 +2508,7 @@ export default function WorkspacePage() {
                     onClick={() => window.open(roomUrl, '_blank')}
                     style={{
                       flex: 1, padding: '9px 0', borderRadius: 4, fontSize: 13, fontWeight: 500,
-                      background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer',
+                      background: '#ffffff', color: '#0f172a', border: 'none', cursor: 'pointer',
                     }}
                   >
                     Open room

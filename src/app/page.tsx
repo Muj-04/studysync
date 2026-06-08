@@ -2,9 +2,6 @@
 import Link from 'next/link';
 import { BookOpen, Mic, PenTool, ArrowRight, Zap, Users, Library } from 'lucide-react';
 
-const HERO_IMG =
-  'https://i.pinimg.com/originals/d7/b9/0c/d7b90cc80898e8823455a127945719af.jpg';
-
 const FEATURES = [
   {
     icon: <Mic size={18} />,
@@ -38,7 +35,7 @@ function AppScreen() {
   return (
     <div style={{
       width: '100%', height: '100%',
-      background: '#000000',
+      background: 'rgba(6,8,18,0.85)',
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
       fontFamily: "'Geist', 'Inter', system-ui, sans-serif",
@@ -46,27 +43,27 @@ function AppScreen() {
       {/* Top nav */}
       <div style={{
         height: 32, flexShrink: 0,
-        background: '#09090b',
-        borderBottom: '1px solid #1e293b',
+        background: 'rgba(255,255,255,0.06)',
+        borderBottom: '1px solid rgba(255,255,255,0.12)',
         display: 'flex', alignItems: 'center',
         padding: '0 10px', gap: 7,
       }}>
         <div style={{
           width: 15, height: 15, borderRadius: 3,
-          background: '#2563eb',
+          background: '#ffffff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
         }}>
-          <div style={{ width: 7, height: 7, border: '1.5px solid #fff', borderRadius: 1 }} />
+          <div style={{ width: 7, height: 7, border: '1.5px solid #0f172a', borderRadius: 1 }} />
         </div>
-        <span style={{ fontSize: 9, fontWeight: 700, color: '#f8fafc' }}>StudySpace</span>
+        <span style={{ fontSize: 9, fontWeight: 700, color: '#ffffff' }}>StudySpace</span>
         <div style={{ display: 'flex', gap: 1, marginLeft: 6 }}>
           {['Recent', 'Mercury PDF', 'Blank Page'].map((tab, i) => (
             <div key={i} style={{
               padding: '2px 7px', borderRadius: '3px 3px 0 0', fontSize: 7,
-              background: i === 1 ? '#1e293b' : 'transparent',
-              color: i === 1 ? '#f8fafc' : '#475569',
-              border: i === 1 ? '1px solid #1e293b' : '1px solid transparent',
+              background: i === 1 ? 'rgba(255,255,255,0.15)' : 'transparent',
+              color: i === 1 ? '#ffffff' : 'rgba(255,255,255,0.4)',
+              border: i === 1 ? '1px solid rgba(255,255,255,0.2)' : '1px solid transparent',
               borderBottom: 'none',
               fontWeight: i === 1 ? 600 : 400,
             }}>
@@ -75,8 +72,8 @@ function AppScreen() {
           ))}
         </div>
         <div style={{ flex: 1 }} />
-        <div style={{ width: 42, height: 14, background: '#1e293b', borderRadius: 3, border: '1px solid #334155' }} />
-        <div style={{ width: 28, height: 14, background: '#2563eb', borderRadius: 3 }} />
+        <div style={{ width: 42, height: 14, background: 'rgba(255,255,255,0.1)', borderRadius: 3, border: '1px solid rgba(255,255,255,0.2)' }} />
+        <div style={{ width: 28, height: 14, background: '#ffffff', borderRadius: 3 }} />
       </div>
 
       {/* Body */}
@@ -84,8 +81,8 @@ function AppScreen() {
         {/* Thumbnails sidebar */}
         <div style={{
           width: 56, flexShrink: 0,
-          background: '#09090b',
-          borderRight: '1px solid #1e293b',
+          background: 'rgba(255,255,255,0.04)',
+          borderRight: '1px solid rgba(255,255,255,0.12)',
           padding: '6px 4px',
           display: 'flex', flexDirection: 'column', gap: 4,
         }}>
@@ -93,18 +90,18 @@ function AppScreen() {
             <div key={i} style={{
               width: '100%', paddingBottom: '138%',
               position: 'relative', flexShrink: 0,
-              background: i === 0 ? 'rgba(37,99,235,0.2)' : '#0f172a',
+              background: i === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)',
               borderRadius: 2,
-              border: i === 0 ? '1px solid rgba(37,99,235,0.6)' : '1px solid #1e293b',
+              border: i === 0 ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.12)',
               overflow: 'hidden',
             }}>
               <div style={{ position: 'absolute', inset: 0, padding: '3px' }}>
-                <div style={{ width: '70%', height: 2, background: i === 0 ? 'rgba(37,99,235,0.8)' : '#334155', borderRadius: 1, marginBottom: 2 }} />
+                <div style={{ width: '70%', height: 2, background: i === 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.25)', borderRadius: 1, marginBottom: 2 }} />
                 {[88, 72, 80, 65, 77].map((w, j) => (
-                  <div key={j} style={{ width: `${w}%`, height: 1.5, background: '#334155', borderRadius: 1, marginBottom: 1.5 }} />
+                  <div key={j} style={{ width: `${w}%`, height: 1.5, background: 'rgba(255,255,255,0.2)', borderRadius: 1, marginBottom: 1.5 }} />
                 ))}
               </div>
-              <div style={{ position: 'absolute', bottom: 1, right: 2, fontSize: 5, color: '#475569' }}>{i + 1}</div>
+              <div style={{ position: 'absolute', bottom: 1, right: 2, fontSize: 5, color: 'rgba(255,255,255,0.4)' }}>{i + 1}</div>
             </div>
           ))}
         </div>
@@ -116,8 +113,8 @@ function AppScreen() {
             flex: 1, display: 'flex',
             alignItems: 'center', justifyContent: 'center',
             padding: '6px 4px 6px 6px',
-            background: '#000000',
-            borderRight: '1px solid #1e293b',
+            background: 'rgba(0,0,0,0.3)',
+            borderRight: '1px solid rgba(255,255,255,0.1)',
           }}>
             <div style={{
               width: '96%', height: '96%',
@@ -152,7 +149,7 @@ function AppScreen() {
             flex: 1, display: 'flex',
             alignItems: 'center', justifyContent: 'center',
             padding: '6px 6px 6px 4px',
-            background: '#000000',
+            background: 'rgba(0,0,0,0.3)',
           }}>
             <div style={{
               width: '96%', height: '96%',
@@ -189,17 +186,17 @@ function AppScreen() {
         {/* Right panel: Voice Notes */}
         <div style={{
           width: 136, flexShrink: 0,
-          background: '#09090b',
-          borderLeft: '1px solid #1e293b',
+          background: 'rgba(255,255,255,0.05)',
+          borderLeft: '1px solid rgba(255,255,255,0.12)',
           display: 'flex', flexDirection: 'column',
         }}>
           <div style={{
             padding: '5px 8px 4px',
-            borderBottom: '1px solid #1e293b',
+            borderBottom: '1px solid rgba(255,255,255,0.12)',
             display: 'flex', alignItems: 'center', gap: 5,
           }}>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
-            <span style={{ fontSize: 7.5, fontWeight: 700, color: '#f8fafc', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Voice Notes</span>
+            <span style={{ fontSize: 7.5, fontWeight: 700, color: '#ffffff', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Voice Notes</span>
           </div>
           <div style={{ flex: 1, padding: '4px 5px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             {[
@@ -210,31 +207,31 @@ function AppScreen() {
             ].map((item, i) => (
               <div key={i} style={{
                 padding: '3px 5px',
-                background: i === 0 ? 'rgba(37,99,235,0.12)' : '#0f172a',
+                background: i === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
                 borderRadius: 3,
-                border: `1px solid ${i === 0 ? 'rgba(37,99,235,0.35)' : '#1e293b'}`,
+                border: `1px solid ${i === 0 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.1)'}`,
               }}>
-                <div style={{ fontSize: 6, color: i === 0 ? '#f8fafc' : '#64748b', lineHeight: 1.4, marginBottom: 1.5, fontWeight: i === 0 ? 600 : 400 }}>
+                <div style={{ fontSize: 6, color: i === 0 ? '#ffffff' : 'rgba(255,255,255,0.45)', lineHeight: 1.4, marginBottom: 1.5, fontWeight: i === 0 ? 600 : 400 }}>
                   {item.label}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: 0, height: 0, borderLeft: '3.5px solid #fff', borderTop: '2px solid transparent', borderBottom: '2px solid transparent', marginLeft: 1 }} />
+                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 0, height: 0, borderLeft: '3.5px solid #0f172a', borderTop: '2px solid transparent', borderBottom: '2px solid transparent', marginLeft: 1 }} />
                   </div>
-                  <span style={{ fontSize: 5, color: '#475569', fontFamily: 'JetBrains Mono, monospace' }}>{item.time}</span>
+                  <span style={{ fontSize: 5, color: 'rgba(255,255,255,0.35)', fontFamily: 'JetBrains Mono, monospace' }}>{item.time}</span>
                 </div>
               </div>
             ))}
           </div>
           <div style={{
             padding: '5px 8px',
-            borderTop: '1px solid #1e293b',
+            borderTop: '1px solid rgba(255,255,255,0.12)',
             display: 'flex', alignItems: 'center', gap: 5,
           }}>
             <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff' }} />
             </div>
-            <div style={{ width: 70, height: 4, background: '#1e293b', borderRadius: 2 }} />
+            <div style={{ width: 70, height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2 }} />
           </div>
         </div>
       </div>
@@ -242,20 +239,20 @@ function AppScreen() {
       {/* Bottom bar */}
       <div style={{
         height: 26, flexShrink: 0,
-        background: '#09090b',
-        borderTop: '1px solid #1e293b',
+        background: 'rgba(255,255,255,0.04)',
+        borderTop: '1px solid rgba(255,255,255,0.1)',
         display: 'flex', alignItems: 'center',
         padding: '0 9px', gap: 7,
       }}>
-        <div style={{ width: 44, height: 5, background: '#1e293b', borderRadius: 2 }} />
+        <div style={{ width: 44, height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <div style={{ width: 14, height: 14, borderRadius: 3, background: '#0f172a', border: '1px solid #1e293b' }} />
-          <div style={{ width: 28, height: 5, background: '#2563eb', borderRadius: 2 }} />
-          <div style={{ width: 14, height: 14, borderRadius: 3, background: '#0f172a', border: '1px solid #1e293b' }} />
+          <div style={{ width: 14, height: 14, borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }} />
+          <div style={{ width: 28, height: 5, background: '#ffffff', borderRadius: 2 }} />
+          <div style={{ width: 14, height: 14, borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }} />
         </div>
         <div style={{ flex: 1 }} />
-        <div style={{ width: 26, height: 5, background: '#1e293b', borderRadius: 2 }} />
-        <div style={{ width: 20, height: 5, background: '#1e293b', borderRadius: 2 }} />
+        <div style={{ width: 26, height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
+        <div style={{ width: 20, height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
       </div>
     </div>
   );
@@ -270,37 +267,39 @@ function TabletMockup() {
       margin: '0 auto',
       position: 'relative',
     }}>
-      {/* Sapphire glow beneath */}
+      {/* White glow beneath */}
       <div style={{
         position: 'absolute',
         bottom: '-20px', left: '15%', right: '15%',
         height: 60,
-        background: 'radial-gradient(ellipse, rgba(37,99,235,0.18) 0%, transparent 70%)',
+        background: 'radial-gradient(ellipse, rgba(255,255,255,0.08) 0%, transparent 70%)',
         filter: 'blur(16px)',
         pointerEvents: 'none',
       }} />
 
       {/* Device body */}
       <div style={{
-        background: '#09090b',
+        background: 'rgba(255,255,255,0.08)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
         borderRadius: 16,
         padding: '10px 14px 14px',
-        border: '1px solid #1e293b',
+        border: '1px solid rgba(255,255,255,0.2)',
         position: 'relative',
       }}>
         {/* Top bezel */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, position: 'relative' }}>
           <div style={{
             width: 6, height: 6, borderRadius: '50%',
-            background: '#1e293b',
-            border: '1px solid #334155',
+            background: 'rgba(255,255,255,0.15)',
+            border: '1px solid rgba(255,255,255,0.3)',
           }} />
           <div style={{ position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ width: 2.5, height: 10, borderRadius: 1.5, background: '#1e293b' }} />
-            <div style={{ width: 2.5, height: 10, borderRadius: 1.5, background: '#1e293b' }} />
+            <div style={{ width: 2.5, height: 10, borderRadius: 1.5, background: 'rgba(255,255,255,0.2)' }} />
+            <div style={{ width: 2.5, height: 10, borderRadius: 1.5, background: 'rgba(255,255,255,0.2)' }} />
           </div>
           <div style={{ position: 'absolute', right: -14, top: '50%', transform: 'translateY(-50%)' }}>
-            <div style={{ width: 2.5, height: 15, borderRadius: 1.5, background: '#1e293b' }} />
+            <div style={{ width: 2.5, height: 15, borderRadius: 1.5, background: 'rgba(255,255,255,0.2)' }} />
           </div>
         </div>
 
@@ -309,7 +308,7 @@ function TabletMockup() {
           borderRadius: 6,
           overflow: 'hidden',
           aspectRatio: '16/9',
-          border: '1px solid #1e293b',
+          border: '1px solid rgba(255,255,255,0.15)',
         }}>
           <AppScreen />
         </div>
@@ -317,7 +316,7 @@ function TabletMockup() {
         {/* Home bar */}
         <div style={{
           width: 80, height: 3, borderRadius: 2,
-          background: '#1e293b',
+          background: 'rgba(255,255,255,0.2)',
           margin: '10px auto 0',
         }} />
       </div>
@@ -327,8 +326,8 @@ function TabletMockup() {
         position: 'absolute',
         right: -12, top: '10%', bottom: '10%',
         width: 10, borderRadius: 5,
-        background: '#1e293b',
-        border: '1px solid #334155',
+        background: 'rgba(255,255,255,0.1)',
+        border: '1px solid rgba(255,255,255,0.25)',
       }}>
         <div style={{
           position: 'absolute', bottom: -7,
@@ -336,13 +335,13 @@ function TabletMockup() {
           width: 0, height: 0,
           borderLeft: '5px solid transparent',
           borderRight: '5px solid transparent',
-          borderTop: '8px solid #334155',
+          borderTop: '8px solid rgba(255,255,255,0.3)',
         }} />
         <div style={{
           position: 'absolute', top: '30%', left: 0, right: 0, height: 18,
-          background: 'rgba(37,99,235,0.15)',
-          borderTop: '1px solid #334155',
-          borderBottom: '1px solid #334155',
+          background: 'rgba(255,255,255,0.08)',
+          borderTop: '1px solid rgba(255,255,255,0.2)',
+          borderBottom: '1px solid rgba(255,255,255,0.2)',
         }} />
       </div>
     </div>
@@ -362,23 +361,35 @@ function FeatureCard({
   return (
     <div style={{
       flex: 1, minWidth: 200,
-      background: '#09090b',
-      border: '1px solid #1e293b',
+      background: 'rgba(255,255,255,0.08)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      border: '1px solid rgba(255,255,255,0.15)',
       borderRadius: 4,
       padding: '20px 18px',
       position: 'relative',
       overflow: 'hidden',
-      transition: 'border-color 0.2s',
+      transition: 'border-color 0.2s, background 0.2s',
     }}
-      onMouseOver={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#334155'; }}
-      onMouseOut={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#1e293b'; }}
+      onMouseOver={(e) => {
+        Object.assign((e.currentTarget as HTMLDivElement).style, {
+          borderColor: 'rgba(255,255,255,0.35)',
+          background: 'rgba(255,255,255,0.13)',
+        });
+      }}
+      onMouseOut={(e) => {
+        Object.assign((e.currentTarget as HTMLDivElement).style, {
+          borderColor: 'rgba(255,255,255,0.15)',
+          background: 'rgba(255,255,255,0.08)',
+        });
+      }}
     >
       <div style={{
         width: 34, height: 34, borderRadius: 4,
-        background: 'rgba(37,99,235,0.12)',
-        border: '1px solid rgba(37,99,235,0.25)',
+        background: 'rgba(255,255,255,0.12)',
+        border: '1px solid rgba(255,255,255,0.25)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#2563eb', marginBottom: 14,
+        color: '#ffffff', marginBottom: 14,
       }}>
         {icon}
       </div>
@@ -397,18 +408,18 @@ function FeatureCard({
         </span>
       )}
 
-      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#f8fafc', margin: '0 0 8px', lineHeight: 1.3 }}>
+      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#ffffff', margin: '0 0 8px', lineHeight: 1.3 }}>
         {title}
       </h3>
 
-      <p style={{ fontSize: 13, color: '#64748b', margin: 0, lineHeight: 1.6 }}>
+      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.6 }}>
         {subtitle}
       </p>
 
-      {/* Sapphire accent line at bottom */}
+      {/* White accent line at bottom */}
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0, height: 1,
-        background: 'linear-gradient(90deg, transparent, rgba(37,99,235,0.4), transparent)',
+        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
       }} />
     </div>
   );
@@ -419,8 +430,8 @@ function FeatureCard({
 function StatItem({ value, label }: { value: string; label: string }) {
   return (
     <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color: '#f8fafc', lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
-      <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color: '#ffffff', lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
+      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>{label}</div>
     </div>
   );
 }
@@ -431,54 +442,40 @@ export default function LandingPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#000000',
-      color: '#f8fafc',
+      color: '#ffffff',
       fontFamily: "'Geist', 'Inter', system-ui, -apple-system, sans-serif",
       overflowX: 'hidden',
     }}>
 
-      {/* ══ Hero — brick wall with Technical Sanctuary overlay ══ */}
+      {/* ══ Hero ══ */}
       <section style={{
         minHeight: '100vh',
-        backgroundImage: `url(${HERO_IMG})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center 35%',
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
       }}>
-        {/* Dark + sapphire vignette overlay */}
-        <div style={{
-          position: 'absolute', inset: 0,
-          background: 'linear-gradient(180deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.78) 30%, rgba(0,0,0,0.72) 55%, rgba(0,0,0,0.90) 80%, #000000 100%)',
-          pointerEvents: 'none',
-        }} />
-        {/* Sapphire glow accent at top */}
-        <div style={{
-          position: 'absolute', top: 0, left: '20%', right: '20%', height: 1,
-          background: 'linear-gradient(90deg, transparent, rgba(37,99,235,0.6), transparent)',
-          pointerEvents: 'none',
-        }} />
-
         {/* ── Header ── */}
         <header style={{
           position: 'relative', zIndex: 10,
           height: 60, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '0 36px',
-          borderBottom: '1px solid rgba(30,41,59,0.6)',
+          borderBottom: '1px solid rgba(255,255,255,0.12)',
+          background: 'rgba(255,255,255,0.06)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 32, height: 32, borderRadius: 4, flexShrink: 0,
-              background: '#2563eb',
+              background: '#ffffff',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <BookOpen size={16} style={{ color: '#fff' }} />
+              <BookOpen size={16} style={{ color: '#0f172a' }} />
             </div>
             <span style={{
               fontSize: 16, fontWeight: 700,
-              color: '#f8fafc', letterSpacing: '-0.02em',
+              color: '#ffffff', letterSpacing: '-0.02em',
             }}>
               StudySpace
             </span>
@@ -490,17 +487,17 @@ export default function LandingPage() {
               display: 'inline-flex', alignItems: 'center', gap: 7,
               height: 36, padding: '0 18px',
               borderRadius: 4,
-              background: '#2563eb',
+              background: '#ffffff',
               border: 'none',
-              color: '#fff',
+              color: '#0f172a',
               fontSize: 13.5, fontWeight: 600,
               cursor: 'pointer', fontFamily: 'inherit',
               textDecoration: 'none',
               transition: 'background 0.15s',
               letterSpacing: '-0.01em',
             }}
-            onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#3b82f6'; }}
-            onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#2563eb'; }}
+            onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.88)'; }}
+            onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#ffffff'; }}
           >
             Get Started <ArrowRight size={14} />
           </Link>
@@ -517,11 +514,13 @@ export default function LandingPage() {
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             padding: '4px 12px', borderRadius: 4, marginBottom: 24,
-            background: 'rgba(37,99,235,0.12)',
-            border: '1px solid rgba(37,99,235,0.3)',
+            background: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.25)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
           }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#3b82f6', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffffff' }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#ffffff', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
               For University Students
             </span>
           </div>
@@ -532,7 +531,7 @@ export default function LandingPage() {
             fontWeight: 800,
             lineHeight: 1.07,
             letterSpacing: '-0.035em',
-            color: '#f8fafc',
+            color: '#ffffff',
             margin: '0 0 20px',
             maxWidth: 840,
           }}>
@@ -543,7 +542,7 @@ export default function LandingPage() {
           {/* Subtitle */}
           <p style={{
             fontSize: 'clamp(0.9rem, 1.5vw, 1.05rem)',
-            color: '#64748b',
+            color: 'rgba(255,255,255,0.65)',
             lineHeight: 1.7,
             maxWidth: 560,
             margin: '0 0 36px',
@@ -560,17 +559,17 @@ export default function LandingPage() {
                 display: 'inline-flex', alignItems: 'center', gap: 8,
                 height: 46, padding: '0 28px',
                 borderRadius: 4,
-                background: '#2563eb',
+                background: '#ffffff',
                 border: 'none',
-                color: '#ffffff',
+                color: '#0f172a',
                 fontSize: 15, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
                 textDecoration: 'none',
                 letterSpacing: '-0.01em',
                 transition: 'background 0.15s',
               }}
-              onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#3b82f6'; }}
-              onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#2563eb'; }}
+              onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.88)'; }}
+              onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#ffffff'; }}
             >
               Start for Free <ArrowRight size={15} />
             </Link>
@@ -580,18 +579,18 @@ export default function LandingPage() {
                 height: 46, padding: '0 28px',
                 borderRadius: 4,
                 background: 'transparent',
-                border: '1px solid #1e293b',
-                color: '#64748b',
+                border: '1px solid rgba(255,255,255,0.25)',
+                color: 'rgba(255,255,255,0.75)',
                 fontSize: 15, fontWeight: 500,
                 cursor: 'pointer', fontFamily: 'inherit',
                 letterSpacing: '-0.01em',
                 transition: 'border-color 0.15s, color 0.15s',
               }}
               onMouseOver={(e) => {
-                Object.assign(e.currentTarget.style, { borderColor: '#334155', color: '#f8fafc' });
+                Object.assign(e.currentTarget.style, { borderColor: 'rgba(255,255,255,0.5)', color: '#ffffff' });
               }}
               onMouseOut={(e) => {
-                Object.assign(e.currentTarget.style, { borderColor: '#1e293b', color: '#64748b' });
+                Object.assign(e.currentTarget.style, { borderColor: 'rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.75)' });
               }}
             >
               Watch Demo
@@ -603,9 +602,9 @@ export default function LandingPage() {
             display: 'flex', gap: 48, marginBottom: 64, flexWrap: 'wrap', justifyContent: 'center',
           }}>
             <StatItem value="10k+" label="Students" />
-            <div style={{ width: 1, background: '#1e293b', alignSelf: 'stretch' }} />
+            <div style={{ width: 1, background: 'rgba(255,255,255,0.2)', alignSelf: 'stretch' }} />
             <StatItem value="500k+" label="Annotations" />
-            <div style={{ width: 1, background: '#1e293b', alignSelf: 'stretch' }} />
+            <div style={{ width: 1, background: 'rgba(255,255,255,0.2)', alignSelf: 'stretch' }} />
             <StatItem value="99.9%" label="Uptime" />
           </div>
 

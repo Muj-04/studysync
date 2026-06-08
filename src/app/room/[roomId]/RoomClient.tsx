@@ -554,7 +554,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           onClick={() => router.replace('/workspace')}
           style={{
             marginTop: 8, padding: '8px 20px', borderRadius: 4, fontSize: 13,
-            background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer',
+            background: '#ffffff', color: '#0f172a', border: 'none', cursor: 'pointer',
           }}
         >
           {t('room_back_ws')}

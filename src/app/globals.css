@@ -4,35 +4,35 @@
   --font-mono: 'JetBrains Mono', var(--font-geist-mono), monospace;
 }
 
-/* ══ Technical Sanctuary — Design Tokens ══════════════════════════════════ */
+/* ══ Glass Design Tokens ═══════════════════════════════════════════════════ */
 :root {
-  /* Backgrounds */
-  --bg-app:      #000000;
-  --bg-sidebar:  #09090b;
-  --bg-panel:    #09090b;
-  --bg-elevated: #0f172a;
-  --bg-input:    #000000;
-  --bg-hover:    #0f172a;
-  --bg-active:   #1e293b;
+  /* Backgrounds — glass over brick wall */
+  --bg-app:      transparent;
+  --bg-sidebar:  rgba(6, 8, 18, 0.72);
+  --bg-panel:    rgba(255, 255, 255, 0.08);
+  --bg-elevated: rgba(255, 255, 255, 0.12);
+  --bg-input:    rgba(255, 255, 255, 0.08);
+  --bg-hover:    rgba(255, 255, 255, 0.06);
+  --bg-active:   rgba(255, 255, 255, 0.18);
 
-  /* Borders — 1px razor slate */
-  --border-subtle: #0f172a;
-  --border:        #1e293b;
-  --border-strong: #334155;
+  /* Borders — white glass */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border:        rgba(255, 255, 255, 0.2);
+  --border-strong: rgba(255, 255, 255, 0.38);
 
   /* Text */
-  --text-1: #f8fafc;
-  --text-2: #64748b;
-  --text-3: #475569;
+  --text-1: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.65);
+  --text-3: rgba(255, 255, 255, 0.4);
 
-  /* Accent — Electric Sapphire */
+  /* Accent */
   --accent:       #2563eb;
   --accent-hover: #3b82f6;
-  --accent-muted: rgba(37, 99, 235, 0.14);
+  --accent-muted: rgba(255, 255, 255, 0.12);
 
   /* Alias */
   --violet:       #2563eb;
-  --violet-muted: rgba(37, 99, 235, 0.14);
+  --violet-muted: rgba(255, 255, 255, 0.12);
 
   /* Functional */
   --red:       #ef4444;
@@ -45,32 +45,32 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 }
 
-/* ── Light theme ──────────────────────────────────────────────────────────── */
+/* ── Light theme — preserved for potential future use ───────────────────── */
 [data-theme="light"] {
-  --bg-app:      #fafafa;
-  --bg-sidebar:  #ffffff;
-  --bg-panel:    #f8fafc;
-  --bg-elevated: #f1f5f9;
-  --bg-input:    #ffffff;
-  --bg-hover:    #f1f5f9;
-  --bg-active:   #e2e8f0;
+  --bg-app:      transparent;
+  --bg-sidebar:  rgba(6, 8, 18, 0.6);
+  --bg-panel:    rgba(255, 255, 255, 0.12);
+  --bg-elevated: rgba(255, 255, 255, 0.18);
+  --bg-input:    rgba(255, 255, 255, 0.15);
+  --bg-hover:    rgba(255, 255, 255, 0.1);
+  --bg-active:   rgba(255, 255, 255, 0.25);
 
-  --border-subtle: #f1f5f9;
-  --border:        #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border:        rgba(255, 255, 255, 0.28);
+  --border-strong: rgba(255, 255, 255, 0.5);
 
-  --text-1: #0f172a;
-  --text-2: #64748b;
-  --text-3: #94a3b8;
+  --text-1: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.75);
+  --text-3: rgba(255, 255, 255, 0.5);
 
-  --accent-muted: rgba(37, 99, 235, 0.10);
-  --violet-muted: rgba(37, 99, 235, 0.10);
-  --red-muted:    rgba(239, 68, 68, 0.10);
+  --accent-muted: rgba(255, 255, 255, 0.15);
+  --violet-muted: rgba(255, 255, 255, 0.15);
+  --red-muted:    rgba(239, 68, 68, 0.12);
 }
 
-[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); }
-[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.24); }
+[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
 
 /* Smooth theme transition */
 [data-transitioning] *,
@@ -83,32 +83,32 @@
 body {
   font-family: var(--font-body);
   color: var(--text-1);
-  background: var(--bg-app);
+  background: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* ══ Technical Sanctuary — Universal 4px Radius ═══════════════════════════ */
+/* ══ Universal 4px Radius (excludes pill/circle shapes) ═══════════════════ */
 button:not([style*="50%"]):not([style*="9999"]):not([style*="borderRadius: '50"]) {
   border-radius: var(--radius) !important;
 }
-input:not([type="range"]):not([type="color"]):not([type="checkbox"]):not([type="radio"]):not([style*="50%"]) {
+input:not([type="range"]):not([type="color"]):not([type="checkbox"]):not([type="radio"]):not([style*="50%"]):not([style*="9999"]) {
   border-radius: var(--radius) !important;
 }
 textarea, select {
   border-radius: var(--radius) !important;
 }
 
-/* ══ Technical Sanctuary — Glassmorphism ══════════════════════════════════ */
+/* ══ Glassmorphism — matches login card ═══════════════════════════════════ */
 .glass {
-  background: rgba(9, 9, 11, 0.4);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 [data-theme="light"] .glass {
-  background: rgba(248, 250, 252, 0.65);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* ══ Technical Sanctuary — Mono font (page numbers, timestamps, sizes) ═══ */
@@ -118,10 +118,10 @@ textarea, select {
   font-variant-numeric: tabular-nums;
 }
 
-/* ══ Technical Sanctuary — Button system ════════════════════════════════== */
+/* ══ Button system ══════════════════════════════════════════════════════== */
 .btn-primary {
-  background: var(--accent);
-  color: #ffffff;
+  background: #ffffff;
+  color: #0f172a;
   border: none;
   border-radius: var(--radius);
   font-family: var(--font-body);
@@ -129,20 +129,20 @@ textarea, select {
   cursor: pointer;
   transition: background 0.15s;
 }
-.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-primary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.88); }
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-ghost {
   background: transparent;
-  color: var(--text-1);
-  border: 1px solid var(--border);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: var(--radius);
   font-family: var(--font-body);
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
-.btn-ghost:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-strong); }
+.btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.4); }
 
 /* ── Glass input — login page only ── */
 .glass-input::placeholder { color: rgba(255, 255, 255, 0.38); }
@@ -162,27 +162,27 @@ textarea, select {
 
 /* ── App input ── */
 .app-input {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius);
-  color: var(--text-1);
+  color: #ffffff;
   font-family: inherit;
   transition: border-color 0.15s;
 }
 .app-input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: rgba(255, 255, 255, 0.65);
 }
-.app-input::placeholder { color: var(--text-3); }
+.app-input::placeholder { color: rgba(255, 255, 255, 0.38); }
 .app-input[type="number"]::-webkit-inner-spin-button,
 .app-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .app-input[type="number"] { -moz-appearance: textfield; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #000000; }
-::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #334155; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.35); }
 
 /* ── Animations ── */
 @keyframes spin       { to { transform: rotate(360deg); } }
@@ -203,7 +203,7 @@ textarea, select {
 @keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
 
 .skeleton {
-  background: var(--bg-elevated);
+  background: rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
   overflow: hidden;
   position: relative;
@@ -214,11 +214,8 @@ textarea, select {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
-}
-[data-theme="light"] .skeleton::after {
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
 }
 
 /* ── Nav bar responsive zoom section ── */
