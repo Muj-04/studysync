@@ -195,12 +195,12 @@ export default function DashboardPage() {
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     height: 42, padding: '0 22px', borderRadius: 4,
-                    background: 'var(--accent)', color: '#fff',
+                    background: '#ffffff', color: '#0f172a',
                     textDecoration: 'none', fontSize: 13.5, fontWeight: 600, flexShrink: 0,
                     transition: 'background 0.13s',
                   }}
-                  onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--accent-hover)'; }}
-                  onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--accent)'; }}
+                  onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.88)'; }}
+                  onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#ffffff'; }}
                 >
                   <Play size={14} fill="currentColor" />
                   {t('dash_continue_btn')}
@@ -359,11 +359,11 @@ export default function DashboardPage() {
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 7,
                     height: 42, padding: '0 22px', borderRadius: 4,
-                    background: 'var(--accent)', color: '#fff', textDecoration: 'none',
+                    background: '#ffffff', color: '#0f172a', textDecoration: 'none',
                     fontSize: 13.5, fontWeight: 600, transition: 'background 0.13s',
                   }}
-                  onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--accent-hover)'; }}
-                  onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'var(--accent)'; }}
+                  onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.88)'; }}
+                  onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#ffffff'; }}
                 >
                   <BookOpen size={14} />
                   {t('dash_open_workspace_btn')}

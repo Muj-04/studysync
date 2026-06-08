@@ -338,7 +338,7 @@ function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => vo
           {t('lib_upload_restore')}
         </p>
         <input ref={fileRef} type="file" accept=".pdf,.pptx" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
-        <button onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 42, borderRadius: 4, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <button onClick={() => fileRef.current?.click()} style={{ width: '100%', height: 42, borderRadius: 4, background: '#ffffff', color: '#0f172a', border: 'none', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <Upload size={15} /> {t('lib_upload_file')}
         </button>
       </div>
@@ -562,7 +562,7 @@ export default function LibraryPage() {
                 <BookOpen size={36} style={{ opacity: 0.25, marginBottom: 12 }} />
                 <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px', color: 'var(--text-2)' }}>{t('lib_empty_title')}</p>
                 <p style={{ fontSize: 13, margin: 0 }}>{t('lib_empty_desc')}</p>
-                <a href="/workspace" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 20, height: 40, padding: '0 20px', borderRadius: 4, background: 'var(--accent)', color: '#fff', textDecoration: 'none', fontSize: 13.5, fontWeight: 600 }}>
+                <a href="/workspace" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 20, height: 40, padding: '0 20px', borderRadius: 4, background: '#ffffff', color: '#0f172a', textDecoration: 'none', fontSize: 13.5, fontWeight: 600 }}>
                   {t('lib_go_workspace')}
                 </a>
               </>

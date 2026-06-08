@@ -204,7 +204,7 @@ export default function FriendsPage() {
 
   const primaryBtnStyle: React.CSSProperties = {
     height: 30, padding: '0 12px', borderRadius: 4, border: 'none',
-    background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600,
+    background: '#ffffff', color: '#0f172a', fontSize: 12, fontWeight: 600,
     cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5,
     transition: 'background 0.12s', whiteSpace: 'nowrap', flexShrink: 0,
   };
