@@ -428,9 +428,11 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
     >
       <div
         style={{
-          background: 'var(--bg-panel)', border: '1px solid var(--border)',
+          background: 'var(--bg-panel)',
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 4, padding: '28px', width: 420,
-                  }}
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {done ? (
@@ -655,9 +657,10 @@ function HelpModal({ onClose }: { onClose: () => void }) {
           maxHeight: '82vh',
           display: 'flex', flexDirection: 'column',
           background: 'var(--bg-panel)',
-          border: '1px solid var(--border)',
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 4,
-                    overflow: 'hidden',
+          overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -2447,9 +2450,10 @@ export default function WorkspacePage() {
             style={{
               width: '100%', maxWidth: 420,
               background: 'var(--bg-panel)',
-              border: '1px solid var(--border)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 4,
-                            padding: '24px',
+              padding: '24px',
               display: 'flex', flexDirection: 'column', gap: 16,
             }}
             onClick={(e) => e.stopPropagation()}
@@ -2542,8 +2546,9 @@ export default function WorkspacePage() {
             padding: '11px 16px',
             borderRadius: 4,
             background: 'var(--bg-panel)',
-            border: '1px solid var(--border)',
-                        color: 'var(--text-1)',
+            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: 'var(--text-1)',
             fontSize: 13, fontWeight: 500,
             pointerEvents: 'none',
             userSelect: 'none',

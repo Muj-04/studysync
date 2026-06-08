@@ -73,7 +73,9 @@ export default function PDFSearchBar({
       display: 'flex', alignItems: 'center',
       padding: '0 10px', gap: 6,
       background: 'var(--bg-panel)',
-      borderBottom: '1px solid var(--border)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderBottom: '1px solid rgba(255,255,255,0.1)',
       zIndex: 15,
     }}>
       <Search size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />

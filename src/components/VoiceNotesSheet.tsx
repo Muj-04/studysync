@@ -49,7 +49,9 @@ export default function VoiceNotesSheet({
   return (
     <div style={{
       background: 'var(--bg-panel)',
-      borderTop: '1px solid var(--border)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderTop: '1px solid rgba(255,255,255,0.1)',
       userSelect: 'none',
       flexShrink: 0,
     }}>
