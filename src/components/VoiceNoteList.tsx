@@ -1,7 +1,11 @@
 'use client';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Play, Pause, Trash2, Pencil } from 'lucide-react';
 import type { VoiceNote } from '@/types';
+
+export interface VoiceNoteListHandle {
+  playPause: () => void;
+}
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -241,7 +245,9 @@ interface Props {
   onUpdateTitle: (id: string, title: string) => void;
 }
 
-export default function VoiceNoteList({ notes, pageKey, onDelete, onUpdateTitle }: Props) {
+const VoiceNoteList = forwardRef<VoiceNoteListHandle, Props>(function VoiceNoteList(
+  { notes, pageKey, onDelete, onUpdateTitle }, ref,
+) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playState, setPlayState] = useState<'playing' | 'paused'>('playing');
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -284,6 +290,19 @@ export default function VoiceNoteList({ notes, pageKey, onDelete, onUpdateTitle 
     onDelete(id);
   }, [playingId, destroyAudio, onDelete]);
 
+  useImperativeHandle(ref, () => ({
+    playPause: () => {
+      if (notes.length === 0) return;
+      const target = playingId ? notes.find((n) => n.id === playingId) ?? notes[0] : notes[0];
+      if (playingId === target.id && audioRef.current) {
+        if (audioRef.current.paused) { audioRef.current.play().catch(() => destroyAudio()); setPlayState('playing'); }
+        else { audioRef.current.pause(); setPlayState('paused'); }
+      } else {
+        handleTogglePlay(target);
+      }
+    },
+  }), [notes, playingId, handleTogglePlay, destroyAudio]);
+
   if (notes.length === 0) return null;
 
   return (
@@ -302,4 +321,6 @@ export default function VoiceNoteList({ notes, pageKey, onDelete, onUpdateTitle 
       ))}
     </div>
   );
-}
+});
+
+export default VoiceNoteList;
