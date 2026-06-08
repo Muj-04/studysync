@@ -213,7 +213,7 @@ export default function NotificationBell() {
                               disabled={isPending}
                               style={{
                                 height: 26, padding: '0 10px', borderRadius: 4,
-                                background: 'var(--accent)', color: '#fff',
+                                background: '#ffffff', color: '#0f172a',
                                 border: 'none', fontSize: 11.5, fontWeight: 600,
                                 cursor: isPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
                                 display: 'flex', alignItems: 'center', gap: 4,
@@ -242,7 +242,7 @@ export default function NotificationBell() {
                               onClick={() => handleJoinRoom(n.id, String(d.room_id))}
                               style={{
                                 height: 26, padding: '0 10px', borderRadius: 4,
-                                background: 'var(--accent)', color: '#fff',
+                                background: '#ffffff', color: '#0f172a',
                                 border: 'none', fontSize: 11.5, fontWeight: 600,
                                 cursor: 'pointer', fontFamily: 'inherit',
                                 display: 'flex', alignItems: 'center', gap: 4,

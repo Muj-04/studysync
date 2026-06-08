@@ -381,7 +381,7 @@ export default function CommunityPage() {
 
         <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, padding: '14px 18px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)' }}>{t('com_share_cta')}</p>
-          <a href="/workspace" style={{ flexShrink: 0, height: 34, padding: '0 14px', background: 'var(--accent)', color: '#fff', borderRadius: 4, fontSize: 12.5, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+          <a href="/workspace" style={{ flexShrink: 0, height: 34, padding: '0 14px', background: '#ffffff', color: '#0f172a', borderRadius: 4, fontSize: 12.5, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
             {t('com_open_workspace')}
           </a>
         </div>
