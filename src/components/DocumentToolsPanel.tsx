@@ -9,6 +9,7 @@ import {
 import { callAI } from '@/lib/gemini';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import type { TextNote, KeyTerm, PDFPageImage } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // ── PDF text extraction ───────────────────────────────────────────────────────
 
@@ -206,6 +207,7 @@ interface ModalData {
 
 function ResultModal({ title, content, copyText, onClose }: ModalData & { onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useLanguage();
 
   function handleCopy() {
     navigator.clipboard.writeText(copyText).catch(() => {});
@@ -302,7 +304,7 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
             }}
           >
             {copied ? <Check size={13} /> : <Copy size={13} />}
-            {copied ? 'Copied!' : 'Copy'}
+            {copied ? t('dtp_copied') : t('dtp_copy')}
           </button>
         </div>
       </div>
@@ -363,7 +365,13 @@ export default function DocumentToolsPanel({
   currentPdfPageForImages,
   onDeletePageImage,
 }: Props) {
+  const { t } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const translatedBgThemes: typeof BG_THEMES = [
+    { ...BG_THEMES[0], label: t('room_bg_white') },
+    { ...BG_THEMES[1], label: t('room_bg_dark') },
+  ];
 
   // ── Modal ──────────────────────────────────────────────────────────────────
   const [modal, setModal] = useState<ModalData | null>(null);
@@ -506,7 +514,7 @@ export default function DocumentToolsPanel({
 
   function openSummaryModal() {
     setModal({
-      title: 'AI Summary',
+      title: t('dtp_ai_summary'),
       copyText: summaryBullets.map((b, i) => `${i + 1}. ${b}`).join('\n'),
       content: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -567,7 +575,7 @@ export default function DocumentToolsPanel({
     ].filter(Boolean).join('\n');
 
     setModal({
-      title: 'Explain Concept',
+      title: t('dtp_explain'),
       copyText,
       content: (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -586,7 +594,7 @@ export default function DocumentToolsPanel({
                 fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
                 textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10,
               }}>
-                Explanation
+                {t('dtp_explanation')}
               </p>
               <p style={{ fontSize: 15, color: 'var(--text-1)', lineHeight: 1.75, margin: 0 }}>
                 {explainText}
@@ -599,7 +607,7 @@ export default function DocumentToolsPanel({
                 fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
                 textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10,
               }}>
-                Examples
+                {t('dtp_examples')}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {explainExamples.map((ex, i) => (
@@ -695,7 +703,7 @@ export default function DocumentToolsPanel({
               letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--text-3)',
             }}>
-              Page Tools
+              {t('dtp_page_tools')}
             </span>
           </div>
 
@@ -708,7 +716,7 @@ export default function DocumentToolsPanel({
 
             {/* ══ AI ASSISTANT ══ */}
             <div>
-              <SectionLabel>AI Assistant</SectionLabel>
+              <SectionLabel>{t('dtp_ai')}</SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
                 {/* ── AI Summary card ── */}
@@ -724,7 +732,7 @@ export default function DocumentToolsPanel({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Sparkles size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
-                        AI Summary
+                        {t('dtp_ai_summary')}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -736,7 +744,7 @@ export default function DocumentToolsPanel({
                         disabled={!canSummarize}
                         loading={summaryState === 'loading'}
                         loadingLabel="…"
-                        label={summaryState === 'done' ? 'Regenerate' : 'Generate'}
+                        label={summaryState === 'done' ? t('dtp_regenerate') : t('dtp_generate')}
                       />
                     </div>
                   </div>
@@ -744,7 +752,7 @@ export default function DocumentToolsPanel({
                   {summaryState === 'loading' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
                       <Loader2 size={12} style={{ color: 'var(--accent)', flexShrink: 0, animation: 'spin 0.9s linear infinite' }} />
-                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Analyzing page…</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_analyzing')}</span>
                     </div>
                   )}
 
@@ -772,9 +780,9 @@ export default function DocumentToolsPanel({
 
                   {summaryState === 'idle' && (
                     <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
-                      {!hasDocument ? 'Open a PDF first.'
-                        : isBlankPage ? 'Not available on blank pages.'
-                        : 'Generate a 3–5 bullet summary of this page.'}
+                      {!hasDocument ? t('dtp_open_pdf')
+                        : isBlankPage ? t('dtp_not_blank')
+                        : t('dtp_summary_hint')}
                     </p>
                   )}
                 </div>
@@ -792,7 +800,7 @@ export default function DocumentToolsPanel({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Lightbulb size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
-                        Explain Concept
+                        {t('dtp_explain')}
                       </span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -804,7 +812,7 @@ export default function DocumentToolsPanel({
                         disabled={!canExplain}
                         loading={explainState === 'loading'}
                         loadingLabel="…"
-                        label={explainState === 'done' ? 'Re-explain' : 'Explain'}
+                        label={explainState === 'done' ? t('dtp_re_explain') : t('dtp_explain_btn')}
                       />
                     </div>
                   </div>
@@ -813,14 +821,14 @@ export default function DocumentToolsPanel({
                     <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
                       {selectedText.trim()
                         ? `"${selectedText.slice(0, 60)}${selectedText.length > 60 ? '…' : ''}"`
-                        : 'Select text on the PDF to explain it.'}
+                        : t('dtp_select_text')}
                     </p>
                   )}
 
                   {explainState === 'loading' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
                       <Loader2 size={12} style={{ color: 'var(--accent)', flexShrink: 0, animation: 'spin 0.9s linear infinite' }} />
-                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Generating explanation…</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_generating')}</span>
                     </div>
                   )}
 
@@ -837,7 +845,7 @@ export default function DocumentToolsPanel({
                             fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
                             textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 3,
                           }}>
-                            Explanation
+                            {t('dtp_explanation')}
                           </p>
                           <p style={{ fontSize: 11.5, color: 'var(--text-1)', lineHeight: 1.6, margin: 0 }}>
                             {explainText}
@@ -850,7 +858,7 @@ export default function DocumentToolsPanel({
                             fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
                             textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 3,
                           }}>
-                            Examples
+                            {t('dtp_examples')}
                           </p>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {explainExamples.map((ex, i) => (
@@ -884,7 +892,7 @@ export default function DocumentToolsPanel({
 
             {/* ══ TRANSLATE ══ */}
             <div>
-              <SectionLabel>Translate</SectionLabel>
+              <SectionLabel>{t('dtp_translate')}</SectionLabel>
 
               <div style={{
                 background: 'var(--bg-elevated)',
@@ -895,7 +903,7 @@ export default function DocumentToolsPanel({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                   <Languages size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
-                    Translate
+                    {t('dtp_translate')}
                   </span>
                 </div>
 
@@ -1009,12 +1017,12 @@ export default function DocumentToolsPanel({
 
             {/* ── Quick Templates ── */}
             <div>
-              <SectionLabel>Quick Templates</SectionLabel>
+              <SectionLabel>{t('dtp_templates')}</SectionLabel>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                <TemplateTile icon={<Table2 size={15} />}         label="Data Table"  onClick={() => setDataTableOpen(true)} />
-                <TemplateTile icon={<Quote size={15} />}          label="Citation"    onClick={() => setCitationOpen(true)} />
-                <TemplateTile icon={<FunctionSquare size={15} />} label="Equation"    onClick={() => setEquationOpen(true)} />
-                <TemplateTile icon={<BookMarked size={15} />}     label="Key Term"    onClick={() => setKeyTermOpen(true)} />
+                <TemplateTile icon={<Table2 size={15} />}         label={t('dtp_table')}    onClick={() => setDataTableOpen(true)} />
+                <TemplateTile icon={<Quote size={15} />}          label={t('dtp_citation')} onClick={() => setCitationOpen(true)} />
+                <TemplateTile icon={<FunctionSquare size={15} />} label={t('dtp_equation')} onClick={() => setEquationOpen(true)} />
+                <TemplateTile icon={<BookMarked size={15} />}     label={t('dtp_key_term')} onClick={() => setKeyTermOpen(true)} />
               </div>
             </div>
 
@@ -1024,7 +1032,7 @@ export default function DocumentToolsPanel({
             {/* ── Add Image ── */}
             {(onAddImageToPage || onAddImageAsNewPage) && (
               <div>
-                <SectionLabel>Image</SectionLabel>
+                <SectionLabel>{t('dtp_image')}</SectionLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <button
                     onClick={() => addImageInputRef.current?.click()}
@@ -1047,7 +1055,7 @@ export default function DocumentToolsPanel({
                     })}
                   >
                     <ImagePlus size={14} />
-                    Add Image…
+                    {t('dtp_insert_image')}
                   </button>
                   {onDeletePageImage && docPageImages && Object.values(docPageImages).some((imgs) => imgs.length > 0) && (
                     <button
@@ -1071,7 +1079,7 @@ export default function DocumentToolsPanel({
                       })}
                     >
                       <Trash2 size={14} />
-                      Remove Image…
+                      {t('dtp_remove_image')}
                     </button>
                   )}
                 </div>
@@ -1083,8 +1091,8 @@ export default function DocumentToolsPanel({
 
             {/* ── Add Blank Page ── */}
             <div>
-              <SectionLabel>Add Blank Page</SectionLabel>
-              <BgSwatches disabled={!hasDocument} onSelect={onInsertBlankPage} />
+              <SectionLabel>{t('dtp_add_blank')}</SectionLabel>
+              <BgSwatches themes={translatedBgThemes} disabled={!hasDocument} onSelect={onInsertBlankPage} />
             </div>
 
             {/* Insert image (blank pages only) */}
@@ -1116,14 +1124,14 @@ export default function DocumentToolsPanel({
               }}
             >
               <ImagePlus size={14} />
-              Insert Image
+              {t('dtp_insert_image')}
             </button>
 
             {/* Page Background (blank pages only) */}
             {isBlankPage && onChangeBgTheme && (
               <div>
-                <SectionLabel>Page Background</SectionLabel>
-                <BgSwatches active={currentBgTheme ?? 'white'} onSelect={onChangeBgTheme} />
+                <SectionLabel>{t('dtp_page_bg')}</SectionLabel>
+                <BgSwatches themes={translatedBgThemes} active={currentBgTheme ?? 'white'} onSelect={onChangeBgTheme} />
               </div>
             )}
 
@@ -1150,7 +1158,7 @@ export default function DocumentToolsPanel({
                 })}
               >
                 <Trash2 size={14} />
-                Delete Page
+                {t('dtp_delete_page')}
               </button>
             )}
 
@@ -1177,7 +1185,7 @@ export default function DocumentToolsPanel({
                 })}
               >
                 <Eraser size={14} />
-                Clear All Drawings
+                {t('dtp_clear_drawings')}
               </button>
             )}
 
@@ -1196,7 +1204,7 @@ export default function DocumentToolsPanel({
               }}
             >
               <FileOutput size={14} />
-              Convert PPTX to PDF
+              {t('dtp_convert_pptx')}
             </button>
           </div>
 
@@ -1232,10 +1240,10 @@ export default function DocumentToolsPanel({
                 </div>
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-1)' }}>
-                    Create Study Room
+                    {t('dtp_create_room')}
                   </div>
                   <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 1 }}>
-                    Collaborate in real-time
+                    {t('dtp_collaborate')}
                   </div>
                 </div>
               </button>
@@ -1276,7 +1284,7 @@ export default function DocumentToolsPanel({
                   <Mic size={14} style={{ color: isRecording ? 'var(--red)' : 'var(--text-2)' }} />
                 </div>
                 <span style={{ fontSize: 12.5, fontWeight: 500, color: isRecording ? 'var(--red)' : 'var(--text-1)' }}>
-                  {isRecording ? 'Recording…' : 'Record Voice Note'}
+                  {isRecording ? t('dtp_recording') : t('dtp_record_voice')}
                 </span>
               </div>
               {isRecording && (
@@ -1350,14 +1358,14 @@ export default function DocumentToolsPanel({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Table2 size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Insert Data Table</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_table')}</span>
               </div>
               <button onClick={() => setDataTableOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
             </div>
 
             <div style={{ padding: '20px 20px 8px' }}>
               <div style={{ marginBottom: 16 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Rows</p>
+                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_rows')}</p>
                 <div style={{ display: 'flex', gap: 5 }}>
                   {[2,3,4,5,6,7,8].map((n) => (
                     <button key={n} onClick={() => setTableRows(n)} style={{ width: 34, height: 30, borderRadius: 6, border: `1px solid ${tableRows === n ? 'var(--accent)' : 'var(--border)'}`, background: tableRows === n ? 'var(--accent-muted)' : 'transparent', color: tableRows === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
@@ -1366,7 +1374,7 @@ export default function DocumentToolsPanel({
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Columns</p>
+                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_cols')}</p>
                 <div style={{ display: 'flex', gap: 5 }}>
                   {[2,3,4,5,6,7,8].map((n) => (
                     <button key={n} onClick={() => setTableCols(n)} style={{ width: 34, height: 30, borderRadius: 6, border: `1px solid ${tableCols === n ? 'var(--accent)' : 'var(--border)'}`, background: tableCols === n ? 'var(--accent-muted)' : 'transparent', color: tableCols === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
@@ -1375,7 +1383,7 @@ export default function DocumentToolsPanel({
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Preview</p>
+                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_preview')}</p>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tableCols}, 1fr)`, border: '1px solid var(--border-strong)', borderRadius: 6, overflow: 'hidden', height: Math.min(tableRows * 24, 168) }}>
                   {Array.from({ length: tableRows * tableCols }).map((_, i) => (
                     <div key={i} style={{ borderRight: (i % tableCols < tableCols - 1) ? '1px solid var(--border)' : 'none', borderBottom: Math.floor(i / tableCols) < tableRows - 1 ? '1px solid var(--border)' : 'none', background: Math.floor(i / tableCols) === 0 ? 'var(--bg-active)' : 'transparent' }} />
@@ -1412,7 +1420,7 @@ export default function DocumentToolsPanel({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Quote size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Insert Citation</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_citation')}</span>
               </div>
               <button onClick={() => setCitationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
             </div>
@@ -1447,7 +1455,7 @@ export default function DocumentToolsPanel({
                 style={{ height: 32, padding: '0 14px', borderRadius: 7, background: citCopied ? 'var(--green)' : 'var(--bg-elevated)', border: `1px solid ${citCopied ? 'transparent' : 'var(--border)'}`, color: citCopied ? '#fff' : 'var(--text-2)', cursor: formatAPA() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, opacity: formatAPA() ? 1 : 0.5 }}
               >
                 {citCopied ? <Check size={12} /> : <Copy size={12} />}
-                {citCopied ? 'Copied!' : 'Copy APA'}
+                {citCopied ? t('dtp_copied') : t('dtp_copy')}
               </button>
               <button
                 onClick={handleInsertCitation}
@@ -1475,7 +1483,7 @@ export default function DocumentToolsPanel({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <FunctionSquare size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Insert Equation</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_equation')}</span>
               </div>
               <button onClick={() => setEquationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
             </div>

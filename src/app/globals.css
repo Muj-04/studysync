@@ -281,17 +281,8 @@ button:active:not(:disabled) {
   }
 }
 
-/* ── Arabic RTL — text direction only, layout containers stay LTR ── */
-/*
-  We intentionally do NOT set direction: rtl on <html> or <body> because
-  that flips all flexbox row directions, grid column order, and positioned
-  elements. Instead we scope it to text-bearing elements only.
-*/
-html.lang-ar p,
-html.lang-ar h1, html.lang-ar h2, html.lang-ar h3,
-html.lang-ar h4, html.lang-ar h5, html.lang-ar h6,
-html.lang-ar input:not([type="color"]):not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="number"]),
-html.lang-ar textarea {
-  direction: rtl;
+/* ── Arabic RTL — dir="rtl" on <html> handles layout; align inputs/textareas ── */
+[dir="rtl"] input:not([type="color"]):not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="number"]),
+[dir="rtl"] textarea {
   text-align: right;
 }

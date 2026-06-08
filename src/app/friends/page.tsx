@@ -14,6 +14,7 @@ import {
 import type { UserResult, FriendEntry, FriendRequest, MyFriendship } from '@/lib/supabase/db';
 import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,7 @@ function EmptyState({ icon: Icon, title, sub }: { icon: React.ElementType; title
 
 export default function FriendsPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [userEmail, setUserEmail]     = useState('');
   const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl]     = useState<string | null>(null);
@@ -240,27 +242,27 @@ export default function FriendsPage() {
         </div>
         {status === 'none' && (
           <button onClick={() => handleSendRequest(u.id)} disabled={isPending} style={{ ...primaryBtnStyle, opacity: isPending ? 0.6 : 1, cursor: isPending ? 'not-allowed' : 'pointer' }}>
-            <UserPlus size={12} /> Add Friend
+            <UserPlus size={12} /> {t('fr_add_friend')}
           </button>
         )}
         {status === 'pending_sent' && (
           <span style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Clock size={12} /> Pending
+            <Clock size={12} /> {t('fr_pending')}
           </span>
         )}
         {status === 'pending_received' && (
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => handleAccept(friendshipId!, u.id)} disabled={isPending} style={{ ...primaryBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <Check size={12} /> Accept
+              <Check size={12} /> {t('fr_accept')}
             </button>
             <button onClick={() => handleReject(friendshipId!, u.id)} disabled={isPending} style={{ ...ghostBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <X size={12} /> Reject
+              <X size={12} /> {t('fr_reject')}
             </button>
           </div>
         )}
         {status === 'accepted' && (
           <span style={{ fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <UserCheck size={12} /> Friends
+            <UserCheck size={12} /> {t('fr_is_friend')}
           </span>
         )}
       </div>
@@ -298,7 +300,7 @@ export default function FriendsPage() {
                 cursor: sent ? 'default' : 'pointer',
               }}
             >
-              {sent ? <><UserCheck size={12} /> Invited</> : <><Users size={12} /> Invite to Room</>}
+              {sent ? <><UserCheck size={12} /> {t('fr_invited')}</> : <><Users size={12} /> {t('fr_invite_room')}</>}
             </button>
           )}
           <button
@@ -306,7 +308,7 @@ export default function FriendsPage() {
             disabled={isPending}
             style={{ ...dangerBtnStyle, opacity: isPending ? 0.6 : 1 }}
           >
-            <UserMinus size={12} /> Remove
+            <UserMinus size={12} /> {t('fr_remove')}
           </button>
         </div>
       </div>
@@ -328,21 +330,21 @@ export default function FriendsPage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)' }}>{displayN}</p>
           <p style={{ margin: '1px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
-            {direction === 'incoming' ? 'Sent you a friend request' : 'Request pending'}
+            {direction === 'incoming' ? t('fr_sent_request') : t('fr_request_pending')}
           </p>
         </div>
         {direction === 'incoming' ? (
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => handleAccept(r.friendshipId, r.userId)} disabled={isPending} style={{ ...primaryBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <Check size={12} /> Accept
+              <Check size={12} /> {t('fr_accept')}
             </button>
             <button onClick={() => handleReject(r.friendshipId, r.userId)} disabled={isPending} style={{ ...ghostBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <X size={12} /> Reject
+              <X size={12} /> {t('fr_reject')}
             </button>
           </div>
         ) : (
           <button onClick={() => handleCancelRequest(r.friendshipId, r.userId)} disabled={isPending} style={{ ...dangerBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-            Cancel
+            {t('fr_cancel')}
           </button>
         )}
       </div>
@@ -382,11 +384,11 @@ export default function FriendsPage() {
           onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
           onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-3)'; }}
         >
-          <ChevronLeft size={14} /> Workspace
+          <ChevronLeft size={14} /> {t('fr_back_workspace')}
         </a>
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
         <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.02em', flex: 1 }}>
-          Friends
+          {t('fr_title')}
         </span>
         <NotificationBell />
         <AvatarDropdown email={userEmail} displayName={displayName} avatarUrl={avatarUrl} />
@@ -400,7 +402,7 @@ export default function FriendsPage() {
           fontSize: 12.5, color: 'var(--accent)',
         }}>
           <Users size={13} />
-          <span>Currently in <strong>{activeRoom.roomName}</strong> — click "Invite to Room" on any friend</span>
+          <span>{t('fr_in_room')} <strong>{activeRoom.roomName}</strong> {t('fr_active_room_hint')}</span>
         </div>
       )}
 
@@ -417,7 +419,7 @@ export default function FriendsPage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by username or email…"
+            placeholder={t('fr_search_placeholder')}
             className="app-input"
             style={{
               width: '100%', height: 40, padding: '0 36px',
@@ -445,10 +447,10 @@ export default function FriendsPage() {
           /* ── Search results ── */
           <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
             <p style={{ margin: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-              Search Results
+              {t('fr_search_results')}
             </p>
             {searchLoading ? <Spinner /> : searchResults.length === 0
-              ? <EmptyState icon={Search} title="No users found" sub="Try a different username or email" />
+              ? <EmptyState icon={Search} title={t('fr_no_results_title')} sub={t('fr_no_results_sub')} />
               : searchResults.map((u) => <SearchCard key={u.id} u={u} />)
             }
           </div>
@@ -457,26 +459,26 @@ export default function FriendsPage() {
           <>
             {/* Tab bar */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 0 }}>
-              {(['friends', 'requests'] as const).map((t) => (
+              {(['friends', 'requests'] as const).map((tabId) => (
                 <button
-                  key={t}
-                  onClick={() => setTab(t)}
+                  key={tabId}
+                  onClick={() => setTab(tabId)}
                   style={{
                     height: 36, padding: '0 14px', borderRadius: '8px 8px 0 0',
-                    background: tab === t ? 'var(--bg-panel)' : 'transparent',
-                    border: tab === t ? '1px solid var(--border-subtle)' : '1px solid transparent',
-                    borderBottom: tab === t ? '1px solid var(--bg-panel)' : '1px solid transparent',
-                    marginBottom: tab === t ? -1 : 0,
-                    color: tab === t ? 'var(--text-1)' : 'var(--text-3)',
-                    fontSize: 13, fontWeight: tab === t ? 600 : 400,
+                    background: tab === tabId ? 'var(--bg-panel)' : 'transparent',
+                    border: tab === tabId ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                    borderBottom: tab === tabId ? '1px solid var(--bg-panel)' : '1px solid transparent',
+                    marginBottom: tab === tabId ? -1 : 0,
+                    color: tab === tabId ? 'var(--text-1)' : 'var(--text-3)',
+                    fontSize: 13, fontWeight: tab === tabId ? 600 : 400,
                     cursor: 'pointer', fontFamily: 'inherit',
                     display: 'flex', alignItems: 'center', gap: 6,
                   }}
                 >
-                  {t === 'friends' ? (
-                    <><Users size={13} /> My Friends {friends.length > 0 && <span style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{friends.length}</span>}</>
+                  {tabId === 'friends' ? (
+                    <><Users size={13} /> {t('fr_tab_friends')} {friends.length > 0 && <span style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{friends.length}</span>}</>
                   ) : (
-                    <><Clock size={13} /> Requests {requestCount > 0 && <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{requestCount}</span>}</>
+                    <><Clock size={13} /> {t('fr_tab_requests')} {requestCount > 0 && <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{requestCount}</span>}</>
                   )}
                 </button>
               ))}
@@ -485,17 +487,17 @@ export default function FriendsPage() {
             <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '0 12px 12px 12px', overflow: 'hidden' }}>
               {dataLoading ? <Spinner /> : tab === 'friends' ? (
                 friends.length === 0
-                  ? <EmptyState icon={Users} title="No friends yet" sub="Search for users above to send friend requests" />
+                  ? <EmptyState icon={Users} title={t('fr_no_friends_title')} sub={t('fr_no_friends_sub')} />
                   : friends.map((f) => <FriendCard key={f.friendshipId} f={f} />)
               ) : (
                 <>
                   {incoming.length === 0 && outgoing.length === 0 && (
-                    <EmptyState icon={Clock} title="No pending requests" sub="Friend requests you send or receive will appear here" />
+                    <EmptyState icon={Clock} title={t('fr_no_requests_title')} sub={t('fr_no_requests_sub')} />
                   )}
                   {incoming.length > 0 && (
                     <>
                       <p style={{ margin: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-                        Incoming ({incoming.length})
+                        {t('fr_incoming')} ({incoming.length})
                       </p>
                       {incoming.map((r) => <RequestCard key={r.friendshipId} r={r} direction="incoming" />)}
                     </>
@@ -503,7 +505,7 @@ export default function FriendsPage() {
                   {outgoing.length > 0 && (
                     <>
                       <p style={{ margin: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-                        Outgoing ({outgoing.length})
+                        {t('fr_outgoing')} ({outgoing.length})
                       </p>
                       {outgoing.map((r) => <RequestCard key={r.friendshipId} r={r} direction="outgoing" />)}
                     </>

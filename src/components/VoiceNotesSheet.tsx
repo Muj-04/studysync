@@ -4,6 +4,7 @@ import { Mic, ChevronUp } from 'lucide-react';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import VoiceNoteList from './VoiceNoteList';
 import type { VoiceNote } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Props {
   isOpen: boolean;
@@ -27,6 +28,7 @@ export default function VoiceNotesSheet({
   isRecording, recordingDuration, recordingContext,
   onStart, onStop, onDelete, onUpdateTitle,
 }: Props) {
+  const { t } = useLanguage();
   const touchStartY = useRef<number | null>(null);
 
   const onTouchStart = (e: React.TouchEvent) => { touchStartY.current = e.touches[0].clientY; };
@@ -148,7 +150,7 @@ export default function VoiceNotesSheet({
           >
             <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 400 }}>
               {notes.length === 0
-                ? 'No notes on this page'
+                ? t('vs_no_notes')
                 : `${notes.length} note${notes.length !== 1 ? 's' : ''}`}
             </span>
             <VoiceNoteRecorder
