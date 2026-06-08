@@ -21,6 +21,7 @@ import type { RoomVoiceNotePayload, RoomBlankPagePayload } from '@/hooks/useStud
 import { useRoomVoiceNotes } from '@/hooks/useRoomVoiceNotes';
 import { clampZoom } from '@/components/PDFViewer';
 import NotificationBell from '@/components/NotificationBell';
+import { useLanguage } from '@/contexts/LanguageContext';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
@@ -54,9 +55,9 @@ function buildVirtualSequence(pdfPageCount: number, blankPages: BlankPage[]): Vi
 
 // ── Blank page themes ─────────────────────────────────────────────────────────
 
-const BG_THEMES = [
-  { theme: 'white' as const, label: 'White', bg: '#ffffff',  dotColor: 'rgba(0,0,0,0.15)' },
-  { theme: 'dark'  as const, label: 'Dark',  bg: '#1e1e2e',  dotColor: 'rgba(255,255,255,0.18)' },
+const BG_THEME_DEFS = [
+  { theme: 'white' as const, bg: '#ffffff',  dotColor: 'rgba(0,0,0,0.15)' },
+  { theme: 'dark'  as const, bg: '#1e1e2e',  dotColor: 'rgba(255,255,255,0.18)' },
 ];
 
 // ── Member avatar chip ────────────────────────────────────────────────────────
@@ -154,6 +155,12 @@ function IconBtn({
 
 export default function RoomClient({ roomId }: { roomId: string }) {
   const router = useRouter();
+  const { t } = useLanguage();
+
+  const BG_THEMES = [
+    { ...BG_THEME_DEFS[0], label: t('room_bg_white') },
+    { ...BG_THEME_DEFS[1], label: t('room_bg_dark') },
+  ];
   const [status, setStatus]     = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
   const [roomName, setRoomName] = useState('Study Room');
@@ -524,7 +531,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
           animation: 'spin 0.8s linear infinite',
         }} />
-        <p style={{ fontSize: 14, margin: 0 }}>Loading study room…</p>
+        <p style={{ fontSize: 14, margin: 0 }}>{t('room_loading')}</p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -537,7 +544,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         alignItems: 'center', justifyContent: 'center', gap: 16,
         background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit',
       }}>
-        <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Could not open room</p>
+        <p style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{t('room_error_title')}</p>
         <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0 }}>{errorMsg}</p>
         <button
           onClick={() => router.replace('/workspace')}
@@ -546,7 +553,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer',
           }}
         >
-          Back to workspace
+          {t('room_back_ws')}
         </button>
       </div>
     );
@@ -603,8 +610,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           )}
           <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
             {members.length > 0
-              ? `${members.slice(0, 2).map((m) => m.name).join(', ')}${members.length > 2 ? ` +${members.length - 2}` : ''} • ${memberCount} live`
-              : `${memberCount} live`}
+              ? `${members.slice(0, 2).map((m) => m.name).join(', ')}${members.length > 2 ? ` +${members.length - 2}` : ''} • ${memberCount} ${t('room_live')}`
+              : `${memberCount} ${t('room_live')}`}
           </span>
         </div>
 
@@ -623,7 +630,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
           onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
         >
-          <UserPlus size={12} /> Invite
+          <UserPlus size={12} /> {t('room_invite')}
         </button>
 
         <button
@@ -638,7 +645,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           }}
         >
           {copied ? <Check size={12} /> : <Link2 size={12} />}
-          {copied ? 'Copied!' : 'Share link'}
+          {copied ? t('room_copied') : t('room_share_link')}
         </button>
 
         {/* Red Leave button */}
@@ -661,7 +668,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             e.currentTarget.style.borderColor = 'rgba(239,68,68,0.35)';
           }}
         >
-          Leave
+          {t('room_leave')}
         </button>
       </div>
 
@@ -675,37 +682,37 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
         {/* ── Tools ── */}
         <div style={{ display: 'flex', gap: 3 }}>
-          <ToolBtn active={tool === 'cursor'} onClick={() => selectTool('cursor')} title="Cursor">
+          <ToolBtn active={tool === 'cursor'} onClick={() => selectTool('cursor')} title={t('room_cursor')}>
             <MousePointer size={13} />
-            <span>Cursor</span>
+            <span>{t('room_cursor')}</span>
           </ToolBtn>
           <ToolBtn
             active={tool === 'pen' && penType === 'normal'}
             onClick={() => selectTool('pen', 'normal')}
-            title="Pen"
+            title={t('room_pen')}
           >
             <Pencil size={13} />
-            <span>Pen</span>
+            <span>{t('room_pen')}</span>
           </ToolBtn>
           <ToolBtn
             active={tool === 'pen' && penType === 'marker'}
             onClick={() => selectTool('pen', 'marker')}
-            title="Marker"
+            title={t('room_marker')}
           >
             <div style={{ width: 13, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.75 }} />
-            <span>Marker</span>
+            <span>{t('room_marker')}</span>
           </ToolBtn>
           <ToolBtn
             active={tool === 'pen' && penType === 'highlighter'}
             onClick={() => selectTool('pen', 'highlighter')}
-            title="Highlighter"
+            title={t('room_highlight')}
           >
             <div style={{ width: 13, height: 8, borderRadius: 2, background: 'currentColor', opacity: 0.4 }} />
-            <span>Highlight</span>
+            <span>{t('room_highlight')}</span>
           </ToolBtn>
-          <ToolBtn active={tool === 'eraser'} onClick={() => selectTool('eraser')} title="Eraser">
+          <ToolBtn active={tool === 'eraser'} onClick={() => selectTool('eraser')} title={t('room_eraser')}>
             <Eraser size={13} />
-            <span>Eraser</span>
+            <span>{t('room_eraser')}</span>
           </ToolBtn>
         </div>
 
@@ -768,7 +775,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
         {/* ── Zoom ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <IconBtn onClick={handleZoomOut} title="Zoom out" disabled={zoom <= 0.5}>
+          <IconBtn onClick={handleZoomOut} title={t('room_zoom_out')} disabled={zoom <= 0.5}>
             <Minus size={12} />
           </IconBtn>
           <span style={{
@@ -777,7 +784,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           }}>
             {Math.round(zoom * 100)}%
           </span>
-          <IconBtn onClick={handleZoomIn} title="Zoom in" disabled={zoom >= 2.0}>
+          <IconBtn onClick={handleZoomIn} title={t('room_zoom_in')} disabled={zoom >= 2.0}>
             <Plus size={12} />
           </IconBtn>
         </div>
@@ -787,7 +794,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         {/* ── Undo ── */}
         <IconBtn
           onClick={() => isBlankPage ? blankDrawingRef.current?.undo?.() : drawingRef.current?.undo?.()}
-          title="Undo last stroke"
+          title={t('room_undo')}
         >
           <Undo2 size={13} />
         </IconBtn>
@@ -798,7 +805,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         <div style={{ position: 'relative' }} data-blank-menu>
           <button
             onClick={() => setBlankMenuOpen((o) => !o)}
-            title="Add blank page"
+            title={t('room_add_blank')}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               height: 30, padding: '0 9px',
@@ -813,7 +820,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             onMouseOut={(e) => { if (!blankMenuOpen) Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' }); }}
           >
             <FilePlus size={13} />
-            <span>Blank</span>
+            <span>{t('room_blank')}</span>
             <ChevronDown size={9} strokeWidth={2.5} style={{ opacity: 0.6 }} />
           </button>
 
@@ -829,7 +836,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                 fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
                 textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8, margin: '0 0 8px',
               }}>
-                Background
+                {t('room_background')}
               </p>
               <div style={{ display: 'flex', gap: 6 }}>
                 {BG_THEMES.map(({ theme, label, bg, dotColor }) => (
@@ -946,7 +953,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           <ChevronLeft size={15} />
         </button>
         <span style={{ fontSize: 13, color: 'var(--text-2)', minWidth: 80, textAlign: 'center' }}>
-          {isBlankPage ? 'Blank' : `Page ${currentPdfPage}`} • {virtualIndex + 1} / {totalPages}
+          {isBlankPage ? t('room_page_blank') : `Page ${currentPdfPage}`} • {virtualIndex + 1} / {totalPages}
         </span>
         <button
           onClick={nextPage}
@@ -988,7 +995,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '14px 16px', borderBottom: '1px solid var(--border-subtle)',
             }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)' }}>Invite Friends</span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)' }}>{t('room_invite_friends_title')}</span>
               <button
                 onClick={() => setInviteOpen(false)}
                 style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}
@@ -1006,7 +1013,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               ) : friendsList.length === 0 ? (
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
                   <UserPlus size={28} style={{ margin: '0 auto 10px', opacity: 0.35, display: 'block' }} />
-                  No friends yet. Add friends to invite them.
+                  {t('room_no_friends')}
                 </div>
               ) : (
                 friendsList.map((f) => {
@@ -1044,7 +1051,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                           transition: 'background 0.12s',
                         }}
                       >
-                        {sent ? <><UserCheck size={12} /> Sent</> : <><UserPlus size={12} /> Invite</>}
+                        {sent ? <><UserCheck size={12} /> {t('room_sent_btn')}</> : <><UserPlus size={12} /> {t('room_invite_btn')}</>}
                       </button>
                     </div>
                   );
@@ -1058,7 +1065,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                 target="_blank"
                 style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}
               >
-                Manage friends →
+                {t('room_manage_friends')}
               </a>
             </div>
           </div>

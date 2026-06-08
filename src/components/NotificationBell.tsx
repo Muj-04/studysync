@@ -35,7 +35,7 @@ function Avatar({ name, url, size = 32 }: { name?: string | null; url?: string |
 }
 
 export default function NotificationBell() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const router = useRouter();
   const { notifications, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
   const [open, setOpen] = useState(false);
@@ -118,9 +118,10 @@ export default function NotificationBell() {
         <div
           className="animate-scale-in"
           style={{
-            position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+            position: 'absolute', top: 'calc(100% + 8px)',
+            ...(lang === 'ar' ? { left: 0 } : { right: 0 }),
             width: 340, maxHeight: 480, overflow: 'hidden',
-            transformOrigin: 'top right',
+            transformOrigin: lang === 'ar' ? 'top left' : 'top right',
             background: 'var(--bg-panel)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
             border: '1px solid var(--border)', borderRadius: 12,
             boxShadow: '0 16px 48px rgba(0,0,0,0.45), inset 0 0 0 0.5px rgba(255,255,255,0.04)',

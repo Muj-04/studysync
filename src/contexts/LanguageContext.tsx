@@ -1,6 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { type Lang, type TranslationKey, translate, LANG_KEY } from '@/lib/i18n';
+import { getUserSettings } from '@/lib/supabase/db';
 
 interface LanguageContextValue {
   lang: Lang;
@@ -17,8 +18,8 @@ const LanguageContext = createContext<LanguageContextValue>({
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>('en');
 
-  // Read from localStorage on mount
   useEffect(() => {
+    // Apply from localStorage immediately (no flash)
     try {
       const stored = localStorage.getItem(LANG_KEY) as Lang | null;
       if (stored === 'ar' || stored === 'en') {
@@ -26,6 +27,16 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         applyLangToDom(stored);
       }
     } catch {}
+
+    // Sync from Supabase asynchronously (cross-device preference)
+    getUserSettings().then((settings) => {
+      const serverLang = settings.language;
+      if (serverLang === 'ar' || serverLang === 'en') {
+        setLangState(serverLang);
+        applyLangToDom(serverLang);
+        try { localStorage.setItem(LANG_KEY, serverLang); } catch {}
+      }
+    }).catch(() => {});
   }, []);
 
   const setLang = useCallback((newLang: Lang) => {
@@ -48,6 +59,8 @@ export function useLanguage() {
 }
 
 function applyLangToDom(lang: Lang) {
-  document.documentElement.classList.toggle('lang-ar', lang === 'ar');
+  const isAr = lang === 'ar';
+  document.documentElement.setAttribute('dir', isAr ? 'rtl' : 'ltr');
   document.documentElement.setAttribute('lang', lang);
+  document.documentElement.classList.toggle('lang-ar', isAr);
 }
