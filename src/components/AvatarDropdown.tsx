@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Settings, LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getInitials } from '@/lib/preferences';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Props {
   email: string;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function AvatarDropdown({ email, displayName, avatarUrl }: Props) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -123,7 +125,7 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
               onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
             >
               <Settings size={13} style={{ flexShrink: 0 }} />
-              Settings
+              {t('avatar_settings')}
             </a>
 
             <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
@@ -142,7 +144,7 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
               onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
               <LogOut size={13} style={{ flexShrink: 0 }} />
-              Log out
+              {t('avatar_logout')}
             </button>
           </div>
         </div>

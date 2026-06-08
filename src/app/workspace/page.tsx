@@ -26,6 +26,7 @@ import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { createClient } from '@/lib/supabase/client';
 import {
   upsertDocument,
@@ -373,14 +374,7 @@ function DocPickEmpty() {
 
 // ── Keyboard shortcuts modal ──────────────────────────────────────────────────
 
-const SHORTCUTS = [
-  { key: '← / →',     desc: 'Previous / next page' },
-  { key: 'Ctrl + Z',  desc: 'Undo last stroke' },
-  { key: 'Ctrl + +',  desc: 'Zoom in' },
-  { key: 'Ctrl + −',  desc: 'Zoom out' },
-  { key: 'Escape',    desc: 'Close toolbar / deselect' },
-  { key: '?',         desc: 'Toggle this cheat sheet' },
-];
+// SHORTCUTS is built inside ShortcutsModal using t() from useLanguage
 
 function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
   docId: string | null;
@@ -388,6 +382,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
   pageTextNotes: Record<string, import('@/types').TextNote[]>;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tagInput, setTagInput] = useState('');
@@ -395,8 +390,8 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
   const [posting, setPosting] = useState(false);
   const [done, setDone] = useState(false);
 
-  const addTag = (t: string) => {
-    const trimmed = t.trim().replace(/,/g, '');
+  const addTag = (tagStr: string) => {
+    const trimmed = tagStr.trim().replace(/,/g, '');
     if (!trimmed || tags.includes(trimmed) || tags.length >= 5) return;
     setTags((prev) => [...prev, trimmed]);
     setTagInput('');
@@ -449,7 +444,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Share to Community</h3>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{t('ws_share_title')}</h3>
               <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
                 <X size={16} />
               </button>
@@ -457,17 +452,17 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
 
             {docName && (
               <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-3)' }}>
-                Sharing from: <strong style={{ color: 'var(--text-2)' }}>{docName}</strong>
+                {t('ws_share_from')} <strong style={{ color: 'var(--text-2)' }}>{docName}</strong>
               </p>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Title *</label>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>{t('ws_share_title_label')}</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. My notes on Chapter 3"
+                  placeholder={t('ws_share_title_placeholder')}
                   style={{
                     width: '100%', height: 36, padding: '0 10px', boxSizing: 'border-box',
                     background: 'var(--bg-elevated)', border: '1px solid var(--border)',
@@ -478,11 +473,11 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
               </div>
 
               <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Description</label>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>{t('ws_share_desc_label')}</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief description of what you're sharing…"
+                  placeholder={t('ws_share_desc_placeholder')}
                   rows={3}
                   style={{
                     width: '100%', padding: '8px 10px', boxSizing: 'border-box',
@@ -494,7 +489,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
               </div>
 
               <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>Tags (up to 5)</label>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>{t('ws_share_tags_label')}</label>
                 {tags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7 }}>
                     {tags.map((t) => (
@@ -508,14 +503,14 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }}
-                    placeholder="e.g. Math, CS, Physics" disabled={tags.length >= 5}
+                    placeholder={t('ws_share_tags_placeholder')} disabled={tags.length >= 5}
                     style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
-                  <button onClick={() => addTag(tagInput)} disabled={!tagInput.trim() || tags.length >= 5} style={{ height: 32, padding: '0 10px', borderRadius: 7, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Add</button>
+                  <button onClick={() => addTag(tagInput)} disabled={!tagInput.trim() || tags.length >= 5} style={{ height: 32, padding: '0 10px', borderRadius: 7, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{t('common_add')}</button>
                 </div>
               </div>
 
               <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)' }}>
-                Your text notes from this document will be shared. Drawings are not included.
+                {t('ws_share_notes_hint')}
               </p>
 
               <button
@@ -530,7 +525,7 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
                   fontFamily: 'inherit', transition: 'background 0.12s, color 0.12s',
                 }}
               >
-                {posting ? 'Posting…' : 'Share Post'}
+                {posting ? t('ws_share_posting') : t('ws_share_btn')}
               </button>
             </div>
           </>
@@ -541,6 +536,16 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
 }
 
 function ShortcutsModal({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
+  const shortcuts = [
+    { key: '← / →',    desc: t('ws_sc_nav') },
+    { key: 'Ctrl + Z', desc: t('ws_sc_undo') },
+    { key: 'Ctrl + +', desc: t('ws_sc_zoom_in') },
+    { key: 'Ctrl + −', desc: t('ws_sc_zoom_out') },
+    { key: 'Escape',   desc: t('ws_sc_escape') },
+    { key: '?',        desc: t('ws_sc_help') },
+  ];
+
   return (
     <div
       style={{
@@ -567,7 +572,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
           marginBottom: 14,
         }}>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
-            Keyboard shortcuts
+            {t('ws_sc_title')}
           </span>
           <button
             onClick={onClose}
@@ -588,7 +593,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {SHORTCUTS.map(({ key, desc }) => (
+          {shortcuts.map(({ key, desc }) => (
             <div key={key} style={{
               display: 'flex', alignItems: 'center',
               justifyContent: 'space-between', gap: 12,
@@ -615,6 +620,8 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
+  const { t } = useLanguage();
+
   // ── Auth ──────────────────────────────────────────────────────────────────
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
@@ -1548,10 +1555,10 @@ export default function WorkspacePage() {
             display: 'flex', gap: 2, marginLeft: 16,
           }} className="hidden md:flex">
             {[
-              { label: 'Dashboard', active: false, href: '/dashboard' },
-              { label: 'Documents', active: true,  href: '#' },
-              { label: 'Library',   active: false, href: '/library' },
-              { label: 'Community', active: false, href: '/community' },
+              { label: t('nav_dashboard'), active: false, href: '/dashboard' },
+              { label: t('nav_workspace'), active: true,  href: '#' },
+              { label: t('nav_library'),   active: false, href: '/library' },
+              { label: t('nav_community'), active: false, href: '/community' },
             ].map(({ label, active, href }) => (
               <a
                 key={label}
@@ -1603,7 +1610,7 @@ export default function WorkspacePage() {
           {documents.length > 0 && !isPPTX && (
             <HdrBtn
               onClick={() => setSearchOpen((o) => !o)}
-              title={searchOpen ? 'Close search' : 'Search in PDF (Ctrl+F)'}
+              title={searchOpen ? t('ws_close_search') : t('ws_open_search')}
               active={searchOpen}
             >
               <Search size={17} />
@@ -1615,7 +1622,7 @@ export default function WorkspacePage() {
           {documents.length > 0 && !isPPTX && (
             <HdrBtn
               onClick={() => setSplitMode((m) => !m)}
-              title={splitMode ? 'Exit split view' : 'Split view: PDF + notes'}
+              title={splitMode ? t('ws_exit_split') : t('ws_enter_split')}
               active={splitMode}
             >
               <SplitIcon />
@@ -1625,7 +1632,7 @@ export default function WorkspacePage() {
           {documents.length > 0 && (
             <HdrBtn
               onClick={() => setRightPanelOpen((o) => !o)}
-              title={rightPanelOpen ? 'Collapse tools' : 'Expand tools'}
+              title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
               active={rightPanelOpen}
             >
               <PanelRight size={18} />
@@ -1646,19 +1653,19 @@ export default function WorkspacePage() {
             isPPTX={isPPTX}
           />
 
-          <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title="Keyboard shortcuts (?)">
+          <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title={t('ws_shortcuts')}>
             <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
           </HdrBtn>
 
           {hasDocument && (
-            <HdrBtn onClick={() => setShareOpen(true)} title="Share to Community">
+            <HdrBtn onClick={() => setShareOpen(true)} title={t('ws_share')}>
               <Share2 size={15} />
             </HdrBtn>
           )}
 
           <a
             href="/friends"
-            title="Friends"
+            title={t('nav_friends')}
             style={{
               width: 34, height: 34, borderRadius: 8,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
