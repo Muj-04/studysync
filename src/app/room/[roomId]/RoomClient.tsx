@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  fetchRoom, joinRoom, fetchDrawings, saveRoomDrawing, fetchRoomDrawing,
+  fetchRoom, joinRoom, saveRoomDrawing, fetchRoomDrawing,
   fetchRoomVoiceNotes, fetchSingleRoomVoiceNote,
   saveRoomBlankPage, fetchRoomBlankPages,
   getProfile, getFriends, inviteToRoom,
@@ -30,6 +30,7 @@ import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import { PRESET_COLORS, SIZES } from '@/lib/drawing';
 import type { Tool, PenType } from '@/lib/drawing';
 import type { BlankPage } from '@/types';
+import { KEYS, storageGet, storageSet } from '@/lib/storage';
 
 // ── Virtual page sequence ─────────────────────────────────────────────────────
 
@@ -206,7 +207,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const seedNotesRef          = useRef<((remote: Parameters<ReturnType<typeof useRoomVoiceNotes>['seedNotes']>[0]) => void) | null>(null);
 
   const { activeDocument, addDocument, goToPage } = usePDF();
-  const { getDrawing, saveDrawing, seedDrawings }  = usePDFDrawings();
+  const { getDrawing, saveDrawing }  = usePDFDrawings();
 
   const broadcastRef = useRef<(page: number, data: string) => void>(() => {});
 
@@ -386,15 +387,18 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       docIdRef.current = newDocId;
       if (!cancelled) setDocId(newDocId);
 
-      const [remoteDrawings, remoteVoiceNotes, remoteBlankPages] = await Promise.all([
-        fetchDrawings(newDocId),
+      // Clear any workspace drawings for this docId so they don't bleed into the room
+      const existingDrawings = storageGet<Record<string, string>>(KEYS.DRAWINGS) ?? {};
+      const prefix = `${newDocId}:`;
+      const filteredDrawings = Object.fromEntries(
+        Object.entries(existingDrawings).filter(([k]) => !k.startsWith(prefix))
+      );
+      storageSet(KEYS.DRAWINGS, filteredDrawings);
+
+      const [remoteVoiceNotes, remoteBlankPages] = await Promise.all([
         fetchRoomVoiceNotes(roomId),
         fetchRoomBlankPages(roomId),
       ]);
-
-      const prefixed: Record<string, string> = {};
-      for (const [k, v] of Object.entries(remoteDrawings)) prefixed[`${newDocId}:${k}`] = v;
-      if (Object.keys(prefixed).length > 0) seedDrawings(prefixed);
 
       if (remoteVoiceNotes.length > 0 && !cancelled) {
         seedNotesRef.current?.(remoteVoiceNotes);
