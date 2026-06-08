@@ -68,6 +68,19 @@ type LineState =
   | { phase: 'idle' }
   | { phase: 'active'; start: { x: number; y: number }; snapshot: ImageData };
 
+function constrainToAngle(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): { x: number; y: number } {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+  const snapped = Math.round(angle / 45) * 45;
+  const snapRad = snapped * (Math.PI / 180);
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  return { x: start.x + dist * Math.cos(snapRad), y: start.y + dist * Math.sin(snapRad) };
+}
+
 export interface DrawingCanvasHandle {
   clear: () => void;
   undo?: () => void;
@@ -272,8 +285,11 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     const canvasDimsRef = useRef(canvasDims);
     canvasDimsRef.current = canvasDims;
 
-    const lineStateRef = useRef<LineState>({ phase: 'idle' });
-    const undoStack    = useRef<string[]>([]);
+    const lineStateRef  = useRef<LineState>({ phase: 'idle' });
+    const undoStack     = useRef<string[]>([]);
+    const shiftSnapRef  = useRef<{ active: boolean; startPos: { x: number; y: number }; snapshot: ImageData | null }>({
+      active: false, startPos: { x: 0, y: 0 }, snapshot: null,
+    });
 
     // ── Image annotation state ────────────────────────────────────────────────
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -412,7 +428,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       if (canvas) onSave(canvas.toDataURL('image/png'));
     }, [onSave]);
 
-    const startDraw = (pos: { x: number; y: number }) => {
+    const startDraw = (pos: { x: number; y: number }, shiftKey = false) => {
       const canvas = drawCanvasRef.current;
       const ctx = canvas?.getContext('2d');
       if (!canvas || !ctx || !canvasDimsRef.current) return;
@@ -448,6 +464,11 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
       isDrawing.current = true;
       lastPos.current = pos;
+      if (shiftKey) {
+        shiftSnapRef.current = { active: true, startPos: pos, snapshot: ctx.getImageData(0, 0, canvas.width, canvas.height) };
+      } else {
+        shiftSnapRef.current = { active: false, startPos: pos, snapshot: null };
+      }
       ctx.save();
       applyCtx(ctx, tool, penType, color, strokeSize);
       ctx.beginPath();
@@ -456,7 +477,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       ctx.restore();
     };
 
-    const continueDraw = (pos: { x: number; y: number }) => {
+    const continueDraw = (pos: { x: number; y: number }, shiftKey = false) => {
       if (tool === 'line') {
         const ls = lineStateRef.current;
         if (ls.phase !== 'active') return;
@@ -477,6 +498,21 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       const canvas = drawCanvasRef.current;
       const ctx = canvas?.getContext('2d');
       if (!canvas || !ctx || !canvasDimsRef.current) return;
+      const ss = shiftSnapRef.current;
+      if (ss.active && ss.snapshot) {
+        // Shift held: rubber-band a straight line constrained to 0/45/90° from stroke start
+        ctx.putImageData(ss.snapshot, 0, 0);
+        const constrained = constrainToAngle(ss.startPos, pos);
+        ctx.save();
+        applyCtx(ctx, tool, penType, color, strokeSize);
+        ctx.beginPath();
+        ctx.moveTo(ss.startPos.x, ss.startPos.y);
+        ctx.lineTo(constrained.x, constrained.y);
+        ctx.stroke();
+        ctx.restore();
+        lastPos.current = constrained;
+        return;
+      }
       ctx.save();
       applyCtx(ctx, tool, penType, color, strokeSize);
       ctx.beginPath();
@@ -492,6 +528,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       if (!isDrawing.current) return;
       isDrawing.current = false;
       lastPos.current = null;
+      shiftSnapRef.current = { active: false, startPos: { x: 0, y: 0 }, snapshot: null };
       saveCanvas();
     };
 
@@ -801,8 +838,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
               cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
               touchAction: canDrawNow ? 'none' : 'pan-y',
             }}
-            onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent)); }}
-            onMouseMove={(e) => { if (!canDrawNow) return; continueDraw(getPos(e.nativeEvent)); }}
+            onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent), e.shiftKey); }}
+            onMouseMove={(e) => { if (!canDrawNow) return; continueDraw(getPos(e.nativeEvent), e.shiftKey); }}
             onMouseUp={() => canDrawNow && stopDraw()}
             onMouseLeave={() => canDrawNow && stopDraw()}
             onTouchStart={(e) => {

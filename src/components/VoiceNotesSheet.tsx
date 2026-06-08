@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { Mic, ChevronUp } from 'lucide-react';
 import VoiceNoteRecorder from './VoiceNoteRecorder';
 import VoiceNoteList from './VoiceNoteList';
+import type { VoiceNoteListHandle } from './VoiceNoteList';
 import type { VoiceNote } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -20,13 +21,14 @@ interface Props {
   onStop: () => void;
   onDelete: (id: string) => void;
   onUpdateTitle: (id: string, title: string) => void;
+  listRef?: React.Ref<VoiceNoteListHandle>;
 }
 
 export default function VoiceNotesSheet({
   isOpen, onToggle,
   notes, pageKey, documentId, pageNumber,
   isRecording, recordingDuration, recordingContext,
-  onStart, onStop, onDelete, onUpdateTitle,
+  onStart, onStop, onDelete, onUpdateTitle, listRef,
 }: Props) {
   const { t } = useLanguage();
   const touchStartY = useRef<number | null>(null);
@@ -174,6 +176,7 @@ export default function VoiceNotesSheet({
               onClick={(e) => e.stopPropagation()}
             >
               <VoiceNoteList
+                ref={listRef}
                 notes={notes}
                 pageKey={pageKey}
                 onDelete={onDelete}
