@@ -146,8 +146,10 @@ export default function PageNavigation({
       display: 'flex', alignItems: 'center',
       padding: '0 8px',
       gap: 4,
-      background: 'var(--bg-sidebar)',
-      borderTop: '1px solid var(--border-subtle)',
+      background: 'rgba(0, 0, 0, 0.65)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
+      borderTop: '1px solid rgba(255,255,255,0.1)',
       flexShrink: 0,
       overflow: 'hidden',
       minWidth: 0,
@@ -189,9 +191,10 @@ export default function PageNavigation({
         {showBgPicker && (
           <div style={{
             position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
-            background: 'var(--bg-panel)', border: '1px solid var(--border)',
+            background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255,255,255,0.15)',
             borderRadius: 4, padding: '10px',
-                        zIndex: 100,
+            zIndex: 100,
           }}>
             <p style={{
               fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
@@ -327,8 +330,8 @@ export default function PageNavigation({
                 width: 26, height: 26, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 4, border: 'none', cursor: 'pointer',
-                background: viewMode === 'page' ? 'var(--accent-muted)' : 'transparent',
-                color: viewMode === 'page' ? 'var(--accent-hover)' : 'var(--text-3)',
+                background: viewMode === 'page' ? 'rgba(255,255,255,0.12)' : 'transparent',
+                color: viewMode === 'page' ? 'var(--text-1)' : 'var(--text-3)',
                 transition: 'background 0.13s, color 0.13s',
               }}
               onMouseOver={(e) => {
@@ -352,8 +355,8 @@ export default function PageNavigation({
                 width: 26, height: 26, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 4, border: 'none', cursor: 'pointer',
-                background: viewMode === 'scroll' ? 'var(--accent-muted)' : 'transparent',
-                color: viewMode === 'scroll' ? 'var(--accent-hover)' : 'var(--text-3)',
+                background: viewMode === 'scroll' ? 'rgba(255,255,255,0.12)' : 'transparent',
+                color: viewMode === 'scroll' ? 'var(--text-1)' : 'var(--text-3)',
                 transition: 'background 0.13s, color 0.13s',
               }}
               onMouseOver={(e) => {
@@ -417,9 +420,9 @@ export default function PageNavigation({
               display: 'flex', alignItems: 'center', gap: 5,
               height: 26, padding: '0 8px',
               borderRadius: 4, flexShrink: 0,
-              background: isDrawing ? 'var(--accent-muted)' : 'transparent',
-              border: `1px solid ${isDrawing ? 'rgba(37,99,235,.35)' : 'var(--border)'}`,
-              color: isDrawing ? 'var(--accent-hover)' : 'var(--text-2)',
+              background: isDrawing ? 'rgba(255,255,255,0.12)' : 'transparent',
+              border: `1px solid ${isDrawing ? 'rgba(255,255,255,0.35)' : 'var(--border)'}`,
+              color: isDrawing ? 'var(--text-1)' : 'var(--text-2)',
               fontSize: 11.5, fontWeight: 500,
               cursor: 'pointer', fontFamily: 'inherit',
               transition: 'background 0.13s, color 0.13s, border-color 0.13s',
@@ -427,7 +430,7 @@ export default function PageNavigation({
             }}
             onMouseOver={(e) => {
               if (!isDrawing) Object.assign(e.currentTarget.style, {
-                background: 'var(--accent-muted)', borderColor: 'rgba(37,99,235,.25)', color: 'var(--accent-hover)',
+                background: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.25)', color: 'var(--text-1)',
               });
             }}
             onMouseOut={(e) => {
