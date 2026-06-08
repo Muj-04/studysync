@@ -1777,8 +1777,10 @@ export default function WorkspacePage() {
         height: 56, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 12px 0 8px',
-        background: 'var(--bg-app)',
-        borderBottom: '1px solid var(--border-subtle)',
+        background: 'rgba(0, 0, 0, 0.65)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid rgba(255,255,255,0.1)',
         position: 'relative', zIndex: 20,
         gap: 8,
       }}>
