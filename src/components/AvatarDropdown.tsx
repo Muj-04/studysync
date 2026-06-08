@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function AvatarDropdown({ email, displayName, avatarUrl }: Props) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -66,9 +66,9 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
-            right: 0,
+            ...(lang === 'ar' ? { left: 0 } : { right: 0 }),
             width: 200,
-            transformOrigin: 'top right',
+            transformOrigin: lang === 'ar' ? 'top left' : 'top right',
             background: 'var(--bg-panel)',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
