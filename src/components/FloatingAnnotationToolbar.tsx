@@ -582,13 +582,16 @@ export default function FloatingAnnotationToolbar({
           zIndex: 2,
         }}>
           <div style={{
-            background: 'var(--accent)',
+            background: 'rgba(255,255,255,0.15)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
             color: '#fff',
             padding: '6px 13px',
             borderRadius: 4,
             fontSize: 12.5, fontWeight: 600,
             whiteSpace: 'nowrap',
-                      }}>
+            border: '1px solid rgba(255,255,255,0.2)',
+          }}>
             Tap to annotate
           </div>
           {/* Arrow pointing right toward the button */}
@@ -596,7 +599,7 @@ export default function FloatingAnnotationToolbar({
             width: 0, height: 0,
             borderTop: '7px solid transparent',
             borderBottom: '7px solid transparent',
-            borderLeft: '9px solid var(--accent)',
+            borderLeft: '9px solid rgba(255,255,255,0.15)',
             flexShrink: 0,
           }} />
         </div>

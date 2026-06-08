@@ -65,7 +65,7 @@ function NoteItem({
         height: 'auto',
         minHeight: minH,
         border: showBorder
-          ? `1px dashed ${isEditing ? 'rgba(120,120,140,0.65)' : 'var(--accent)'}`
+          ? `1px dashed ${isEditing ? 'rgba(120,120,140,0.65)' : 'rgba(255,255,255,0.5)'}`
           : 'none',
         borderRadius: 4,
         background: 'transparent',
@@ -112,7 +112,7 @@ function NoteItem({
           {[0, 1, 2, 3].map(i => (
             <div key={i} style={{
               width: 2.5, height: 2.5, borderRadius: '50%',
-              background: 'var(--accent)', opacity: 0.5,
+              background: 'rgba(255,255,255,0.5)',
             }} />
           ))}
         </div>
@@ -127,9 +127,9 @@ function NoteItem({
             left: '100%', top: 0, marginLeft: 6,
             width: 26, height: 26,
             borderRadius: 6,
-            background: 'var(--accent)',
+            background: '#ffffff',
             border: 'none',
-            color: '#fff',
+            color: '#0f172a',
             cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 15, fontWeight: 700, lineHeight: 1,
@@ -246,7 +246,7 @@ function NoteItem({
           style={{
             position: 'absolute', right: -5, bottom: -5,
             width: 12, height: 12,
-            background: 'var(--accent)', border: '2px solid white',
+            background: '#ffffff', border: '2px solid rgba(0,0,0,0.3)',
             borderRadius: 2, cursor: 'nwse-resize', pointerEvents: 'auto',
           }}
           onPointerDown={(e) => {
@@ -517,11 +517,11 @@ export default function TextNotesLayer({
           }}
         >
           {/* Top bar */}
-          <line x1="1" y1="1.5" x2="13" y2="1.5" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="1" y1="1.5" x2="13" y2="1.5" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" strokeLinecap="round" />
           {/* Stem */}
-          <line x1="7" y1="1.5" x2="7"  y2="20.5" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />
+          <line x1="7" y1="1.5" x2="7"  y2="20.5" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" />
           {/* Bottom bar */}
-          <line x1="1" y1="20.5" x2="13" y2="20.5" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="1" y1="20.5" x2="13" y2="20.5" stroke="rgba(255,255,255,0.7)" strokeWidth="2.5" strokeLinecap="round" />
         </svg>
       )}
     </div>
