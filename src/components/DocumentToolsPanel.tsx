@@ -92,7 +92,7 @@ function TemplateTile({ icon, label, onClick }: { icon: React.ReactNode; label: 
         transition: 'border-color 0.13s, background 0.13s',
       }}
       onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-        borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)',
+        borderColor: 'rgba(255,255,255,0.35)', background: 'var(--bg-hover)',
       })}
       onMouseOut={(e) => Object.assign(e.currentTarget.style, {
         borderColor: 'var(--border)', background: 'var(--bg-elevated)',
@@ -129,10 +129,10 @@ function BgSwatches({
             style={{
               flex: 1,
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-              border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+              border: `1px solid ${isActive ? 'rgba(255,255,255,0.5)' : 'var(--border)'}`,
               borderRadius: 4, padding: '6px 4px',
               cursor: disabled ? 'not-allowed' : 'pointer',
-              background: isActive ? 'var(--accent-muted)' : 'transparent',
+              background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
               fontFamily: 'inherit',
               opacity: disabled ? 0.4 : 1,
               transition: 'border-color 0.13s, background 0.13s',
@@ -158,7 +158,7 @@ function BgSwatches({
             }} />
             <span style={{
               fontSize: 10,
-              color: isActive ? 'var(--accent)' : 'var(--text-2)',
+              color: isActive ? 'var(--text-1)' : 'var(--text-2)',
               fontWeight: isActive ? 600 : 400,
             }}>
               {label}
@@ -330,15 +330,15 @@ function ActionBtn({
       style={{
         height: 22, padding: '0 9px',
         borderRadius: 4, fontSize: 10.5, fontWeight: 500,
-        background: active ? 'var(--accent)' : 'var(--bg-active)',
+        background: active ? '#ffffff' : 'var(--bg-active)',
         border: 'none',
-        color: active ? '#fff' : 'var(--text-3)',
+        color: active ? '#0f172a' : 'var(--text-3)',
         cursor: active ? 'pointer' : 'not-allowed',
         fontFamily: 'inherit', flexShrink: 0,
         transition: 'background 0.13s',
       }}
-      onMouseOver={(e) => { if (active) e.currentTarget.style.background = 'var(--accent-hover)'; }}
-      onMouseOut={(e)  => { if (active) e.currentTarget.style.background = 'var(--accent)'; }}
+      onMouseOver={(e) => { if (active) e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
+      onMouseOut={(e)  => { if (active) e.currentTarget.style.background = '#ffffff'; }}
     >
       {loading ? loadingLabel : label}
     </button>
@@ -591,7 +591,7 @@ export default function DocumentToolsPanel({
             <div>
               <p style={{
                 fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-                textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10,
+                textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 10,
               }}>
                 {t('dtp_explanation')}
               </p>
@@ -604,7 +604,7 @@ export default function DocumentToolsPanel({
             <div>
               <p style={{
                 fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-                textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 10,
+                textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 10,
               }}>
                 {t('dtp_examples')}
               </p>
@@ -612,7 +612,7 @@ export default function DocumentToolsPanel({
                 {explainExamples.map((ex, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                     <span style={{
-                      fontSize: 12, fontWeight: 700, color: 'var(--accent)',
+                      fontSize: 12, fontWeight: 700, color: 'var(--text-2)',
                       flexShrink: 0, lineHeight: 1.75, minWidth: 18,
                     }}>
                       {i + 1}.
@@ -685,7 +685,9 @@ export default function DocumentToolsPanel({
         <div style={{
           width: '100%', height: '100%',
           background: 'var(--bg-sidebar)',
-          borderLeft: '1px solid var(--border-subtle)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderLeft: '1px solid rgba(255,255,255,0.1)',
           display: 'flex', flexDirection: 'column',
           opacity: isOpen ? 1 : 0,
           transition: 'opacity 0.18s ease',
@@ -729,7 +731,7 @@ export default function DocumentToolsPanel({
                     justifyContent: 'space-between', marginBottom: 6,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Sparkles size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                      <Sparkles size={13} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
                       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
                         {t('dtp_ai_summary')}
                       </span>
@@ -750,7 +752,7 @@ export default function DocumentToolsPanel({
 
                   {summaryState === 'loading' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
-                      <Loader2 size={12} style={{ color: 'var(--accent)', flexShrink: 0, animation: 'spin 0.9s linear infinite' }} />
+                      <Loader2 size={12} style={{ color: 'var(--text-3)', flexShrink: 0, animation: 'spin 0.9s linear infinite' }} />
                       <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_analyzing')}</span>
                     </div>
                   )}
@@ -797,7 +799,7 @@ export default function DocumentToolsPanel({
                     justifyContent: 'space-between', marginBottom: 6,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Lightbulb size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                      <Lightbulb size={13} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
                       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
                         {t('dtp_explain')}
                       </span>
@@ -826,7 +828,7 @@ export default function DocumentToolsPanel({
 
                   {explainState === 'loading' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
-                      <Loader2 size={12} style={{ color: 'var(--accent)', flexShrink: 0, animation: 'spin 0.9s linear infinite' }} />
+                      <Loader2 size={12} style={{ color: 'var(--text-3)', flexShrink: 0, animation: 'spin 0.9s linear infinite' }} />
                       <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_generating')}</span>
                     </div>
                   )}
@@ -842,7 +844,7 @@ export default function DocumentToolsPanel({
                         <div>
                           <p style={{
                             fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-                            textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 3,
+                            textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 3,
                           }}>
                             {t('dtp_explanation')}
                           </p>
@@ -855,14 +857,14 @@ export default function DocumentToolsPanel({
                         <div>
                           <p style={{
                             fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-                            textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 3,
+                            textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 3,
                           }}>
                             {t('dtp_examples')}
                           </p>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {explainExamples.map((ex, i) => (
                               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', flexShrink: 0, lineHeight: 1.7 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', flexShrink: 0, lineHeight: 1.7 }}>
                                   {i + 1}.
                                 </span>
                                 <p style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.55, margin: 0 }}>
@@ -900,7 +902,7 @@ export default function DocumentToolsPanel({
               }}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                  <Languages size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                  <Languages size={13} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
                     {t('dtp_translate')}
                   </span>
@@ -955,16 +957,16 @@ export default function DocumentToolsPanel({
                   style={{
                     width: '100%', height: 28,
                     borderRadius: 4, fontSize: 11.5, fontWeight: 500,
-                    background: canTranslate ? 'var(--accent)' : 'var(--bg-active)',
+                    background: canTranslate ? '#ffffff' : 'var(--bg-active)',
                     border: 'none',
-                    color: canTranslate ? '#fff' : 'var(--text-3)',
+                    color: canTranslate ? '#0f172a' : 'var(--text-3)',
                     cursor: canTranslate ? 'pointer' : 'not-allowed',
                     fontFamily: 'inherit',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                     transition: 'background 0.13s',
                   }}
-                  onMouseOver={(e) => { if (canTranslate) e.currentTarget.style.background = 'var(--accent-hover)'; }}
-                  onMouseOut={(e)  => { if (canTranslate) e.currentTarget.style.background = 'var(--accent)'; }}
+                  onMouseOver={(e) => { if (canTranslate) e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
+                  onMouseOut={(e)  => { if (canTranslate) e.currentTarget.style.background = '#ffffff'; }}
                 >
                   {translateState === 'loading' ? (
                     <>
@@ -985,7 +987,7 @@ export default function DocumentToolsPanel({
                     }}>
                       <span style={{
                         fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-                        textTransform: 'uppercase', color: 'var(--accent)',
+                        textTransform: 'uppercase', color: 'var(--text-2)',
                       }}>
                         Result
                       </span>
@@ -1265,7 +1267,7 @@ export default function DocumentToolsPanel({
               }}
               onMouseOver={(e) => {
                 if (!isRecording) Object.assign(e.currentTarget.style, {
-                  borderColor: 'rgba(37,99,235,0.4)', background: 'var(--bg-hover)',
+                  borderColor: 'rgba(255,255,255,0.35)', background: 'var(--bg-hover)',
                 });
               }}
               onMouseOut={(e) => {
@@ -1439,7 +1441,7 @@ export default function DocumentToolsPanel({
 
               {formatAPA() && (
                 <div style={{ marginTop: 16 }}>
-                  <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--accent)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Formatted (APA)</p>
+                  <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Formatted (APA)</p>
                   <div style={{ background: 'var(--bg-active)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '10px 12px' }}>
                     <p style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.6, margin: 0 }}>{formatAPA()}</p>
                   </div>
@@ -1551,7 +1553,7 @@ export default function DocumentToolsPanel({
               borderBottom: '1px solid var(--border-subtle)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <ImagePlus size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                <ImagePlus size={15} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
                 <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
                   Add Image
                 </span>
@@ -1828,7 +1830,7 @@ export default function DocumentToolsPanel({
                           <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>
                             Page {pageNumber}
                             {isCurrentPage && (
-                              <span style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--accent)', fontWeight: 500 }}>
+                              <span style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--text-2)', fontWeight: 500 }}>
                                 Current
                               </span>
                             )}

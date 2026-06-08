@@ -325,8 +325,8 @@ function DocRowContent({
 
       {/* File icon */}
       {doc.type === 'pptx'
-        ? <Presentation size={10} style={{ flexShrink: 0, color: isActive ? 'var(--accent-hover)' : 'var(--text-3)' }} />
-        : <FileText     size={10} style={{ flexShrink: 0, color: isActive ? 'var(--accent-hover)' : 'var(--text-3)' }} />}
+        ? <Presentation size={10} style={{ flexShrink: 0, color: isActive ? 'var(--text-1)' : 'var(--text-3)' }} />
+        : <FileText     size={10} style={{ flexShrink: 0, color: isActive ? 'var(--text-1)' : 'var(--text-3)' }} />}
 
       {/* Name — clickable */}
       <button
@@ -515,7 +515,9 @@ export default function SidebarThumbnails({
         width: '100%',
         height: '100%',
         background: 'var(--bg-sidebar)',
-        borderRight: '1px solid var(--border-subtle)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderRight: '1px solid rgba(255,255,255,0.1)',
         display: 'flex', flexDirection: 'column',
         opacity: isOpen ? 1 : 0,
         transition: 'opacity 0.18s ease',
@@ -537,10 +539,10 @@ export default function SidebarThumbnails({
                   padding: '6px 4px 8px',
                   fontSize: 10, fontWeight: 600,
                   letterSpacing: '0.06em', textTransform: 'uppercase',
-                  color: activeTab === id ? 'var(--accent)' : 'var(--text-3)',
+                  color: activeTab === id ? '#ffffff' : 'var(--text-3)',
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: `2px solid ${activeTab === id ? 'var(--accent)' : 'transparent'}`,
+                  borderBottom: `2px solid ${activeTab === id ? 'rgba(255,255,255,0.7)' : 'transparent'}`,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   transition: 'color 0.13s, border-color 0.13s',
@@ -566,7 +568,7 @@ export default function SidebarThumbnails({
                   <span style={{
                     position: 'absolute', top: 4, right: 2,
                     width: 5, height: 5, borderRadius: '50%',
-                    background: 'var(--accent)',
+                    background: 'rgba(255,255,255,0.65)',
                   }} />
                 )}
               </button>
@@ -649,8 +651,8 @@ export default function SidebarThumbnails({
                   >
                     <div style={{ marginTop: 1, flexShrink: 0 }}>
                       {entry.type === 'voice'
-                        ? <Mic size={10} style={{ color: '#a78bfa' }} />
-                        : <FileText size={10} style={{ color: 'var(--accent)' }} />}
+                        ? <Mic size={10} style={{ color: 'rgba(255,255,255,0.55)' }} />
+                        : <FileText size={10} style={{ color: 'rgba(255,255,255,0.55)' }} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 9.5, color: 'var(--text-3)', fontWeight: 600, marginBottom: 1, letterSpacing: '0.03em' }}>
@@ -733,7 +735,7 @@ export default function SidebarThumbnails({
                 {draggingDoc && (
                   <div style={{
                     background: 'var(--bg-panel)',
-                    border: '1px solid var(--accent)',
+                    border: '1px solid rgba(255,255,255,0.3)',
                     borderRadius: 4,
                                         padding: '0 6px 0 3px',
                     opacity: 0.96,
@@ -849,8 +851,8 @@ export default function SidebarThumbnails({
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           gap: 4, padding: '4px 3px',
                           borderRadius: 4, marginBottom: 2,
-                          border: `1px solid ${isActive ? 'rgba(89,101,217,.45)' : 'transparent'}`,
-                          background: isActive ? 'var(--accent-muted)' : 'transparent',
+                          border: `1px solid ${isActive ? 'rgba(255,255,255,0.35)' : 'transparent'}`,
+                          background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
                           cursor: 'pointer', fontFamily: 'inherit',
                           transition: 'background 0.12s, border-color 0.12s',
                           position: 'relative',
