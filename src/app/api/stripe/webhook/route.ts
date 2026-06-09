@@ -71,9 +71,8 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
         if (data?.user_id) {
           await admin.from('subscriptions').update({
-            status:              sub.status,
-            current_period_end:  new Date(sub.current_period_end * 1000).toISOString(),
-            updated_at:          new Date().toISOString(),
+            status:     sub.status,
+            updated_at: new Date().toISOString(),
           }).eq('user_id', data.user_id);
         }
         break;
