@@ -890,8 +890,10 @@ export async function uploadRoomPdf(roomId: string, blob: Blob, docName: string)
 
 export async function createRoom(roomId: string, docName: string, pdfPath: string): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const { error } = await sb().from('study_rooms').insert({
     id: roomId, host_user_id: uid, document_name: docName, pdf_path: pdfPath,
+    status: 'active', max_members: 10, expires_at: expiresAt,
   });
   if (error) { console.error('[DB] createRoom error:', error.message); return null; }
   return roomId;
@@ -899,18 +901,55 @@ export async function createRoom(roomId: string, docName: string, pdfPath: strin
 
 export async function fetchRoom(roomId: string): Promise<{
   id: string; documentName: string; pdfPath: string; hostUserId: string;
+  status: 'active' | 'closed'; maxMembers: number; expiresAt: string | null;
 } | null> {
   const { data, error } = await sb().from('study_rooms').select('*').eq('id', roomId).single();
   if (error || !data) { console.error('[DB] fetchRoom error:', error?.message); return null; }
-  return { id: data.id, documentName: data.document_name, pdfPath: data.pdf_path, hostUserId: data.host_user_id };
+  return {
+    id: data.id, documentName: data.document_name, pdfPath: data.pdf_path, hostUserId: data.host_user_id,
+    status: (data.status ?? 'active') as 'active' | 'closed',
+    maxMembers: data.max_members ?? 10,
+    expiresAt: data.expires_at ?? null,
+  };
 }
 
-export async function joinRoom(roomId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
+export async function joinRoom(roomId: string): Promise<{ error?: string }> {
+  const uid = await userId(); if (!uid) return { error: 'unauthenticated' };
+
+  // Re-joining: allow existing members through without capacity check
+  const { data: existing } = await sb().from('room_members')
+    .select('user_id').eq('room_id', roomId).eq('user_id', uid).maybeSingle();
+
+  if (!existing) {
+    const [{ count }, { data: room }] = await Promise.all([
+      sb().from('room_members').select('user_id', { count: 'exact', head: true }).eq('room_id', roomId),
+      sb().from('study_rooms').select('max_members, status').eq('id', roomId).maybeSingle(),
+    ]);
+    if (room?.status === 'closed') return { error: 'closed' };
+    if ((count ?? 0) >= (room?.max_members ?? 10)) return { error: 'full' };
+  }
+
   await sb().from('room_members').upsert(
     { room_id: roomId, user_id: uid },
     { onConflict: 'room_id,user_id' },
   );
+  return {};
+}
+
+export async function leaveRoom(roomId: string): Promise<{ wasLastMember: boolean }> {
+  const uid = await userId(); if (!uid) return { wasLastMember: false };
+  await sb().from('room_members').delete().eq('room_id', roomId).eq('user_id', uid);
+  const { count } = await sb().from('room_members')
+    .select('user_id', { count: 'exact', head: true }).eq('room_id', roomId);
+  if ((count ?? 0) === 0) {
+    await sb().from('study_rooms').update({ status: 'closed' }).eq('id', roomId);
+    return { wasLastMember: true };
+  }
+  return { wasLastMember: false };
+}
+
+export async function closeRoom(roomId: string): Promise<void> {
+  await sb().from('study_rooms').update({ status: 'closed' }).eq('id', roomId);
 }
 
 export async function saveRoomDrawing(roomId: string, pageNumber: number, data: string): Promise<void> {
