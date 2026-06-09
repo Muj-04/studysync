@@ -3,7 +3,9 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
-import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle } from '@/lib/supabase/db';
+import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle, getTotalVoiceStorageBytes, getProfile } from '@/lib/supabase/db';
+
+const VOICE_STORAGE_LIMIT = 50 * 1024 * 1024; // 50 MB
 
 interface PersistedNote {
   id: string;
@@ -70,7 +72,8 @@ function deserializeNotes(persisted: PersistedNote[]): VoiceNote[] {
   });
 }
 
-export function useVoiceNotes() {
+export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
+  const onLimitRef = useRef(opts?.onStorageLimitReached);
   const [notes, setNotes] = useState<VoiceNote[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -198,14 +201,21 @@ export function useVoiceNotes() {
 
       setNotes((prev) => [...prev, note]);
 
-      // Upload to Supabase in background
+      // Upload to Supabase in background (with storage limit check for free users)
       if (userIdRef.current) {
-        console.log('[VoiceNotes] userIdRef set — calling saveVoiceNote id:', note.id);
-        saveVoiceNote(note).then((url) => {
+        (async () => {
+          const [profile, usedBytes] = await Promise.all([getProfile(), getTotalVoiceStorageBytes()]);
+          const bypass = (profile?.isVip ?? false) || (profile?.plan ?? 'free') !== 'free';
+          if (!bypass && usedBytes + blob.size > VOICE_STORAGE_LIMIT) {
+            onLimitRef.current?.();
+            return;
+          }
+          console.log('[VoiceNotes] calling saveVoiceNote id:', note.id);
+          const url = await saveVoiceNote(note);
           console.log('[VoiceNotes] saveVoiceNote returned audioUrl:', url ? url.slice(0, 80) + '…' : null);
-        });
+        })();
       } else {
-        console.warn('[VoiceNotes] userIdRef is null — saveVoiceNote NOT called (user not logged in?)');
+        console.warn('[VoiceNotes] userIdRef is null — saveVoiceNote NOT called');
       }
     };
 

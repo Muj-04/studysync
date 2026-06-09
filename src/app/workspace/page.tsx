@@ -849,6 +849,8 @@ export default function WorkspacePage() {
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'premium' | 'pro'>('free');
+  const [isVip,    setIsVip]    = useState(false);
+  const [limitModal, setLimitModal] = useState<'documents' | 'room' | 'voice' | null>(null);
 
   // ── Current user (for Supabase sync) ─────────────────────────────────────
   // userId as state so effects that depend on it re-run once the async
@@ -865,6 +867,7 @@ export default function WorkspacePage() {
       setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
       setUserAvatarUrl(profile?.avatarUrl ?? null);
       if (profile?.plan) setUserPlan(profile.plan as 'free' | 'premium' | 'pro');
+      if (profile?.isVip) setIsVip(true);
       console.log('[StudySync] userId resolved:', uid ?? 'NOT LOGGED IN');
     });
   }, []);
@@ -956,7 +959,7 @@ export default function WorkspacePage() {
     isRecording, recordingDuration, recordingContext,
     startRecording, stopRecording, deleteNote, updateNoteTitle, getNotesForPage,
     seedVoiceNotes,
-  } = useVoiceNotes();
+  } = useVoiceNotes({ onStorageLimitReached: () => setLimitModal('voice') });
   const {
     insertBlankPage, removeBlankPage,
     updateCanvasData, updateImages, updateBgTheme, getBlankPagesForDocument,
@@ -1575,6 +1578,11 @@ export default function WorkspacePage() {
   }, [showSplit, activeSide, rightSideMode, currentVP]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
+    const bypass = isVip || userPlan !== 'free';
+    if (!bypass && documents.length >= 3) {
+      setLimitModal('documents');
+      return;
+    }
     let anyRestored = false;
     for (const f of files) {
       const { isRestored } = await addDocument(f);
@@ -1607,6 +1615,8 @@ export default function WorkspacePage() {
 
   const handleCreateRoom = useCallback(async () => {
     if (!activeDocument || activeDocument.type !== 'pdf') return;
+    const bypass = isVip || userPlan !== 'free';
+    if (!bypass) { setLimitModal('room'); return; }
     setRoomModal('creating');
     try {
       const resp = await fetch(activeDocument.url);
@@ -2453,6 +2463,67 @@ export default function WorkspacePage() {
             />
           </div>
 
+        </div>
+      )}
+
+      {/* ══ Feature limit modals ══ */}
+      {limitModal && (
+        <div
+          onClick={() => setLimitModal(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1300,
+            background: 'rgba(0,0,0,0.62)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 400,
+              background: 'var(--bg-panel)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 8, padding: '28px 28px 24px',
+              display: 'flex', flexDirection: 'column', gap: 14,
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+              Free Plan Limit
+            </p>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+              {limitModal === 'documents' && "You've reached the 3 document limit"}
+              {limitModal === 'room'      && 'Study Rooms are a Premium feature'}
+              {limitModal === 'voice'     && 'Voice note storage full (50 MB limit)'}
+            </p>
+            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+              {limitModal === 'documents' && "You've reached the 3 document limit on the Free plan. Upgrade to Premium for unlimited documents."}
+              {limitModal === 'room'      && 'Upgrade to Premium to access real-time collaboration in study rooms. Free users can still join rooms they\'re invited to.'}
+              {limitModal === 'voice'     && 'Upgrade to Premium for 1 GB of voice note storage.'}
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button
+                onClick={() => setLimitModal(null)}
+                style={{
+                  padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+                  background: 'var(--bg-elevated)', color: 'var(--text-2)',
+                  border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Cancel
+              </button>
+              <a
+                href="/pricing"
+                style={{
+                  padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 600,
+                  background: '#ffffff', color: '#0f172a',
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none',
+                  display: 'inline-flex', alignItems: 'center',
+                }}
+              >
+                Upgrade to Premium
+              </a>
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,10 +1,18 @@
+import { createClient } from '@/lib/supabase/client';
+
 export async function callAI(action: 'summary', text: string): Promise<string>;
 export async function callAI(action: 'translate', text: string, language: string): Promise<string>;
 export async function callAI(action: 'explain', text: string): Promise<string>;
 export async function callAI(action: string, text: string, language?: string): Promise<string> {
+  const { data: { session } } = await createClient().auth.getSession();
+  const token = session?.access_token;
+
   const res = await fetch('/api/ai', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({ action, text, language }),
   });
 

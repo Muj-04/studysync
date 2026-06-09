@@ -342,6 +342,7 @@ export async function saveVoiceNote(note: VoiceNote) {
     duration: note.duration,
     title: note.title ?? null,
     audio_url: audioUrl,
+    audio_size_bytes: note.audioBlob?.size ?? 0,
     timestamp: note.timestamp instanceof Date ? note.timestamp.toISOString() : note.timestamp,
   }, { onConflict: 'id' });
 
@@ -632,6 +633,52 @@ export async function getUserStorageStats(): Promise<{
   };
 }
 
+export async function getTotalVoiceStorageBytes(): Promise<number> {
+  const uid = await userId(); if (!uid) return 0;
+  const { data } = await sb()
+    .from('voice_notes')
+    .select('audio_size_bytes')
+    .eq('user_id', uid);
+  return (data ?? []).reduce((sum, r) => sum + (r.audio_size_bytes ?? 0), 0);
+}
+
+export async function getMonthlyAiUsage(): Promise<number> {
+  const uid = await userId(); if (!uid) return 0;
+  const month = new Date().toISOString().slice(0, 7);
+  const { data } = await sb()
+    .from('ai_usage')
+    .select('count')
+    .eq('user_id', uid)
+    .eq('month', month)
+    .maybeSingle();
+  return data?.count ?? 0;
+}
+
+export async function getLimitUsageStats(): Promise<{
+  documents: number;
+  voiceStorageBytes: number;
+  aiRequestsThisMonth: number;
+  plan: 'free' | 'premium' | 'pro';
+  isVip: boolean;
+}> {
+  const uid = await userId();
+  if (!uid) return { documents: 0, voiceStorageBytes: 0, aiRequestsThisMonth: 0, plan: 'free', isVip: false };
+  const month = new Date().toISOString().slice(0, 7);
+  const [docsRes, vnRes, aiRes, profileRes] = await Promise.all([
+    sb().from('documents').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+    sb().from('voice_notes').select('audio_size_bytes').eq('user_id', uid),
+    sb().from('ai_usage').select('count').eq('user_id', uid).eq('month', month).maybeSingle(),
+    sb().from('profiles').select('plan, is_vip').eq('id', uid).maybeSingle(),
+  ]);
+  return {
+    documents: docsRes.count ?? 0,
+    voiceStorageBytes: (vnRes.data ?? []).reduce((s, r) => s + (r.audio_size_bytes ?? 0), 0),
+    aiRequestsThisMonth: aiRes.data?.count ?? 0,
+    plan: (profileRes.data?.plan ?? 'free') as 'free' | 'premium' | 'pro',
+    isVip: profileRes.data?.is_vip ?? false,
+  };
+}
+
 export async function deleteAllVoiceNotesForUser(): Promise<void> {
   const uid = await userId(); if (!uid) return;
   await sb().from('voice_notes').delete().eq('user_id', uid);
@@ -855,17 +902,19 @@ export async function getProfile(): Promise<{
   username: string | null;
   avatarUrl: string | null;
   plan: 'free' | 'premium' | 'pro';
+  isVip: boolean;
 } | null> {
   const uid = await userId(); if (!uid) return null;
   const { data } = await sb()
     .from('profiles')
-    .select('username, avatar_url, plan')
+    .select('username, avatar_url, plan, is_vip')
     .eq('id', uid)
     .maybeSingle();
   return data ? {
     username: data.username ?? null,
     avatarUrl: data.avatar_url ?? null,
     plan: (data.plan ?? 'free') as 'free' | 'premium' | 'pro',
+    isVip: data.is_vip ?? false,
   } : null;
 }
 
