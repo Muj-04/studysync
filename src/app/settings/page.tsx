@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/client';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
 import {
   getUserStorageStats,
+  getLimitUsageStats,
   deleteAllVoiceNotesForUser,
   deleteAllDrawingsForUser,
   exportAllUserData,
@@ -1228,10 +1229,40 @@ function NotificationsSection() {
 // Section: Data & Storage
 // ─────────────────────────────────────────────────────────────────────────────
 
+function UsageBar({ used, max, label }: { used: number; max: number; label: string }) {
+  const pct = Math.min(100, max > 0 ? (used / max) * 100 : 0);
+  const nearLimit = pct >= 80;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 12, color: nearLimit ? 'var(--red, #ef4444)' : 'var(--text-3)', fontVariantNumeric: 'tabular-nums' }}>
+          {used} / {max}
+        </span>
+      </div>
+      <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', borderRadius: 2,
+          width: `${pct}%`,
+          background: nearLimit ? 'var(--red, #ef4444)' : 'var(--accent)',
+          transition: 'width 0.3s ease',
+        }} />
+      </div>
+    </div>
+  );
+}
+
 function DataSection() {
   const { t } = useLanguage();
   const [stats, setStats] = useState<{ documents: number; voiceNotes: number; drawings: number } | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [limitStats, setLimitStats] = useState<{
+    documents: number;
+    voiceStorageBytes: number;
+    aiRequestsThisMonth: number;
+    plan: 'free' | 'premium' | 'pro';
+    isVip: boolean;
+  } | null>(null);
 
   const [clearDrawState, setClearDrawState] = useState<'idle' | 'confirm' | 'loading'>('idle');
   const [clearNotesState, setClearNotesState] = useState<'idle' | 'confirm' | 'loading'>('idle');
@@ -1239,11 +1270,13 @@ function DataSection() {
 
   useEffect(() => {
     getUserStorageStats().then((s) => { setStats(s); setStatsLoading(false); });
+    getLimitUsageStats().then(setLimitStats);
   }, []);
 
   const refreshStats = useCallback(() => {
     setStatsLoading(true);
     getUserStorageStats().then((s) => { setStats(s); setStatsLoading(false); });
+    getLimitUsageStats().then(setLimitStats);
   }, []);
 
   const doClearDrawings = useCallback(async () => {
@@ -1284,7 +1317,7 @@ function DataSection() {
       <div style={{ marginBottom: 24 }}>
         <FieldLabel>{t('set_data_usage')}</FieldLabel>
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10,
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16,
         }}>
           {([
             { label: t('set_data_documents'), key: 'documents' },
@@ -1303,6 +1336,36 @@ function DataSection() {
             </div>
           ))}
         </div>
+
+        {/* Free plan usage bars */}
+        {limitStats && !limitStats.isVip && limitStats.plan === 'free' && (
+          <div style={{
+            padding: '14px 16px', borderRadius: 4,
+            background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+          }}>
+            <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+              Free Plan Limits
+            </p>
+            <UsageBar
+              used={limitStats.documents}
+              max={3}
+              label="Documents"
+            />
+            <UsageBar
+              used={Math.round(limitStats.voiceStorageBytes / (1024 * 1024))}
+              max={50}
+              label="Voice storage (MB)"
+            />
+            <UsageBar
+              used={limitStats.aiRequestsThisMonth}
+              max={30}
+              label="AI requests this month"
+            />
+            <a href="/pricing" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', display: 'inline-block', marginTop: 4 }}>
+              Upgrade for higher limits →
+            </a>
+          </div>
+        )}
       </div>
 
       <Divider />
