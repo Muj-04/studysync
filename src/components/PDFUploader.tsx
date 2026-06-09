@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useRef, useState } from 'react';
 import { Upload, FileText } from 'lucide-react';
+import { validatePdfOrPptx } from '@/lib/fileValidation';
 
 interface Props {
   onFilesAdded: (files: File[]) => void;
@@ -9,33 +10,37 @@ interface Props {
 
 export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const dragCounter = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(
-    (files: FileList | null) => {
+    async (files: FileList | null) => {
       if (!files) return;
-      const accepted = Array.from(files).filter((f) => {
-        const name = f.name.toLowerCase();
-        return (
-          f.type === 'application/pdf' ||
-          name.endsWith('.pdf') ||
-          name.endsWith('.pptx') ||
-          f.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
-        );
-      });
+      setUploadError(null);
+      const results = await Promise.all(
+        Array.from(files).map(async (f) => {
+          const r = await validatePdfOrPptx(f);
+          return { file: f, result: r };
+        }),
+      );
+      const rejected = results.filter((r) => !r.result.valid);
+      const accepted  = results.filter((r) => r.result.valid).map((r) => r.file);
+      if (rejected.length > 0) {
+        setUploadError(rejected[0].result.error ?? 'Invalid file.');
+      }
       if (accepted.length > 0) onFilesAdded(accepted);
     },
     [onFilesAdded],
   );
 
   const onDragEnter = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); dragCounter.current += 1; setIsDragging(true); };
-  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const onDragOver  = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
   const onDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); dragCounter.current -= 1; if (dragCounter.current === 0) setIsDragging(false); };
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation();
     dragCounter.current = 0; setIsDragging(false);
-    handleFiles(e.dataTransfer.files);
+    void handleFiles(e.dataTransfer.files);
   }, [handleFiles]);
 
   if (compact) {
@@ -73,7 +78,7 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
           type="file"
           accept=".pdf,.pptx"
           multiple style={{ display: 'none' }}
-          onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+          onChange={(e) => { void handleFiles(e.target.files); e.target.value = ''; }}
         />
       </label>
     );
@@ -120,8 +125,14 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
             browse
           </span>
         </p>
-        <p style={{ fontSize: 12, color: 'var(--text-3)' }}>PDF and PPTX supported</p>
+        <p style={{ fontSize: 12, color: 'var(--text-3)' }}>PDF and PPTX • max 50 MB</p>
       </div>
+
+      {uploadError && (
+        <p style={{ fontSize: 12, color: 'var(--red, #ef4444)', margin: 0, textAlign: 'center' }}>
+          {uploadError}
+        </p>
+      )}
 
       <input
         ref={inputRef}
@@ -129,7 +140,7 @@ export default function PDFUploader({ onFilesAdded, compact = false }: Props) {
         accept=".pdf,.pptx"
         multiple style={{ display: 'none' }}
         onClick={(e) => e.stopPropagation()}
-        onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+        onChange={(e) => { void handleFiles(e.target.files); e.target.value = ''; }}
       />
     </div>
   );
