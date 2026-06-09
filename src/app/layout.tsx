@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import '@/lib/env'; // validate required env vars on cold-start
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
