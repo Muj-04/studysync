@@ -121,7 +121,7 @@ export default function NotificationBell() {
             transformOrigin: lang === 'ar' ? 'top left' : 'top right',
             background: 'var(--bg-panel)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
             border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4,
-                        zIndex: 300, display: 'flex', flexDirection: 'column',
+            zIndex: 9999, display: 'flex', flexDirection: 'column',
           }}
         >
           {/* Header */}
