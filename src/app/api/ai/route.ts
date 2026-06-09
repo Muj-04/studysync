@@ -103,7 +103,27 @@ export async function POST(req: NextRequest) {
 
     let prompt: string;
 
-    if (action === 'summary') {
+    if (action === 'flashcards') {
+      prompt =
+        'Generate 5 to 10 flashcard question-answer pairs from the text below. ' +
+        'Return ONLY a JSON array with objects containing "question" and "answer" string fields. ' +
+        'No markdown fences, no extra text, just the raw JSON array.\n\n' +
+        text.slice(0, 6000);
+
+      const msg = await client.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const raw = (msg.content[0] as { type: string; text: string }).text ?? '[]';
+      if (!bypass) {
+        admin.from('ai_usage').upsert(
+          { user_id: user.id, month, count: currentCount + 1 },
+          { onConflict: 'user_id,month' },
+        ).then(() => {});
+      }
+      return NextResponse.json({ result: raw });
+    } else if (action === 'summary') {
       prompt =
         'Summarize the following text in 3–5 concise bullet points. ' +
         'Return ONLY the bullet points, one per line, each starting with "• ". No headers or extra text.\n\n' +

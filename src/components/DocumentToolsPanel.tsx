@@ -1,15 +1,17 @@
 'use client';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import {
   ImagePlus, Trash2, FileOutput, FilePlus, Mic,
-  Sparkles, Languages, Lightbulb,
+  Sparkles, Languages, Lightbulb, BookOpen, ChevronLeft, ChevronRight,
   Table2, Quote, FunctionSquare, BookMarked,
-  Loader2, Maximize2, Copy, Check, X, Users, Eraser,
+  Loader2, Maximize2, Copy, Check, X, Users, Eraser, RotateCcw,
 } from 'lucide-react';
 import { callAI } from '@/lib/gemini';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import type { TextNote, KeyTerm, PDFPageImage } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { saveFlashcards, loadFlashcards } from '@/lib/supabase/db';
+import type { Flashcard } from '@/lib/supabase/db';
 
 // ── PDF text extraction ───────────────────────────────────────────────────────
 
@@ -674,6 +676,55 @@ export default function DocumentToolsPanel({
     });
   }
 
+  // ── Flashcards state ───────────────────────────────────────────────────────
+  const [flashcardState, setFlashcardState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [flashcardError, setFlashcardError] = useState('');
+  const [flashcards, setFlashcards]         = useState<Flashcard[]>([]);
+  const [fcIndex, setFcIndex]               = useState(0);
+  const [fcFlipped, setFcFlipped]           = useState(false);
+  const [fcStudyMode, setFcStudyMode]       = useState(false);
+
+  // Reset flashcards when page changes
+  useEffect(() => {
+    setFlashcardState('idle');
+    setFlashcards([]);
+    setFcIndex(0);
+    setFcFlipped(false);
+    setFcStudyMode(false);
+  }, [documentUrl, currentPdfPage]);
+
+  // Load saved flashcards when doc/page changes
+  useEffect(() => {
+    if (!activeDocumentId || !currentPdfPage) return;
+    loadFlashcards(activeDocumentId, currentPdfPage).then((cards) => {
+      if (cards.length > 0) { setFlashcards(cards); setFlashcardState('done'); setFcIndex(0); setFcFlipped(false); }
+    });
+  }, [activeDocumentId, currentPdfPage]);
+
+  const handleGenerateFlashcards = useCallback(async () => {
+    if (!documentUrl || !currentPdfPage || !activeDocumentId) return;
+    setFlashcardState('loading');
+    setFlashcardError('');
+    try {
+      const text = await extractPageText(documentUrl, currentPdfPage);
+      if (!text) { setFlashcardState('error'); setFlashcardError('No extractable text on this page.'); return; }
+      const raw = await callAI('flashcards', text);
+      let parsed: { question: string; answer: string }[] = [];
+      try { parsed = JSON.parse(raw); } catch { parsed = []; }
+      if (!Array.isArray(parsed) || !parsed.length) { setFlashcardState('error'); setFlashcardError('Could not parse flashcards. Try again.'); return; }
+      const clean = parsed.filter((c) => c.question && c.answer).slice(0, 10);
+      await saveFlashcards(activeDocumentId, currentPdfPage, clean);
+      const saved = await loadFlashcards(activeDocumentId, currentPdfPage);
+      setFlashcards(saved);
+      setFcIndex(0);
+      setFcFlipped(false);
+      setFlashcardState('done');
+    } catch (e) {
+      setFlashcardState('error');
+      setFlashcardError((e as Error).message.slice(0, 120));
+    }
+  }, [documentUrl, currentPdfPage, activeDocumentId]);
+
   // ── Derived ────────────────────────────────────────────────────────────────
   const canSummarize = !!documentUrl && !!currentPdfPage && !isBlankPage;
   const canExplain   = !!selectedText.trim() && explainState !== 'loading';
@@ -885,6 +936,141 @@ export default function DocumentToolsPanel({
                   )}
                 </div>
 
+              </div>
+            </div>
+
+            {/* ── Divider ── */}
+            <div style={{ height: 1, background: 'var(--border-subtle)' }} />
+
+            {/* ══ FLASHCARDS ══ */}
+            <div>
+              <SectionLabel>Flashcards</SectionLabel>
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, padding: '10px 11px' }}>
+                {/* Header row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <BookOpen size={13} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>AI Flashcards</span>
+                  </div>
+                  <ActionBtn
+                    onClick={handleGenerateFlashcards}
+                    disabled={!canSummarize}
+                    loading={flashcardState === 'loading'}
+                    loadingLabel="…"
+                    label={flashcardState === 'done' ? 'Regenerate' : 'Generate'}
+                  />
+                </div>
+
+                {flashcardState === 'idle' && (
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
+                    {!hasDocument ? 'Open a PDF to generate flashcards.' : isBlankPage ? 'Not available on blank pages.' : 'Generate Q&A cards from this page.'}
+                  </p>
+                )}
+
+                {flashcardState === 'loading' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
+                    <Loader2 size={12} style={{ color: 'var(--text-3)', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />
+                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Generating flashcards…</span>
+                  </div>
+                )}
+
+                {flashcardState === 'error' && (
+                  <p style={{ fontSize: 11, color: 'var(--red)', lineHeight: 1.4, margin: 0 }}>{flashcardError}</p>
+                )}
+
+                {flashcardState === 'done' && flashcards.length > 0 && !fcStudyMode && (
+                  <div>
+                    {/* Flip card */}
+                    <div
+                      onClick={() => setFcFlipped((f) => !f)}
+                      style={{
+                        cursor: 'pointer', borderRadius: 4,
+                        minHeight: 80, padding: '10px 12px',
+                        background: fcFlipped ? 'rgba(89,101,217,0.12)' : 'var(--bg-panel)',
+                        border: `1px solid ${fcFlipped ? 'rgba(89,101,217,0.35)' : 'var(--border)'}`,
+                        marginBottom: 8,
+                        transition: 'background 0.2s, border-color 0.2s',
+                        display: 'flex', flexDirection: 'column', gap: 4,
+                      }}
+                    >
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: fcFlipped ? 'var(--accent)' : 'var(--text-3)' }}>
+                        {fcFlipped ? 'Answer' : 'Question'}
+                      </span>
+                      <p style={{ fontSize: 11.5, color: 'var(--text-1)', lineHeight: 1.5, margin: 0 }}>
+                        {fcFlipped ? flashcards[fcIndex].answer : flashcards[fcIndex].question}
+                      </p>
+                      <span style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2 }}>
+                        {fcFlipped ? 'Click to see question' : 'Click to reveal answer'}
+                      </span>
+                    </div>
+
+                    {/* Navigation */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <button
+                        onClick={() => { setFcIndex((i) => Math.max(0, i - 1)); setFcFlipped(false); }}
+                        disabled={fcIndex === 0}
+                        style={{ background: 'none', border: 'none', cursor: fcIndex === 0 ? 'not-allowed' : 'pointer', color: fcIndex === 0 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === 0 ? 0.4 : 1, display: 'flex' }}
+                      ><ChevronLeft size={14} /></button>
+                      <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{fcIndex + 1} / {flashcards.length}</span>
+                      <button
+                        onClick={() => { setFcIndex((i) => Math.min(flashcards.length - 1, i + 1)); setFcFlipped(false); }}
+                        disabled={fcIndex === flashcards.length - 1}
+                        style={{ background: 'none', border: 'none', cursor: fcIndex === flashcards.length - 1 ? 'not-allowed' : 'pointer', color: fcIndex === flashcards.length - 1 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === flashcards.length - 1 ? 0.4 : 1, display: 'flex' }}
+                      ><ChevronRight size={14} /></button>
+                    </div>
+
+                    {/* Study mode button */}
+                    <button
+                      onClick={() => { setFcStudyMode(true); setFcIndex(0); setFcFlipped(false); }}
+                      style={{
+                        marginTop: 8, width: '100%', height: 26,
+                        borderRadius: 4, border: '1px solid var(--border)',
+                        background: 'transparent', color: 'var(--text-2)',
+                        cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
+                        transition: 'background 0.12s, color 0.12s',
+                      }}
+                      onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+                      onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
+                    >
+                      Study Mode
+                    </button>
+                  </div>
+                )}
+
+                {/* Study mode overlay (full-screen card review) */}
+                {fcStudyMode && flashcards.length > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Study Mode</span>
+                      <button onClick={() => setFcStudyMode(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}><X size={12} /></button>
+                    </div>
+                    <div
+                      onClick={() => setFcFlipped((f) => !f)}
+                      style={{
+                        cursor: 'pointer', borderRadius: 6, minHeight: 120, padding: '14px',
+                        background: fcFlipped ? 'rgba(89,101,217,0.14)' : 'var(--bg-panel)',
+                        border: `1.5px solid ${fcFlipped ? 'rgba(89,101,217,0.4)' : 'var(--border)'}`,
+                        marginBottom: 8, transition: 'background 0.25s, border-color 0.25s',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, textAlign: 'center',
+                      }}
+                    >
+                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: fcFlipped ? 'var(--accent)' : 'var(--text-3)' }}>
+                        {fcFlipped ? 'Answer' : 'Question'}
+                      </span>
+                      <p style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, margin: 0 }}>
+                        {fcFlipped ? flashcards[fcIndex].answer : flashcards[fcIndex].question}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <button onClick={() => { setFcIndex((i) => Math.max(0, i - 1)); setFcFlipped(false); }} disabled={fcIndex === 0} style={{ background: 'none', border: 'none', cursor: fcIndex === 0 ? 'not-allowed' : 'pointer', color: fcIndex === 0 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === 0 ? 0.4 : 1, display: 'flex' }}><ChevronLeft size={14} /></button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{fcIndex + 1} / {flashcards.length}</span>
+                        <button onClick={() => { setFcIndex(0); setFcFlipped(false); }} title="Restart" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}><RotateCcw size={11} /></button>
+                      </div>
+                      <button onClick={() => { setFcIndex((i) => Math.min(flashcards.length - 1, i + 1)); setFcFlipped(false); }} disabled={fcIndex === flashcards.length - 1} style={{ background: 'none', border: 'none', cursor: fcIndex === flashcards.length - 1 ? 'not-allowed' : 'pointer', color: fcIndex === flashcards.length - 1 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === flashcards.length - 1 ? 0.4 : 1, display: 'flex' }}><ChevronRight size={14} /></button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
