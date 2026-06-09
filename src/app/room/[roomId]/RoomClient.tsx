@@ -530,9 +530,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         alignItems: 'center', justifyContent: 'center', gap: 16,
         background: 'var(--bg-app)', color: 'var(--text-2)', fontFamily: 'inherit',
       }}>
-        <div className="animate-spin" style={{
+        <div style={{
           width: 40, height: 40, borderRadius: '50%',
           border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
+          animation: 'spin 0.8s linear infinite',
         }} />
         <p style={{ fontSize: 14, margin: 0 }}>{t('room_loading')}</p>
       </div>
@@ -1018,7 +1019,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             <div style={{ maxHeight: 360, overflowY: 'auto' }}>
               {friendsLoading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-                  <span className="animate-spin" style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
+                  <span style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block', animation: 'spin 0.8s linear infinite' }} />
                 </div>
               ) : friendsList.length === 0 ? (
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
