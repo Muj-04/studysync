@@ -1,41 +1,41 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+
+export const runtime = 'nodejs';
 
 // ── In-memory rate limiter (30 req/min per IP) ────────────────────────────────
 const WINDOW_MS  = 60_000;
 const MAX_REQ    = 30;
-const CLEANUP_AT = 500; // prune the map when it exceeds this size
+const CLEANUP_AT = 500;
 
 interface RateBucket { count: number; windowStart: number }
 const buckets = new Map<string, RateBucket>();
 
-function allowed(key: string): boolean {
+function ipAllowed(key: string): boolean {
   const now = Date.now();
-
-  // Periodic cleanup to prevent unbounded growth on serverless warm instances
   if (buckets.size > CLEANUP_AT) {
-    for (const [k, b] of buckets) {
-      if (now - b.windowStart > WINDOW_MS) buckets.delete(k);
-    }
+    for (const [k, b] of buckets) { if (now - b.windowStart > WINDOW_MS) buckets.delete(k); }
   }
-
   const b = buckets.get(key);
-  if (!b || now - b.windowStart > WINDOW_MS) {
-    buckets.set(key, { count: 1, windowStart: now });
-    return true;
-  }
+  if (!b || now - b.windowStart > WINDOW_MS) { buckets.set(key, { count: 1, windowStart: now }); return true; }
   if (b.count >= MAX_REQ) return false;
   b.count++;
   return true;
 }
 
 function clientIp(req: NextRequest): string {
-  return (
-    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
-    req.headers.get('x-real-ip') ??
-    'unknown'
+  return req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? req.headers.get('x-real-ip') ?? 'unknown';
+}
+
+function getAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 }
+
+const FREE_MONTHLY_LIMIT = 30;
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -44,14 +44,55 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured on this server' }, { status: 503 });
   }
 
-  const ip = clientIp(req);
-  if (!allowed(ip)) {
+  // IP rate limit
+  if (!ipAllowed(clientIp(req))) {
     return NextResponse.json(
       { error: 'Rate limit exceeded. Please wait a minute and try again.' },
       { status: 429, headers: { 'Retry-After': '60' } },
     );
   }
 
+  // Auth — require Bearer token to enforce per-user monthly limit
+  const bearer = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!bearer) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
+  const admin = getAdmin();
+  const { data: { user }, error: authErr } = await admin.auth.getUser(bearer);
+  if (authErr || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Monthly limit check for free users
+  const month = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  const { data: profile } = await admin
+    .from('profiles')
+    .select('plan, is_vip')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const isVip  = profile?.is_vip ?? false;
+  const plan   = profile?.plan ?? 'free';
+  const bypass = isVip || plan !== 'free';
+
+  const { data: usageRow } = await admin
+    .from('ai_usage')
+    .select('count')
+    .eq('user_id', user.id)
+    .eq('month', month)
+    .maybeSingle();
+
+  const currentCount = usageRow?.count ?? 0;
+
+  if (!bypass && currentCount >= FREE_MONTHLY_LIMIT) {
+    return NextResponse.json(
+      { error: `Monthly AI limit reached (${FREE_MONTHLY_LIMIT}/${FREE_MONTHLY_LIMIT}). Upgrade to Premium for 300 requests/month.` },
+      { status: 429 },
+    );
+  }
+
+  // Process the AI request
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   try {
     const { action, text, language } = await req.json();
@@ -98,6 +139,15 @@ export async function POST(req: NextRequest) {
     });
 
     const result = (message.content[0] as { type: string; text: string }).text ?? '';
+
+    // Increment usage counter (fire-and-forget — don't block the response)
+    if (!bypass) {
+      admin.from('ai_usage').upsert(
+        { user_id: user.id, month, count: currentCount + 1 },
+        { onConflict: 'user_id,month' },
+      ).then(() => {});
+    }
+
     return NextResponse.json({ result });
   } catch (err) {
     const message = err instanceof Error ? err.message.slice(0, 200) : 'Unknown error';
