@@ -66,26 +66,43 @@ const BG_THEME_DEFS = [
 
 // ── Member avatar chip ────────────────────────────────────────────────────────
 
-function MemberAvatar({ name, avatarUrl, isSpeaking }: { name: string; avatarUrl?: string; isSpeaking?: boolean }) {
+function MemberAvatar({ name, avatarUrl, isSpeaking, isVip }: { name: string; avatarUrl?: string; isSpeaking?: boolean; isVip?: boolean }) {
   const initials = name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
+  const border = isVip ? '1.5px solid transparent' : (isSpeaking ? '1.5px solid #22c55e' : '1.5px solid var(--bg-panel)');
   return (
-    <div
-      title={name}
-      style={{
-        width: 24, height: 24, borderRadius: '50%', position: 'relative',
+    <div title={name} style={{ position: 'relative', marginLeft: -6, flexShrink: 0, width: 24, height: 24 }}>
+      {isVip && (
+        <div style={{
+          position: 'absolute', top: -2, left: -2, width: 28, height: 28, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700, #FFA500)',
+          backgroundSize: '200% 200%', animation: 'vip-shimmer 2.5s ease-in-out infinite',
+          pointerEvents: 'none',
+        }} />
+      )}
+      <div style={{
+        position: 'relative', zIndex: 1,
+        width: 24, height: 24, borderRadius: '50%',
         background: avatarUrl ? 'transparent' : 'var(--accent)', color: '#fff',
         fontSize: 9.5, fontWeight: 700,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         flexShrink: 0,
-        border: isSpeaking ? '1.5px solid #22c55e' : '1.5px solid var(--bg-panel)',
-        marginLeft: -6, overflow: 'hidden',
-        boxShadow: isSpeaking ? '0 0 0 2px rgba(34,197,94,0.35)' : 'none',
+        border,
+        overflow: 'hidden',
+        boxShadow: isSpeaking && !isVip ? '0 0 0 2px rgba(34,197,94,0.35)' : 'none',
         transition: 'border-color 0.2s, box-shadow 0.2s',
-      }}
-    >
-      {avatarUrl
-        ? <img src={avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : (initials || '?')}
+      }}>
+        {avatarUrl
+          ? <img src={avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : (initials || '?')}
+      </div>
+      {isVip && (
+        <span style={{
+          position: 'absolute', bottom: -3, right: -3, zIndex: 2,
+          background: '#FFD700', color: '#000', fontWeight: 800,
+          fontSize: 5.5, padding: '1px 2.5px', borderRadius: 2,
+          lineHeight: 1.3, pointerEvents: 'none',
+        }}>VIP</span>
+      )}
     </div>
   );
 }
@@ -199,6 +216,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [userName, setUserName]   = useState('');
   const [userId, setUserId]       = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | undefined>(undefined);
+  const [userIsVip, setUserIsVip] = useState(false);
   const [hostUserId, setHostUserId]   = useState('');
   const [maxMembers, setMaxMembers]   = useState(10);
   const [expiresAt, setExpiresAt]     = useState<string | null>(null);
@@ -335,8 +353,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, []);
 
   const myPresence = useMemo(
-    () => ({ userId, name: userName, avatarUrl: userAvatarUrl }),
-    [userId, userName, userAvatarUrl],
+    () => ({ userId, name: userName, avatarUrl: userAvatarUrl, isVip: userIsVip }),
+    [userId, userName, userAvatarUrl, userIsVip],
   );
 
   const handleRoomClosed = useCallback(() => {
@@ -419,6 +437,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       setUserName(name);
       setUserId(user.id);
       if (profile?.avatarUrl) setUserAvatarUrl(profile.avatarUrl);
+      if (profile?.isVip) setUserIsVip(true);
 
       const room = await fetchRoom(roomId);
       if (!room) { setErrorMsg('Room not found.'); setStatus('error'); return; }
@@ -750,7 +769,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           {members.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
               {visibleMembers.map((m, i) => (
-                <MemberAvatar key={m.userId || i} name={m.name} avatarUrl={m.avatarUrl} isSpeaking={speakingIds.has(m.userId)} />
+                <MemberAvatar key={m.userId || i} name={m.name} avatarUrl={m.avatarUrl} isSpeaking={speakingIds.has(m.userId)} isVip={m.isVip} />
               ))}
               {hiddenCount > 0 && (
                 <div style={{

@@ -56,6 +56,7 @@ export default function DashboardPage() {
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<'free' | 'premium' | 'pro'>('free');
+  const [isVip, setIsVip] = useState(false);
   const [studyStreak, setStudyStreak] = useState(0);
 
   useEffect(() => {
@@ -66,6 +67,7 @@ export default function DashboardPage() {
       setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
       setUserAvatarUrl(profile?.avatarUrl ?? null);
       if (profile?.plan) setUserPlan(profile.plan as 'free' | 'premium' | 'pro');
+      if (profile?.isVip) setIsVip(true);
     });
 
     // Load and apply cross-device preferences from Supabase
@@ -176,7 +178,7 @@ export default function DashboardPage() {
             <Users size={16} />
           </a>
           <NotificationBell />
-          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
+          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
         </div>
       </header>
 
