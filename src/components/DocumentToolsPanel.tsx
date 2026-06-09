@@ -752,7 +752,7 @@ export default function DocumentToolsPanel({
 
                   {summaryState === 'loading' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
-                      <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                      <Loader2 size={12} style={{ color: 'var(--text-3)', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_analyzing')}</span>
                     </div>
                   )}
@@ -828,7 +828,7 @@ export default function DocumentToolsPanel({
 
                   {explainState === 'loading' && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
-                      <Loader2 size={12} className="animate-spin" style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                      <Loader2 size={12} style={{ color: 'var(--text-3)', flexShrink: 0, animation: 'spin 0.8s linear infinite' }} />
                       <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_generating')}</span>
                     </div>
                   )}
@@ -970,7 +970,7 @@ export default function DocumentToolsPanel({
                 >
                   {translateState === 'loading' ? (
                     <>
-                      <Loader2 size={12} className="animate-spin" />
+                      <Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} />
                       Translating…
                     </>
                   ) : (
