@@ -2,6 +2,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import {
+  checkActiveSession,
+  registerSession,
+  getOrCreateSessionId,
+} from '@/lib/supabase/db';
 
 const glassInput: React.CSSProperties = {
   width: '100%',
@@ -23,22 +28,64 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Session conflict dialog state
+  const [showConflict, setShowConflict] = useState(false);
+  const [conflictLoading, setConflictLoading] = useState(false);
+
+  // Kicked-from-other-device banner
+  const [wasKicked, setWasKicked] = useState(false);
+
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setWasKicked(new URLSearchParams(window.location.search).get('kicked') === '1');
+    }
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) window.location.replace('/dashboard');
     });
   }, []);
 
+  const proceedToApp = async (sessionId: string) => {
+    await registerSession(sessionId, navigator.userAgent.slice(0, 200));
+    window.location.href = '/dashboard';
+  };
+
   const handleLogin = async () => {
     if (!email || !password) { setError('Please fill in all fields.'); return; }
     setError('');
     setLoading(true);
+
     const supabase = createClient();
     const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (err) { setLoading(false); setError(err.message); return; }
+
+    // Auth succeeded — check for session conflict before redirecting
+    const sessionId = getOrCreateSessionId();
+    const status = await checkActiveSession(sessionId);
+
     setLoading(false);
-    if (err) { setError(err.message); return; }
-    window.location.href = '/dashboard';
+
+    if (status === 'conflict') {
+      setShowConflict(true);
+      return;
+    }
+
+    // 'ok' or 'free_user' — register and proceed
+    await proceedToApp(sessionId);
+  };
+
+  const handleKickOther = async () => {
+    setConflictLoading(true);
+    const sessionId = getOrCreateSessionId();
+    await proceedToApp(sessionId); // registerSession inside proceedToApp overwrites the old one
+  };
+
+  const handleCancelConflict = async () => {
+    setConflictLoading(true);
+    await createClient().auth.signOut();
+    setShowConflict(false);
+    setConflictLoading(false);
   };
 
   return (
@@ -54,14 +101,79 @@ export default function LoginPage() {
           border: '2px solid rgba(255,255,255,0.2)',
           borderRadius: '16px',
           color: '#fff',
+          position: 'relative',
         }}
       >
+        {/* ── Session conflict dialog (overlay inside card) ── */}
+        {showConflict && (
+          <div style={{
+            position: 'absolute', inset: 0, borderRadius: 16, zIndex: 10,
+            background: 'rgba(10,15,25,0.96)', backdropFilter: 'blur(8px)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', padding: '2rem',
+            animation: 'scale-in 0.15s ease-out both',
+          }}>
+            <div style={{
+              width: 44, height: 44, borderRadius: '50%', marginBottom: 16,
+              background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 20,
+            }}>
+              ⚠️
+            </div>
+            <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 8, textAlign: 'center', lineHeight: 1.4 }}>
+              Already logged in elsewhere
+            </p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', textAlign: 'center', marginBottom: 24, lineHeight: 1.5 }}>
+              You&apos;re already logged in on another device. Log out of the other device to continue?
+            </p>
+
+            <button
+              onClick={handleKickOther}
+              disabled={conflictLoading}
+              style={{
+                width: '100%', padding: '0.7rem', borderRadius: 8, marginBottom: 10,
+                background: '#ef4444', color: '#fff', fontWeight: 600, fontSize: 13,
+                border: 'none', cursor: conflictLoading ? 'not-allowed' : 'pointer',
+                opacity: conflictLoading ? 0.6 : 1, fontFamily: 'inherit',
+              }}
+            >
+              {conflictLoading ? 'Logging out other device…' : 'Yes, log out other device'}
+            </button>
+
+            <button
+              onClick={handleCancelConflict}
+              disabled={conflictLoading}
+              style={{
+                width: '100%', padding: '0.7rem', borderRadius: 8,
+                background: 'transparent', color: 'rgba(255,255,255,0.7)',
+                fontWeight: 500, fontSize: 13,
+                border: '1px solid rgba(255,255,255,0.2)',
+                cursor: conflictLoading ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         <h1 style={{ textAlign: 'center', fontSize: '2rem', fontWeight: 600, marginBottom: 4 }}>
           Login
         </h1>
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>
           Welcome back — sign in to continue
         </p>
+
+        {wasKicked && (
+          <div style={{
+            marginBottom: '1rem', padding: '0.6rem 1rem',
+            background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)',
+            borderRadius: 8, fontSize: '0.8rem', color: '#fbbf24', textAlign: 'center',
+          }}>
+            You were signed out because another device logged in.
+          </div>
+        )}
 
         {error && (
           <div style={{

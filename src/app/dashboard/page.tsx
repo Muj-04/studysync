@@ -8,6 +8,7 @@ import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useSessionGuard } from '@/hooks/useSessionGuard';
 
 interface DocEntry {
   id: string;
@@ -41,6 +42,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
 }
 
 export default function DashboardPage() {
+  useSessionGuard({ onKicked: () => { window.location.href = '/login?kicked=1'; } });
   const { t } = useLanguage();
   const [docs, setDocs] = useState<DocEntry[]>([]);
   const [totalVoiceNotes, setTotalVoiceNotes] = useState(0);
