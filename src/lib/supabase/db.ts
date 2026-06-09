@@ -141,6 +141,7 @@ export interface CommunityPost {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  isVip: boolean;
   documentId: string | null;
   title: string;
   description: string;
@@ -157,6 +158,7 @@ export interface CommunityComment {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  isVip: boolean;
   content: string;
   createdAt: string;
 }
@@ -195,7 +197,7 @@ export async function fetchCommunityPosts(opts: {
   if (!posts?.length) return [];
 
   const authorIds = [...new Set(posts.map((p) => p.user_id))];
-  const { data: profiles } = await sb().from('profiles').select('id, username, avatar_url').in('id', authorIds);
+  const { data: profiles } = await sb().from('profiles').select('id, username, avatar_url, is_vip').in('id', authorIds);
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
 
   const postIds = posts.map((p) => p.id);
@@ -208,7 +210,7 @@ export async function fetchCommunityPosts(opts: {
 
   const commentAuthorIds = [...new Set((commentsRes.data ?? []).map((c: { user_id: string }) => c.user_id))];
   const { data: commentProfiles } = commentAuthorIds.length
-    ? await sb().from('profiles').select('id, username, avatar_url').in('id', commentAuthorIds)
+    ? await sb().from('profiles').select('id, username, avatar_url, is_vip').in('id', commentAuthorIds)
     : { data: [] };
   const cpMap = new Map((commentProfiles ?? []).map((p) => [p.id, p]));
 
@@ -219,6 +221,7 @@ export async function fetchCommunityPosts(opts: {
     commentsByPost.get(c.post_id)!.push({
       id: c.id, userId: c.user_id,
       username: cp?.username ?? null, avatarUrl: cp?.avatar_url ?? null,
+      isVip: cp?.is_vip ?? false,
       content: c.content, createdAt: c.created_at,
     });
   }
@@ -228,6 +231,7 @@ export async function fetchCommunityPosts(opts: {
     return {
       id: p.id, userId: p.user_id,
       username: pr?.username ?? null, avatarUrl: pr?.avatar_url ?? null,
+      isVip: pr?.is_vip ?? false,
       documentId: p.document_id ?? null,
       title: p.title, description: p.description,
       pages: (p.pages as CommunityPage[]) ?? [],
@@ -275,10 +279,11 @@ export async function addPostComment(postId: string, content: string): Promise<C
     .insert({ post_id: postId, user_id: uid, content: safeContent })
     .select('id, user_id, content, created_at').single();
   if (error) { console.error('[DB] addPostComment error:', error.message); return null; }
-  const { data: pr } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
+  const { data: pr } = await sb().from('profiles').select('username, avatar_url, is_vip').eq('id', uid).maybeSingle();
   return {
     id: data.id, userId: uid,
     username: pr?.username ?? null, avatarUrl: pr?.avatar_url ?? null,
+    isVip: pr?.is_vip ?? false,
     content: data.content, createdAt: data.created_at,
   };
 }
@@ -1062,6 +1067,7 @@ export interface FriendEntry {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  isVip: boolean;
 }
 
 export interface FriendRequest {
@@ -1069,6 +1075,7 @@ export interface FriendRequest {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  isVip: boolean;
   createdAt: string;
 }
 
@@ -1146,12 +1153,12 @@ export async function getFriends(): Promise<FriendEntry[]> {
     .or(`requester_id.eq.${uid},receiver_id.eq.${uid}`);
   if (!friendships?.length) return [];
   const otherIds = friendships.map((f) => f.requester_id === uid ? f.receiver_id : f.requester_id);
-  const { data: profiles } = await sb().from('profiles').select('id, username, avatar_url').in('id', otherIds);
+  const { data: profiles } = await sb().from('profiles').select('id, username, avatar_url, is_vip').in('id', otherIds);
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p]));
   return friendships.map((f) => {
     const otherId = f.requester_id === uid ? f.receiver_id : f.requester_id;
     const p = profileMap.get(otherId);
-    return { friendshipId: f.id, userId: otherId, username: p?.username ?? null, avatarUrl: p?.avatar_url ?? null };
+    return { friendshipId: f.id, userId: otherId, username: p?.username ?? null, avatarUrl: p?.avatar_url ?? null, isVip: p?.is_vip ?? false };
   });
 }
 
@@ -1166,12 +1173,12 @@ export async function getFriendRequests(): Promise<{ incoming: FriendRequest[]; 
   const allOtherIds = [...new Set([...incoming.map((f) => f.requester_id), ...outgoing.map((f) => f.receiver_id)])];
   const profileMap = new Map(
     allOtherIds.length
-      ? ((await sb().from('profiles').select('id, username, avatar_url').in('id', allOtherIds)).data ?? []).map((p) => [p.id, p])
+      ? ((await sb().from('profiles').select('id, username, avatar_url, is_vip').in('id', allOtherIds)).data ?? []).map((p) => [p.id, p])
       : [],
   );
   const toReq = (f: { id: string; requester_id: string; receiver_id: string; created_at: string }, otherId: string): FriendRequest => {
     const p = profileMap.get(otherId);
-    return { friendshipId: f.id, userId: otherId, username: p?.username ?? null, avatarUrl: p?.avatar_url ?? null, createdAt: f.created_at };
+    return { friendshipId: f.id, userId: otherId, username: p?.username ?? null, avatarUrl: p?.avatar_url ?? null, isVip: p?.is_vip ?? false, createdAt: f.created_at };
   };
   return { incoming: incoming.map((f) => toReq(f, f.requester_id)), outgoing: outgoing.map((f) => toReq(f, f.receiver_id)) };
 }
@@ -1388,6 +1395,7 @@ export interface PublicProfile {
   userId: string;
   username: string | null;
   avatarUrl: string | null;
+  isVip: boolean;
   followersCount: number;
   followingCount: number;
   isFollowedByMe: boolean;
@@ -1396,7 +1404,7 @@ export interface PublicProfile {
 export async function getPublicProfile(targetId: string): Promise<PublicProfile | null> {
   const uid = await userId();
   const [profileRes, countsData, followingData] = await Promise.all([
-    sb().from('profiles').select('username, avatar_url').eq('id', targetId).maybeSingle(),
+    sb().from('profiles').select('username, avatar_url, is_vip').eq('id', targetId).maybeSingle(),
     getFollowCounts(targetId),
     uid && uid !== targetId ? isFollowing(targetId) : Promise.resolve(false),
   ]);
@@ -1405,6 +1413,7 @@ export async function getPublicProfile(targetId: string): Promise<PublicProfile 
     userId: targetId,
     username: profileRes.data?.username ?? null,
     avatarUrl: profileRes.data?.avatar_url ?? null,
+    isVip: profileRes.data?.is_vip ?? false,
     followersCount: countsData.followers,
     followingCount: countsData.following,
     isFollowedByMe: followingData as boolean,
@@ -1426,10 +1435,10 @@ export async function getUserCommunityPosts(targetId: string): Promise<Community
     sb().from('post_comments').select('id, post_id, user_id, content, created_at').in('post_id', postIds).order('created_at', { ascending: true }),
   ]);
   const likedSet = new Set((likesRes.data ?? []).map((l: { post_id: string }) => l.post_id));
-  const profileRes = await sb().from('profiles').select('username, avatar_url').eq('id', targetId).maybeSingle();
+  const profileRes = await sb().from('profiles').select('username, avatar_url, is_vip').eq('id', targetId).maybeSingle();
   const commentAuthorIds = [...new Set((commentsRes.data ?? []).map((c: { user_id: string }) => c.user_id))];
   const { data: cpData } = commentAuthorIds.length
-    ? await sb().from('profiles').select('id, username, avatar_url').in('id', commentAuthorIds)
+    ? await sb().from('profiles').select('id, username, avatar_url, is_vip').in('id', commentAuthorIds)
     : { data: [] };
   const cpMap = new Map((cpData ?? []).map((p) => [p.id, p]));
   const commentsByPost = new Map<string, CommunityComment[]>();
@@ -1439,6 +1448,7 @@ export async function getUserCommunityPosts(targetId: string): Promise<Community
     commentsByPost.get(c.post_id)!.push({
       id: c.id, userId: c.user_id,
       username: cp?.username ?? null, avatarUrl: cp?.avatar_url ?? null,
+      isVip: cp?.is_vip ?? false,
       content: c.content, createdAt: c.created_at,
     });
   }
@@ -1446,6 +1456,7 @@ export async function getUserCommunityPosts(targetId: string): Promise<Community
     id: p.id, userId: p.user_id,
     username: profileRes.data?.username ?? null,
     avatarUrl: profileRes.data?.avatar_url ?? null,
+    isVip: profileRes.data?.is_vip ?? false,
     documentId: p.document_id ?? null,
     title: p.title, description: p.description,
     pages: (p.pages as CommunityPage[]) ?? [],

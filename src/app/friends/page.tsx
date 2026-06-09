@@ -18,16 +18,35 @@ import { useLanguage } from '@/contexts/LanguageContext';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function UserAvatar({ name, url, size = 36 }: { name?: string | null; url?: string | null; size?: number }) {
+function UserAvatar({ name, url, size = 36, isVip = false }: { name?: string | null; url?: string | null; size?: number; isVip?: boolean }) {
   const initial = (name ?? '?')[0]?.toUpperCase() ?? '?';
-  return (
+  const inner = (
     <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%',
       background: url ? 'transparent' : 'var(--accent)', color: '#fff',
       fontSize: size * 0.38, fontWeight: 700,
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      position: isVip ? 'relative' : undefined, zIndex: isVip ? 1 : undefined,
     }}>
       {url ? <img src={url} alt={name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
+    </div>
+  );
+  if (!isVip) return <div style={{ flexShrink: 0 }}>{inner}</div>;
+  return (
+    <div style={{ position: 'relative', flexShrink: 0, width: size, height: size }}>
+      <div style={{
+        position: 'absolute', top: -2, left: -2, width: size + 4, height: size + 4, borderRadius: '50%',
+        background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700, #FFA500)',
+        backgroundSize: '200% 200%', animation: 'vip-shimmer 2.5s ease-in-out infinite',
+      }} />
+      {inner}
+      <span style={{
+        position: 'absolute', bottom: -3, right: -3, zIndex: 2,
+        background: '#FFD700', color: '#000', fontWeight: 800,
+        fontSize: Math.max(6, size * 0.2), padding: '1.5px 3.5px', borderRadius: 3,
+        lineHeight: 1.3, letterSpacing: '0.03em',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.25)', pointerEvents: 'none',
+      }}>VIP</span>
     </div>
   );
 }
@@ -83,6 +102,7 @@ export default function FriendsPage() {
   const [userEmail, setUserEmail]     = useState('');
   const [displayName, setDisplayName] = useState('');
   const [avatarUrl, setAvatarUrl]     = useState<string | null>(null);
+  const [isVip, setIsVip]             = useState(false);
   const [authReady, setAuthReady]     = useState(false);
 
   const [tab, setTab]             = useState<Tab>('friends');
@@ -111,6 +131,7 @@ export default function FriendsPage() {
       const profile = await getProfile();
       setDisplayName(profile?.username ?? user.email?.split('@')[0] ?? '');
       setAvatarUrl(profile?.avatarUrl ?? null);
+      if (profile?.isVip) setIsVip(true);
       setAuthReady(true);
     });
 
@@ -172,7 +193,7 @@ export default function FriendsPage() {
     const accepted = incoming.find((r) => r.friendshipId === friendshipId);
     setIncoming((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
     if (accepted) {
-      setFriends((prev) => [...prev, { friendshipId, userId: accepted.userId, username: accepted.username, avatarUrl: accepted.avatarUrl }]);
+      setFriends((prev) => [...prev, { friendshipId, userId: accepted.userId, username: accepted.username, avatarUrl: accepted.avatarUrl, isVip: accepted.isVip }]);
       setMyFriendships((prev) => prev.map((f) => f.friendshipId === friendshipId ? { ...f, status: 'accepted' } : f));
     }
     setActionPending(null);
@@ -281,7 +302,7 @@ export default function FriendsPage() {
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)',
       }}>
-        <UserAvatar name={f.username} url={f.avatarUrl} size={38} />
+        <UserAvatar name={f.username} url={f.avatarUrl} size={38} isVip={f.isVip} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {displayN}
@@ -326,7 +347,7 @@ export default function FriendsPage() {
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)',
       }}>
-        <UserAvatar name={r.username} url={r.avatarUrl} size={38} />
+        <UserAvatar name={r.username} url={r.avatarUrl} size={38} isVip={r.isVip} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)' }}>{displayN}</p>
           <p style={{ margin: '1px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
@@ -388,7 +409,7 @@ export default function FriendsPage() {
           {t('fr_title')}
         </span>
         <NotificationBell />
-        <AvatarDropdown email={userEmail} displayName={displayName} avatarUrl={avatarUrl} />
+        <AvatarDropdown email={userEmail} displayName={displayName} avatarUrl={avatarUrl} isVip={isVip} />
       </div>
 
       {/* ── Active room banner ── */}

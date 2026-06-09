@@ -9,9 +9,27 @@ interface Props {
   email: string;
   displayName?: string;
   avatarUrl?: string | null;
+  isVip?: boolean;
 }
 
-export default function AvatarDropdown({ email, displayName, avatarUrl }: Props) {
+const VIP_RING: React.CSSProperties = {
+  position: 'absolute', top: -2, left: -2,
+  width: 38, height: 38, borderRadius: '50%',
+  background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700, #FFA500)',
+  backgroundSize: '200% 200%',
+  animation: 'vip-shimmer 2.5s ease-in-out infinite',
+  pointerEvents: 'none', zIndex: 0,
+};
+
+const VIP_BADGE: React.CSSProperties = {
+  position: 'absolute', bottom: -3, right: -3, zIndex: 2,
+  background: '#FFD700', color: '#000', fontWeight: 800,
+  fontSize: 7, padding: '1.5px 3.5px', borderRadius: 3,
+  lineHeight: 1.3, letterSpacing: '0.03em',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.25)', pointerEvents: 'none',
+};
+
+export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }: Props) {
   const { t, lang } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -35,29 +53,34 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
   return (
     <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
       {/* ── Avatar button ── */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        title={displayName || email}
-        aria-label="Account menu"
-        style={{
-          width: 34, height: 34, borderRadius: '50%',
-          background: avatarUrl ? 'transparent' : (open ? 'var(--accent-hover)' : 'var(--accent)'),
-          border: open ? '2px solid var(--accent-hover)' : '2px solid transparent',
-          color: '#fff',
-          fontSize: 12, fontWeight: 700, letterSpacing: '0.02em',
-          cursor: 'pointer', fontFamily: 'inherit',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'background 0.15s, box-shadow 0.15s',
-          boxShadow: open ? '0 0 0 3px var(--accent-muted)' : 'none',
-          flexShrink: 0, overflow: 'hidden', padding: 0,
-        }}
-        onMouseOver={(e) => { e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-muted)'; }}
-        onMouseOut={(e) => { if (!open) e.currentTarget.style.boxShadow = 'none'; }}
-      >
-        {avatarUrl
-          ? <img src={avatarUrl} alt={displayName || email} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-          : initials}
-      </button>
+      <div style={{ position: 'relative', width: 34, height: 34, flexShrink: 0 }}>
+        {isVip && <div style={VIP_RING} />}
+        <button
+          onClick={() => setOpen((o) => !o)}
+          title={displayName || email}
+          aria-label="Account menu"
+          style={{
+            position: 'relative', zIndex: 1,
+            width: 34, height: 34, borderRadius: '50%',
+            background: avatarUrl ? 'transparent' : (open ? 'var(--accent-hover)' : 'var(--accent)'),
+            border: isVip ? '2px solid transparent' : (open ? '2px solid var(--accent-hover)' : '2px solid transparent'),
+            color: '#fff',
+            fontSize: 12, fontWeight: 700, letterSpacing: '0.02em',
+            cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background 0.15s, box-shadow 0.15s',
+            boxShadow: open && !isVip ? '0 0 0 3px var(--accent-muted)' : 'none',
+            flexShrink: 0, overflow: 'hidden', padding: 0,
+          }}
+          onMouseOver={(e) => { if (!isVip) e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-muted)'; }}
+          onMouseOut={(e) => { if (!open && !isVip) e.currentTarget.style.boxShadow = 'none'; }}
+        >
+          {avatarUrl
+            ? <img src={avatarUrl} alt={displayName || email} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+            : initials}
+        </button>
+        {isVip && <span style={VIP_BADGE}>VIP</span>}
+      </div>
 
       {/* ── Dropdown ── */}
       {open && (
@@ -84,16 +107,21 @@ export default function AvatarDropdown({ email, displayName, avatarUrl }: Props)
             borderBottom: '1px solid var(--border-subtle)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: '50%',
-                background: avatarUrl ? 'transparent' : 'var(--accent)', color: '#fff',
-                fontSize: 12, fontWeight: 700,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, overflow: 'hidden',
-              }}>
-                {avatarUrl
-                  ? <img src={avatarUrl} alt={displayName || email} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : initials}
+              <div style={{ position: 'relative', width: 32, height: 32, flexShrink: 0 }}>
+                {isVip && <div style={{ ...VIP_RING, width: 36, height: 36, top: -2, left: -2 }} />}
+                <div style={{
+                  position: 'relative', zIndex: 1,
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: avatarUrl ? 'transparent' : 'var(--accent)', color: '#fff',
+                  fontSize: 12, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  overflow: 'hidden',
+                }}>
+                  {avatarUrl
+                    ? <img src={avatarUrl} alt={displayName || email} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : initials}
+                </div>
+                {isVip && <span style={{ ...VIP_BADGE, fontSize: 6.5 }}>VIP</span>}
               </div>
               <div style={{ minWidth: 0 }}>
                 {displayName && (

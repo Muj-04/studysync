@@ -24,16 +24,35 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-function Avatar({ name, url, size = 32 }: { name?: string | null; url?: string | null; size?: number }) {
+function Avatar({ name, url, size = 32, isVip = false }: { name?: string | null; url?: string | null; size?: number; isVip?: boolean }) {
   const initial = (name ?? '?')[0]?.toUpperCase() ?? '?';
-  return (
+  const inner = (
     <div style={{
-      width: size, height: size, borderRadius: '50%', flexShrink: 0,
+      width: size, height: size, borderRadius: '50%',
       background: url ? 'transparent' : 'var(--accent)', color: '#fff',
       fontSize: size * 0.38, fontWeight: 700,
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      position: isVip ? 'relative' : undefined, zIndex: isVip ? 1 : undefined,
     }}>
       {url ? <img src={url} alt={name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
+    </div>
+  );
+  if (!isVip) return <div style={{ flexShrink: 0 }}>{inner}</div>;
+  return (
+    <div style={{ position: 'relative', flexShrink: 0, width: size, height: size }}>
+      <div style={{
+        position: 'absolute', top: -2, left: -2, width: size + 4, height: size + 4, borderRadius: '50%',
+        background: 'linear-gradient(135deg, #FFD700, #FFA500, #FFD700, #FFA500)',
+        backgroundSize: '200% 200%', animation: 'vip-shimmer 2.5s ease-in-out infinite',
+      }} />
+      {inner}
+      <span style={{
+        position: 'absolute', bottom: -3, right: -3, zIndex: 2,
+        background: '#FFD700', color: '#000', fontWeight: 800,
+        fontSize: Math.max(6, size * 0.15), padding: '1.5px 3.5px', borderRadius: 3,
+        lineHeight: 1.3, letterSpacing: '0.03em',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.25)', pointerEvents: 'none',
+      }}>VIP</span>
     </div>
   );
 }
@@ -95,6 +114,7 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
   const [myEmail, setMyEmail] = useState('');
   const [myDisplayName, setMyDisplayName] = useState('');
   const [myAvatarUrl, setMyAvatarUrl] = useState<string | null>(null);
+  const [myIsVip, setMyIsVip] = useState(false);
   const [followPending, setFollowPending] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -105,6 +125,7 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
       const p = await getProfile();
       setMyDisplayName(p?.username ?? user?.email?.split('@')[0] ?? '');
       setMyAvatarUrl(p?.avatarUrl ?? null);
+      if (p?.isVip) setMyIsVip(true);
     });
 
     loadUserPreferences().then((prefs) => {
@@ -200,7 +221,7 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
             onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
           ><Users size={16} /></a>
           <NotificationBell />
-          <AvatarDropdown email={myEmail} displayName={myDisplayName} avatarUrl={myAvatarUrl} />
+          <AvatarDropdown email={myEmail} displayName={myDisplayName} avatarUrl={myAvatarUrl} isVip={myIsVip} />
         </div>
       </header>
 
@@ -228,12 +249,19 @@ export default function ProfilePage({ params }: { params: Promise<{ userId: stri
               borderRadius: 4, padding: '28px', marginBottom: 28,
               display: 'flex', alignItems: 'flex-start', gap: 20,
             }}>
-              <Avatar name={profile.username ?? profile.userId} url={profile.avatarUrl} size={72} />
+              <Avatar name={profile.username ?? profile.userId} url={profile.avatarUrl} size={72} isVip={profile.isVip} />
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-1)' }}>
-                    {profile.username ?? 'User'}
-                  </h1>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: profile.isVip ? 4 : 8 }}>
+                  <div>
+                    <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-1)' }}>
+                      {profile.username ?? 'User'}
+                    </h1>
+                    {profile.isVip && (
+                      <p style={{ margin: '3px 0 0', fontSize: 12.5, fontWeight: 600, color: '#FFD700', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        ⭐ VIP Member
+                      </p>
+                    )}
+                  </div>
                   {myUserId && myUserId !== targetId && (
                     <button
                       onClick={handleFollow}

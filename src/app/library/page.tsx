@@ -367,6 +367,7 @@ export default function LibraryPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+  const [isVip, setIsVip] = useState(false);
 
   useEffect(() => {
     createClient().auth.getUser().then(async ({ data: { user } }) => {
@@ -374,6 +375,7 @@ export default function LibraryPage() {
       const profile = await getProfile();
       setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
       setUserAvatarUrl(profile?.avatarUrl ?? null);
+      if (profile?.isVip) setIsVip(true);
     });
 
     loadUserPreferences().then((prefs) => {
@@ -485,7 +487,7 @@ export default function LibraryPage() {
             onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
           ><Users size={16} /></a>
           <NotificationBell />
-          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
+          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
         </div>
       </header>
 
