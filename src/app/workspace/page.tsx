@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
   ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
+  Timer, Download,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -25,6 +26,8 @@ import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
 import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
+import PomodoroWidget from '@/components/PomodoroWidget';
+import GlobalSearch from '@/components/GlobalSearch';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -939,6 +942,25 @@ export default function WorkspacePage() {
   // ── Share to Community ────────────────────────────────────────────────────
   const [shareOpen, setShareOpen] = useState(false);
 
+  // ── Pomodoro ──────────────────────────────────────────────────────────────
+  const [pomodoroOpen, setPomodoroOpen] = useState(false);
+
+  // ── Global Search ─────────────────────────────────────────────────────────
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+
+  // ── Export dropdown ───────────────────────────────────────────────────────
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setExportMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [exportMenuOpen]);
+
   // ── Toast ─────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1223,6 +1245,14 @@ export default function WorkspacePage() {
     const idx = virtualSequence.findIndex((vp) => vp.type === 'pdf' && vp.pdfPage === pdfPage);
     if (idx >= 0) setVirtualIndex(idx);
   }, [virtualSequence]);
+
+  const handleGlobalSearchNavigate = useCallback((docId: string, pageNum?: number) => {
+    setActiveDocument(docId);
+    if (pageNum) {
+      // Wait for the doc to become active, then navigate
+      setTimeout(() => handleNavigateToPdfPage(pageNum), 80);
+    }
+  }, [setActiveDocument, handleNavigateToPdfPage]);
 
   // ── Text notes (persisted per doc+page) ──────────────────────────────────
   const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
@@ -1890,6 +1920,63 @@ export default function WorkspacePage() {
             </HdrBtn>
           )}
 
+          {/* Global search */}
+          <HdrBtn onClick={() => setGlobalSearchOpen(true)} title="Global Search (Ctrl+Shift+F)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              <line x1="8" y1="11" x2="14" y2="11" /><line x1="11" y1="8" x2="11" y2="14" />
+            </svg>
+          </HdrBtn>
+
+          {/* Pomodoro */}
+          <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title="Pomodoro Timer" active={pomodoroOpen}>
+            <Timer size={17} />
+          </HdrBtn>
+
+          {/* Export notes */}
+          {hasDocument && (
+            <div ref={exportMenuRef} style={{ position: 'relative' }}>
+              <HdrBtn onClick={() => setExportMenuOpen((o) => !o)} title="Export Notes" active={exportMenuOpen}>
+                <Download size={17} />
+              </HdrBtn>
+              {exportMenuOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                  background: 'var(--bg-panel)', border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 6, padding: '4px 0', minWidth: 160,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 200,
+                }}>
+                  {[
+                    { label: 'Export as PDF', ext: 'pdf' },
+                    { label: 'Export as Word (.docx)', ext: 'docx' },
+                  ].map(({ label, ext }) => (
+                    <button
+                      key={ext}
+                      onClick={async () => {
+                        setExportMenuOpen(false);
+                        if (!activeDocument) return;
+                        const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
+                        const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
+                        if (ext === 'pdf') exportAsPDF(data);
+                        else exportAsDocx(data);
+                      }}
+                      style={{
+                        display: 'flex', width: '100%', padding: '8px 14px',
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 12.5, color: 'var(--text-1)', fontFamily: 'inherit', textAlign: 'left',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                      onMouseOut={(e)  => { e.currentTarget.style.background = 'none'; }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
 
           {documents.length > 0 && !isPPTX && (
@@ -1983,6 +2070,17 @@ export default function WorkspacePage() {
           docName={activeDocument?.name ?? null}
           pageTextNotes={pageTextNotes}
           onClose={() => setShareOpen(false)}
+        />
+      )}
+
+      {/* Pomodoro widget */}
+      {pomodoroOpen && <PomodoroWidget onClose={() => setPomodoroOpen(false)} />}
+
+      {/* Global search */}
+      {globalSearchOpen && (
+        <GlobalSearch
+          onClose={() => setGlobalSearchOpen(false)}
+          onNavigate={handleGlobalSearchNavigate}
         />
       )}
 
