@@ -247,9 +247,13 @@ export async function createCommunityPost(post: {
   tags?: string[];
 }): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
+  const { sanitizeText } = await import('@/lib/sanitize');
+  const title       = sanitizeText(post.title).slice(0, 200);
+  const description = sanitizeText(post.description).slice(0, 2000);
+  const tags        = (post.tags ?? []).map((t) => sanitizeText(t).slice(0, 50)).filter(Boolean);
   const { data, error } = await sb()
     .from('community_posts')
-    .insert({ user_id: uid, document_id: post.documentId, title: post.title, description: post.description, pages: post.pages, tags: post.tags ?? [] })
+    .insert({ user_id: uid, document_id: post.documentId, title, description, pages: post.pages, tags })
     .select('id').single();
   if (error) { console.error('[DB] createCommunityPost error:', error.message); return null; }
   return data.id;
@@ -263,9 +267,12 @@ export async function togglePostLike(postId: string): Promise<boolean> {
 
 export async function addPostComment(postId: string, content: string): Promise<CommunityComment | null> {
   const uid = await userId(); if (!uid) return null;
+  const { sanitizeText } = await import('@/lib/sanitize');
+  const safeContent = sanitizeText(content).slice(0, 1000);
+  if (!safeContent) return null;
   const { data, error } = await sb()
     .from('post_comments')
-    .insert({ post_id: postId, user_id: uid, content })
+    .insert({ post_id: postId, user_id: uid, content: safeContent })
     .select('id, user_id, content, created_at').single();
   if (error) { console.error('[DB] addPostComment error:', error.message); return null; }
   const { data: pr } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
@@ -869,8 +876,9 @@ export async function updateUserPlan(plan: 'free' | 'premium' | 'pro'): Promise<
 
 export async function upsertProfile(profile: { username?: string; avatarUrl?: string }): Promise<void> {
   const uid = await userId(); if (!uid) return;
+  const { sanitizeText } = await import('@/lib/sanitize');
   const update: Record<string, string | null> = {};
-  if ('username' in profile) update.username = profile.username || null;
+  if ('username' in profile) update.username = profile.username ? sanitizeText(profile.username).slice(0, 50) || null : null;
   if ('avatarUrl' in profile) update.avatar_url = profile.avatarUrl || null;
   const { error } = await sb().from('profiles').upsert({ id: uid, ...update }, { onConflict: 'id' });
   if (error) console.error('[DB] upsertProfile error:', error.message);
@@ -893,6 +901,13 @@ export async function uploadAvatar(file: File): Promise<string | null> {
 
 export async function uploadRoomPdf(roomId: string, blob: Blob, docName: string): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
+  if (blob.size > 50 * 1024 * 1024) { console.error('[DB] uploadRoomPdf: file too large'); return null; }
+  // Verify PDF magic bytes (%PDF)
+  const header = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+  if (header[0] !== 0x25 || header[1] !== 0x50 || header[2] !== 0x44 || header[3] !== 0x46) {
+    console.error('[DB] uploadRoomPdf: invalid PDF magic bytes');
+    return null;
+  }
   const path = `${uid}/rooms/${roomId}/${docName}.pdf`;
   const { error } = await sb().storage.from('pdfs').upload(path, blob, {
     contentType: 'application/pdf', upsert: true,
