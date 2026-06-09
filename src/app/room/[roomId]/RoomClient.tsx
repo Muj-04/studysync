@@ -5,7 +5,9 @@ import {
   Link2, Check, ChevronLeft, ChevronRight,
   Undo2, MousePointer, Pencil, Eraser, Minus, Plus,
   ChevronDown, FilePlus, UserPlus, UserCheck, X as XIcon,
+  Mic, MicOff,
 } from 'lucide-react';
+import { useVoiceChat } from '@/hooks/useVoiceChat';
 import { createClient } from '@/lib/supabase/client';
 import {
   fetchRoom, joinRoom, leaveRoom, closeRoom,
@@ -64,23 +66,50 @@ const BG_THEME_DEFS = [
 
 // ── Member avatar chip ────────────────────────────────────────────────────────
 
-function MemberAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
+function MemberAvatar({ name, avatarUrl, isSpeaking }: { name: string; avatarUrl?: string; isSpeaking?: boolean }) {
   const initials = name.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
   return (
     <div
       title={name}
       style={{
-        width: 24, height: 24, borderRadius: '50%',
+        width: 24, height: 24, borderRadius: '50%', position: 'relative',
         background: avatarUrl ? 'transparent' : 'var(--accent)', color: '#fff',
         fontSize: 9.5, fontWeight: 700,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, border: '1.5px solid var(--bg-panel)',
+        flexShrink: 0,
+        border: isSpeaking ? '1.5px solid #22c55e' : '1.5px solid var(--bg-panel)',
         marginLeft: -6, overflow: 'hidden',
+        boxShadow: isSpeaking ? '0 0 0 2px rgba(34,197,94,0.35)' : 'none',
+        transition: 'border-color 0.2s, box-shadow 0.2s',
       }}
     >
       {avatarUrl
         ? <img src={avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         : (initials || '?')}
+    </div>
+  );
+}
+
+// ── Voice waveform bars (shown when speaking) ─────────────────────────────────
+
+function VoiceWaveform({ speaking, size = 10 }: { speaking: boolean; size?: number }) {
+  const bars = [0, 0.12, 0.24, 0.12];
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 1.5,
+      height: size, width: size + 4,
+    }}>
+      {bars.map((delay, i) => (
+        <div key={i} style={{
+          width: 2, height: '100%',
+          background: speaking ? '#22c55e' : 'var(--text-3)',
+          borderRadius: 1,
+          transformOrigin: 'center',
+          transform: speaking ? undefined : 'scaleY(0.35)',
+          animation: speaking ? `voice-bar 0.55s ease-in-out ${delay}s infinite` : 'none',
+          transition: 'background 0.2s',
+        }} />
+      ))}
     </div>
   );
 }
@@ -329,6 +358,17 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
+
+  const {
+    connected: voiceConnected,
+    connecting: voiceConnecting,
+    muted: voiceMuted,
+    speakingIds,
+    voiceError,
+    join: voiceJoin,
+    leave: voiceLeave,
+    toggleMute: voiceToggleMute,
+  } = useVoiceChat(roomId, userId, userName);
 
   // Stable broadcast callbacks for voice notes
   const handleNoteAdded = useCallback((noteId: string) => {
@@ -710,7 +750,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           {members.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
               {visibleMembers.map((m, i) => (
-                <MemberAvatar key={m.userId || i} name={m.name} avatarUrl={m.avatarUrl} />
+                <MemberAvatar key={m.userId || i} name={m.name} avatarUrl={m.avatarUrl} isSpeaking={speakingIds.has(m.userId)} />
               ))}
               {hiddenCount > 0 && (
                 <div style={{
@@ -1006,6 +1046,54 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             </div>
           )}
         </div>
+
+        <Divider />
+
+        {/* ── Voice chat ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            onClick={voiceConnected ? voiceLeave : voiceJoin}
+            disabled={voiceConnecting}
+            title={voiceConnected ? 'Leave voice chat' : 'Join voice chat'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              height: 30, padding: '0 9px',
+              borderRadius: 4, fontSize: 12, fontWeight: 500,
+              background: voiceConnected ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',
+              color: voiceConnected ? '#22c55e' : 'var(--text-2)',
+              border: `1px solid ${voiceConnected ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
+              cursor: voiceConnecting ? 'wait' : 'pointer',
+              fontFamily: 'inherit', flexShrink: 0,
+              transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+              opacity: voiceConnecting ? 0.7 : 1,
+            }}
+          >
+            {voiceConnecting
+              ? <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+              : <Mic size={12} />
+            }
+            <span>{voiceConnected ? 'In Voice' : voiceConnecting ? 'Joining…' : 'Voice'}</span>
+            {voiceConnected && <VoiceWaveform speaking={speakingIds.size > 0} size={10} />}
+          </button>
+
+          {voiceConnected && (
+            <button
+              onClick={voiceToggleMute}
+              title={voiceMuted ? 'Unmute (or hold Space)' : 'Mute'}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 4,
+                background: voiceMuted ? 'rgba(239,68,68,0.15)' : 'var(--bg-elevated)',
+                color: voiceMuted ? '#ef4444' : 'var(--text-2)',
+                border: `1px solid ${voiceMuted ? 'rgba(239,68,68,0.4)' : 'var(--border)'}`,
+                cursor: 'pointer', flexShrink: 0,
+                transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+              }}
+            >
+              {voiceMuted ? <MicOff size={13} /> : <Mic size={13} />}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── PDF / blank page viewer ── */}
@@ -1104,6 +1192,19 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           <ChevronRight size={15} />
         </button>
       </div>
+
+      {/* ── Voice error toast ── */}
+      {voiceError && (
+        <div style={{
+          position: 'fixed', bottom: 70, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
+          color: '#ef4444', fontSize: 12, fontWeight: 500, padding: '8px 16px',
+          borderRadius: 4, zIndex: 400, whiteSpace: 'nowrap',
+          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        }}>
+          {voiceError}
+        </div>
+      )}
 
       {/* ── End Room confirm modal ── */}
       {endRoomConfirm && (

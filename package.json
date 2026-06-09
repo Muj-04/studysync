@@ -18,6 +18,8 @@
     "@supabase/supabase-js": "^2.107.0",
     "html2canvas": "^1.4.1",
     "jszip": "^3.10.1",
+    "livekit-client": "^2.19.2",
+    "livekit-server-sdk": "^2.15.4",
     "lucide-react": "^1.14.0",
     "next": "16.2.6",
     "pdfjs-dist": "^5.7.284",
