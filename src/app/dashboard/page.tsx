@@ -53,6 +53,7 @@ export default function DashboardPage() {
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+  const [userPlan, setUserPlan] = useState<'free' | 'premium' | 'pro'>('free');
   const [studyStreak, setStudyStreak] = useState(0);
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export default function DashboardPage() {
       const profile = await getProfile();
       setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
       setUserAvatarUrl(profile?.avatarUrl ?? null);
+      if (profile?.plan) setUserPlan(profile.plan as 'free' | 'premium' | 'pro');
     });
 
     // Load and apply cross-device preferences from Supabase
@@ -121,6 +123,7 @@ export default function DashboardPage() {
               { label: t('nav_library'),   href: '/library',   active: false },
               { label: t('nav_community'), href: '/community', active: false },
               { label: t('nav_settings'),  href: '/settings',  active: false },
+              { label: 'Pricing',          href: '/pricing',   active: false },
             ].map(({ label, href, active }) => (
               <a
                 key={label}
@@ -141,6 +144,21 @@ export default function DashboardPage() {
           </nav>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {userPlan === 'free' && (
+            <a
+              href="/pricing"
+              style={{
+                fontSize: 12, fontWeight: 600, color: '#0f172a',
+                background: '#ffffff', border: 'none', borderRadius: 4,
+                padding: '5px 12px', textDecoration: 'none', cursor: 'pointer',
+                transition: 'background 0.15s', flexShrink: 0,
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
+              onMouseOut={(e)  => { e.currentTarget.style.background = '#ffffff'; }}
+            >
+              Upgrade
+            </a>
+          )}
           <a
             href="/friends"
             title={t('nav_friends')}

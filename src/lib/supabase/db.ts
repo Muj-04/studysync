@@ -844,14 +844,27 @@ export async function updateRoomVoiceNoteTitle(noteId: string, title: string | u
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
 
-export async function getProfile(): Promise<{ username: string | null; avatarUrl: string | null } | null> {
+export async function getProfile(): Promise<{
+  username: string | null;
+  avatarUrl: string | null;
+  plan: 'free' | 'premium' | 'pro';
+} | null> {
   const uid = await userId(); if (!uid) return null;
   const { data } = await sb()
     .from('profiles')
-    .select('username, avatar_url')
+    .select('username, avatar_url, plan')
     .eq('id', uid)
     .maybeSingle();
-  return data ? { username: data.username ?? null, avatarUrl: data.avatar_url ?? null } : null;
+  return data ? {
+    username: data.username ?? null,
+    avatarUrl: data.avatar_url ?? null,
+    plan: (data.plan ?? 'free') as 'free' | 'premium' | 'pro',
+  } : null;
+}
+
+export async function updateUserPlan(plan: 'free' | 'premium' | 'pro'): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await sb().from('profiles').update({ plan }).eq('id', uid);
 }
 
 export async function upsertProfile(profile: { username?: string; avatarUrl?: string }): Promise<void> {
