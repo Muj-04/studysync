@@ -64,7 +64,7 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
         const el = track.attach() as HTMLAudioElement;
         el.style.display = 'none';
         document.body.appendChild(el);
-        audioEls.current.set(track.sid, el);
+        if (track.sid) audioEls.current.set(track.sid, el);
       });
 
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
