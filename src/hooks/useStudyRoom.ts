@@ -36,6 +36,7 @@ export function useStudyRoom(
   onIncomingBlankPage?: (page: RoomBlankPagePayload) => void,
   myPresence?: { userId?: string; name?: string; avatarUrl?: string },
   onIncomingBlankDrawing?: (pageId: string, data: string) => void,
+  onRoomClosed?: () => void,
 ) {
   const [memberCount, setMemberCount] = useState(1);
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -46,6 +47,7 @@ export function useStudyRoom(
   const onVoiceNoteDeleteRef = useRef(onIncomingVoiceNoteDelete);
   const onBlankPageRef       = useRef(onIncomingBlankPage);
   const onBlankDrawingRef    = useRef(onIncomingBlankDrawing);
+  const onRoomClosedRef      = useRef(onRoomClosed);
   const myPresenceRef        = useRef(myPresence);
   const retryRef             = useRef(0);
   const timerRef             = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,6 +61,7 @@ export function useStudyRoom(
   useEffect(() => { onVoiceNoteDeleteRef.current = onIncomingVoiceNoteDelete; });
   useEffect(() => { onBlankPageRef.current = onIncomingBlankPage; });
   useEffect(() => { onBlankDrawingRef.current = onIncomingBlankDrawing; });
+  useEffect(() => { onRoomClosedRef.current = onRoomClosed; });
   useEffect(() => { myPresenceRef.current = myPresence; });
 
   // Re-track presence when name or avatar becomes available (loads async after connect)
@@ -128,6 +131,10 @@ export function useStudyRoom(
         .on('broadcast', { event: 'blank_page_added' }, ({ payload }: { payload: RoomBlankPagePayload }) => {
           if (generation !== generationRef.current) return;
           onBlankPageRef.current?.(payload);
+        })
+        .on('broadcast', { event: 'room_closed' }, () => {
+          if (generation !== generationRef.current) return;
+          onRoomClosedRef.current?.();
         })
         .on('presence', { event: 'sync' }, () => {
           if (generation !== generationRef.current) return;
@@ -227,10 +234,17 @@ export function useStudyRoom(
       .catch((err) => console.error('[StudyRoom] broadcast blank_page_added error:', err));
   }, []);
 
+  const broadcastRoomClosed = useCallback(() => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({ type: 'broadcast', event: 'room_closed', payload: {} })
+      .catch(() => {});
+  }, []);
+
   return {
     broadcastDrawing, broadcastBlankDrawing,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
-    broadcastBlankPageAdded,
+    broadcastBlankPageAdded, broadcastRoomClosed,
     memberCount, members,
   };
 }

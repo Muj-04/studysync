@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  fetchRoom, joinRoom, saveRoomDrawing, fetchRoomDrawing,
+  fetchRoom, joinRoom, leaveRoom, closeRoom,
+  saveRoomDrawing, fetchRoomDrawing,
   fetchRoomVoiceNotes, fetchSingleRoomVoiceNote,
   saveRoomBlankPage, fetchRoomBlankPages,
   getProfile, getFriends, inviteToRoom,
@@ -169,6 +170,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [userName, setUserName]   = useState('');
   const [userId, setUserId]       = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | undefined>(undefined);
+  const [hostUserId, setHostUserId]   = useState('');
+  const [maxMembers, setMaxMembers]   = useState(10);
+  const [expiresAt, setExpiresAt]     = useState<string | null>(null);
+  const [timeLeft, setTimeLeft]       = useState('');
+  const [endRoomConfirm, setEndRoomConfirm] = useState(false);
 
   // ── Drawing state ─────────────────────────────────────────────────────────
   const [tool, setTool]             = useState<Tool>('pen');
@@ -194,6 +200,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [invitedIds, setInvitedIds]     = useState<Set<string>>(new Set());
 
+  const hasJoinedRef    = useRef(false);
   const drawingRef      = useRef<DrawingCanvasHandle | null>(null);
   const blankDrawingRef = useRef<BlankCanvasHandle | null>(null);
   const docIdRef        = useRef<string | null>(null);
@@ -303,16 +310,22 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     [userId, userName, userAvatarUrl],
   );
 
+  const handleRoomClosed = useCallback(() => {
+    setErrorMsg('This room has ended. Redirecting…');
+    setStatus('error');
+    setTimeout(() => router.replace('/workspace'), 3000);
+  }, [router]);
+
   const {
     broadcastDrawing, broadcastBlankDrawing,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
-    broadcastBlankPageAdded,
+    broadcastBlankPageAdded, broadcastRoomClosed,
     memberCount, members,
   } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
     handleIncomingVoiceNoteAdded, handleIncomingVoiceNoteDelete,
     handleIncomingBlankPage, myPresence,
-    handleIncomingBlankDrawing,
+    handleIncomingBlankDrawing, handleRoomClosed,
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
@@ -368,8 +381,16 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       if (profile?.avatarUrl) setUserAvatarUrl(profile.avatarUrl);
 
       const room = await fetchRoom(roomId);
-      if (!room) { setErrorMsg('Room not found or has been closed.'); setStatus('error'); return; }
+      if (!room) { setErrorMsg('Room not found.'); setStatus('error'); return; }
+      if (room.status === 'closed') { setErrorMsg('This room has ended.'); setStatus('error'); return; }
+      if (room.expiresAt && new Date(room.expiresAt) < new Date()) {
+        closeRoom(roomId).catch(() => {});
+        setErrorMsg('This room has expired.'); setStatus('error'); return;
+      }
       setRoomName(room.documentName);
+      setHostUserId(room.hostUserId);
+      setMaxMembers(room.maxMembers);
+      setExpiresAt(room.expiresAt);
 
       const { data: signed, error: signErr } = await supabase.storage
         .from('pdfs').createSignedUrl(room.pdfPath, 3600);
@@ -408,7 +429,15 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         setRoomBlankPages(remoteBlankPages);
       }
 
-      await joinRoom(roomId);
+      const joinResult = await joinRoom(roomId);
+      if (joinResult.error === 'full') {
+        setErrorMsg(`This room is full (${room.maxMembers}/${room.maxMembers} members).`);
+        setStatus('error'); return;
+      }
+      if (joinResult.error === 'closed') {
+        setErrorMsg('This room has been closed.'); setStatus('error'); return;
+      }
+      if (!cancelled) hasJoinedRef.current = true;
       if (!cancelled) {
         setStatus('ready');
         // Let friends page know which room is active
@@ -422,7 +451,13 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       setErrorMsg('Something went wrong loading the room.');
       setStatus('error');
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (hasJoinedRef.current) {
+        hasJoinedRef.current = false;
+        leaveRoom(roomId).catch(() => {});
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
@@ -434,6 +469,51 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     ? getDrawing(activeDocument.id, currentVP.pdfPage) : undefined;
 
   useEffect(() => { currentPageRef.current = currentPdfPage; }, [currentPdfPage]);
+
+  // Time-left ticker
+  useEffect(() => {
+    if (!expiresAt) return;
+    const update = () => {
+      const ms = new Date(expiresAt).getTime() - Date.now();
+      if (ms <= 0) { setTimeLeft('Expired'); return; }
+      const h = Math.floor(ms / 3600000);
+      const m = Math.floor((ms % 3600000) / 60000);
+      setTimeLeft(h > 0 ? `${h}h ${m}m left` : `${m}m left`);
+    };
+    update();
+    const id = setInterval(update, 60_000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  // Auto-expire: close room when timer hits 0
+  useEffect(() => {
+    if (!expiresAt || status !== 'ready') return;
+    const ms = new Date(expiresAt).getTime() - Date.now();
+    if (ms <= 0) {
+      closeRoom(roomId).catch(() => {});
+      broadcastRoomClosed();
+      setErrorMsg('This room has expired.'); setStatus('error'); return;
+    }
+    const timer = setTimeout(async () => {
+      await closeRoom(roomId).catch(() => {});
+      broadcastRoomClosed();
+      setErrorMsg('This room has expired.'); setStatus('error');
+    }, ms);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expiresAt, status]);
+
+  // Pagehide: best-effort leave on browser close/refresh
+  useEffect(() => {
+    const handleUnload = () => {
+      if (hasJoinedRef.current) {
+        hasJoinedRef.current = false;
+        leaveRoom(roomId).catch(() => {});
+      }
+    };
+    window.addEventListener('pagehide', handleUnload);
+    return () => window.removeEventListener('pagehide', handleUnload);
+  }, [roomId]);
 
   useEffect(() => {
     if (status !== 'ready' || isBlankPage) return;
@@ -459,6 +539,25 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   }, []);
+
+  const handleLeave = useCallback(async () => {
+    if (hasJoinedRef.current) {
+      hasJoinedRef.current = false;
+      const { wasLastMember } = await leaveRoom(roomId);
+      if (wasLastMember) broadcastRoomClosed();
+    }
+    try { localStorage.removeItem('activeRoom'); } catch { /* */ }
+    router.replace('/workspace');
+  }, [roomId, broadcastRoomClosed, router]);
+
+  const handleEndRoom = useCallback(async () => {
+    setEndRoomConfirm(false);
+    hasJoinedRef.current = false;
+    await closeRoom(roomId);
+    broadcastRoomClosed();
+    try { localStorage.removeItem('activeRoom'); } catch { /* */ }
+    router.replace('/workspace');
+  }, [roomId, broadcastRoomClosed, router]);
 
   const prevPage = useCallback(() => {
     setVirtualIndex((i) => Math.max(0, i - 1));
@@ -593,7 +692,20 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           {roomName}
         </span>
 
-        {/* Member avatars + names */}
+        {/* Time remaining */}
+        {timeLeft && (
+          <span style={{
+            fontSize: 11, fontWeight: 500, color: timeLeft === 'Expired' ? '#ef4444' : 'var(--text-3)',
+            whiteSpace: 'nowrap', flexShrink: 0,
+            padding: '2px 8px', borderRadius: 9999,
+            background: timeLeft === 'Expired' ? 'rgba(239,68,68,0.12)' : 'var(--bg-elevated)',
+            border: `1px solid ${timeLeft === 'Expired' ? 'rgba(239,68,68,0.35)' : 'var(--border)'}`,
+          }}>
+            {timeLeft}
+          </span>
+        )}
+
+        {/* Member avatars + count */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {members.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
@@ -614,9 +726,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             </div>
           )}
           <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-            {members.length > 0
-              ? `${members.slice(0, 2).map((m) => m.name).join(', ')}${members.length > 2 ? ` +${members.length - 2}` : ''} • ${memberCount} ${t('room_live')}`
-              : `${memberCount} ${t('room_live')}`}
+            {memberCount}/{maxMembers} {t('room_live')}
           </span>
         </div>
 
@@ -653,15 +763,30 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           {copied ? t('room_copied') : t('room_share_link')}
         </button>
 
-        {/* Red Leave button */}
+        {/* Host-only: End Room button */}
+        {userId === hostUserId && (
+          <button
+            onClick={() => setEndRoomConfirm(true)}
+            style={{
+              padding: '4px 11px', borderRadius: 4, fontSize: 12, fontWeight: 500,
+              background: 'rgba(239,68,68,0.18)', color: '#ef4444',
+              border: '1px solid rgba(239,68,68,0.5)', cursor: 'pointer',
+              transition: 'background 0.13s, border-color 0.13s',
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.3)'; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; }}
+          >
+            End Room
+          </button>
+        )}
+
+        {/* Leave button */}
         <button
-          onClick={() => { try { localStorage.removeItem('activeRoom'); } catch { /* */ } router.replace('/workspace'); }}
+          onClick={handleLeave}
           style={{
             padding: '4px 11px', borderRadius: 4, fontSize: 12, fontWeight: 500,
-            background: 'rgba(239,68,68,0.12)',
-            color: '#ef4444',
-            border: '1px solid rgba(239,68,68,0.35)',
-            cursor: 'pointer',
+            background: 'rgba(239,68,68,0.12)', color: '#ef4444',
+            border: '1px solid rgba(239,68,68,0.35)', cursor: 'pointer',
             transition: 'background 0.13s, border-color 0.13s',
           }}
           onMouseOver={(e) => {
@@ -979,6 +1104,57 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           <ChevronRight size={15} />
         </button>
       </div>
+
+      {/* ── End Room confirm modal ── */}
+      {endRoomConfirm && (
+        <div
+          onClick={() => setEndRoomConfirm(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 600,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 340, padding: '24px',
+              background: 'var(--bg-panel)',
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8,
+            }}
+          >
+            <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: '0 0 8px' }}>
+              End this room?
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 20px' }}>
+              The room will be closed for everyone and cannot be reopened.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEndRoomConfirm(false)}
+                style={{
+                  padding: '6px 16px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+                  background: 'var(--bg-elevated)', color: 'var(--text-2)',
+                  border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEndRoom}
+                style={{
+                  padding: '6px 16px', borderRadius: 4, fontSize: 13, fontWeight: 600,
+                  background: '#ef4444', color: '#fff',
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                End Room
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Invite Friends modal ── */}
       {inviteOpen && (
