@@ -846,6 +846,7 @@ export default function WorkspacePage() {
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+  const [userPlan, setUserPlan] = useState<'free' | 'premium' | 'pro'>('free');
 
   // ── Current user (for Supabase sync) ─────────────────────────────────────
   // userId as state so effects that depend on it re-run once the async
@@ -861,6 +862,7 @@ export default function WorkspacePage() {
       const profile = await getProfile();
       setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
       setUserAvatarUrl(profile?.avatarUrl ?? null);
+      if (profile?.plan) setUserPlan(profile.plan as 'free' | 'premium' | 'pro');
       console.log('[StudySync] userId resolved:', uid ?? 'NOT LOGGED IN');
     });
   }, []);
@@ -1817,6 +1819,7 @@ export default function WorkspacePage() {
               { label: t('nav_workspace'), active: true,  href: '#' },
               { label: t('nav_library'),   active: false, href: '/library' },
               { label: t('nav_community'), active: false, href: '/community' },
+              { label: 'Pricing',          active: false, href: '/pricing' },
             ].map(({ label, active, href }) => (
               <a
                 key={label}
@@ -1935,6 +1938,22 @@ export default function WorkspacePage() {
           >
             <Users size={16} />
           </a>
+
+          {userPlan === 'free' && (
+            <a
+              href="/pricing"
+              style={{
+                fontSize: 12, fontWeight: 600, color: '#0f172a',
+                background: '#ffffff', border: 'none', borderRadius: 4,
+                padding: '5px 12px', textDecoration: 'none', cursor: 'pointer',
+                transition: 'background 0.15s', flexShrink: 0,
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
+              onMouseOut={(e)  => { e.currentTarget.style.background = '#ffffff'; }}
+            >
+              Upgrade
+            </a>
+          )}
 
           <NotificationBell />
 
