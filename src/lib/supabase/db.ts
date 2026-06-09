@@ -1102,6 +1102,7 @@ export async function getNotifications(): Promise<AppNotification[]> {
   const { data } = await sb()
     .from('notifications').select('id, type, data, read, created_at')
     .eq('user_id', uid)
+    .eq('read', false)
     .order('created_at', { ascending: false })
     .limit(30);
   return (data ?? []).map((r) => ({
@@ -1117,6 +1118,10 @@ export async function markNotificationRead(id: string): Promise<void> {
 export async function markAllNotificationsRead(): Promise<void> {
   const uid = await userId(); if (!uid) return;
   await sb().from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false);
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  await sb().from('notifications').delete().eq('id', id);
 }
 
 // ── Document Tags ─────────────────────────────────────────────────────────────
