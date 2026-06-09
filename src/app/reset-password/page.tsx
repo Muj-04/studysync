@@ -94,15 +94,14 @@ export default function ResetPasswordPage() {
           WebkitBackdropFilter: 'blur(15px)', border: '2px solid rgba(255,255,255,0.2)',
           borderRadius: '16px', color: '#fff',
         }}>
-          <div style={{
+          <div className="animate-spin" style={{
             width: 36, height: 36, borderRadius: '50%',
             border: '3px solid rgba(255,255,255,0.2)', borderTopColor: '#fff',
-            animation: 'spin 0.8s linear infinite', margin: '0 auto 16px',
+            margin: '0 auto 16px',
           }} />
           <p style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
             Verifying reset link…
           </p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
     );
