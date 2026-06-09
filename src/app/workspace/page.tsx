@@ -1969,7 +1969,7 @@ export default function WorkspacePage() {
 
           <NotificationBell />
 
-          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} />
+          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
         </div>
       </header>
 

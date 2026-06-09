@@ -23,6 +23,7 @@ export interface RoomMember {
   userId: string;
   name: string;
   avatarUrl?: string;
+  isVip?: boolean;
 }
 
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000];
@@ -34,7 +35,7 @@ export function useStudyRoom(
   onIncomingVoiceNoteAdded?: (noteId: string) => void,
   onIncomingVoiceNoteDelete?: (noteId: string) => void,
   onIncomingBlankPage?: (page: RoomBlankPagePayload) => void,
-  myPresence?: { userId?: string; name?: string; avatarUrl?: string },
+  myPresence?: { userId?: string; name?: string; avatarUrl?: string; isVip?: boolean },
   onIncomingBlankDrawing?: (pageId: string, data: string) => void,
   onRoomClosed?: () => void,
 ) {
@@ -74,9 +75,10 @@ export function useStudyRoom(
       userId: myPresence.userId ?? '',
       name: myPresence.name,
       avatarUrl: myPresence.avatarUrl ?? '',
+      isVip: myPresence.isVip ?? false,
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myPresence?.name, myPresence?.avatarUrl]);
+  }, [myPresence?.name, myPresence?.avatarUrl, myPresence?.isVip]);
 
   useEffect(() => {
     deadRef.current = false;
@@ -138,7 +140,7 @@ export function useStudyRoom(
         })
         .on('presence', { event: 'sync' }, () => {
           if (generation !== generationRef.current) return;
-          type PresenceEntry = { ts: number; userId?: string; name?: string; avatarUrl?: string };
+          type PresenceEntry = { ts: number; userId?: string; name?: string; avatarUrl?: string; isVip?: boolean };
           const state = channel.presenceState<PresenceEntry>();
           const entries = Object.values(state).flat();
           // Deduplicate by userId — same user in multiple tabs counts once
@@ -153,7 +155,7 @@ export function useStudyRoom(
           setMembers(
             unique
               .filter((e) => e.name)
-              .map((e) => ({ userId: e.userId ?? '', name: e.name!, avatarUrl: e.avatarUrl || undefined }))
+              .map((e) => ({ userId: e.userId ?? '', name: e.name!, avatarUrl: e.avatarUrl || undefined, isVip: e.isVip ?? false }))
           );
           setMemberCount(unique.length || 1);
         })
@@ -171,6 +173,7 @@ export function useStudyRoom(
               userId: p?.userId ?? '',
               name: p?.name ?? '',
               avatarUrl: p?.avatarUrl ?? '',
+              isVip: p?.isVip ?? false,
             });
             if (connectedOnceRef.current) {
               console.log('[StudyRoom] reconnected — calling onReconnect');
