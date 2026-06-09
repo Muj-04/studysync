@@ -1982,10 +1982,11 @@ export default function WorkspacePage() {
             </p>
             {isLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <div className="animate-spin" style={{
+                <div style={{
                   width: 20, height: 20, borderRadius: '50%',
                   border: '2px solid var(--border-strong)',
                   borderTopColor: 'var(--text-2)',
+                  animation: 'spin 0.8s linear infinite',
                 }} />
               </div>
             ) : (
@@ -2460,10 +2461,10 @@ export default function WorkspacePage() {
             {roomModal === 'creating' ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div className="animate-spin" style={{
+                  <div style={{
                     width: 36, height: 36, borderRadius: '50%',
                     border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
-                    flexShrink: 0,
+                    flexShrink: 0, animation: 'spin 0.8s linear infinite',
                   }} />
                   <div>
                     <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
