@@ -133,10 +133,10 @@ function PrimaryBtn({
       onMouseOut={(e) => { if (!disabled && !loading) e.currentTarget.style.background = '#ffffff'; }}
     >
       {loading && (
-        <span style={{
+        <span className="animate-spin" style={{
           width: 12, height: 12, borderRadius: '50%',
           border: '2px solid rgba(15,23,42,0.2)',
-          borderTopColor: '#0f172a', animation: 'spin 0.7s linear infinite', flexShrink: 0,
+          borderTopColor: '#0f172a', flexShrink: 0,
         }} />
       )}
       {children}
@@ -359,7 +359,7 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, loading 
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}
           >
-            {loading && <span style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />}
+            {loading && <span className="animate-spin" style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', flexShrink: 0 }} />}
             {confirmLabel}
           </button>
         </div>
@@ -782,7 +782,7 @@ function AppearanceSection() {
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
-        <span style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+        <span className="animate-spin" style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
       </div>
     );
   }
@@ -1406,7 +1406,7 @@ export default function SettingsPage() {
   if (!authReady) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: 'var(--bg-app)' }}>
-        <span style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+        <span className="animate-spin" style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
       </div>
     );
   }

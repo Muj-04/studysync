@@ -591,7 +591,7 @@ export default function SidebarThumbnails({
             )}
             {activeDocument && !isPPTX && outlineLoading && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 80, gap: 8 }}>
-                <Loader2 size={14} style={{ color: 'var(--text-3)', animation: 'spin 0.9s linear infinite' }} />
+                <Loader2 size={14} className="animate-spin" style={{ color: 'var(--text-3)' }} />
                 <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Loading outline…</span>
               </div>
             )}
