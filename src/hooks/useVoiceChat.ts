@@ -68,8 +68,10 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
       });
 
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
-        const el = audioEls.current.get(track.sid);
-        if (el) { el.remove(); audioEls.current.delete(track.sid); }
+        if (track.sid) {
+          const el = audioEls.current.get(track.sid);
+          if (el) { el.remove(); audioEls.current.delete(track.sid); }
+        }
         track.detach();
       });
 
