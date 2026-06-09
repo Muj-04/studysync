@@ -425,17 +425,6 @@ function FeatureCard({
   );
 }
 
-// ── Stat row ──────────────────────────────────────────────────────────────────
-
-function StatItem({ value, label }: { value: string; label: string }) {
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color: '#ffffff', lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" }}>{value}</div>
-      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>{label}</div>
-    </div>
-  );
-}
-
 // ── Main landing page ─────────────────────────────────────────────────────────
 
 export default function LandingPage() {
@@ -595,17 +584,6 @@ export default function LandingPage() {
             >
               Watch Demo
             </button>
-          </div>
-
-          {/* Stats row */}
-          <div style={{
-            display: 'flex', gap: 48, marginBottom: 64, flexWrap: 'wrap', justifyContent: 'center',
-          }}>
-            <StatItem value="10k+" label="Students" />
-            <div style={{ width: 1, background: 'rgba(255,255,255,0.2)', alignSelf: 'stretch' }} />
-            <StatItem value="500k+" label="Annotations" />
-            <div style={{ width: 1, background: 'rgba(255,255,255,0.2)', alignSelf: 'stretch' }} />
-            <StatItem value="99.9%" label="Uptime" />
           </div>
 
           {/* Tablet mockup */}

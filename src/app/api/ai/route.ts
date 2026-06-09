@@ -1,10 +1,57 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
+// ── In-memory rate limiter (30 req/min per IP) ────────────────────────────────
+const WINDOW_MS  = 60_000;
+const MAX_REQ    = 30;
+const CLEANUP_AT = 500; // prune the map when it exceeds this size
+
+interface RateBucket { count: number; windowStart: number }
+const buckets = new Map<string, RateBucket>();
+
+function allowed(key: string): boolean {
+  const now = Date.now();
+
+  // Periodic cleanup to prevent unbounded growth on serverless warm instances
+  if (buckets.size > CLEANUP_AT) {
+    for (const [k, b] of buckets) {
+      if (now - b.windowStart > WINDOW_MS) buckets.delete(k);
+    }
+  }
+
+  const b = buckets.get(key);
+  if (!b || now - b.windowStart > WINDOW_MS) {
+    buckets.set(key, { count: 1, windowStart: now });
+    return true;
+  }
+  if (b.count >= MAX_REQ) return false;
+  b.count++;
+  return true;
+}
+
+function clientIp(req: NextRequest): string {
+  return (
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ??
+    req.headers.get('x-real-ip') ??
+    'unknown'
+  );
+}
+
+// ── Handler ───────────────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured on this server' }, { status: 503 });
   }
+
+  const ip = clientIp(req);
+  if (!allowed(ip)) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please wait a minute and try again.' },
+      { status: 429, headers: { 'Retry-After': '60' } },
+    );
+  }
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   try {
     const { action, text, language } = await req.json();
