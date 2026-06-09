@@ -37,7 +37,7 @@ function Avatar({ name, url, size = 32 }: { name?: string | null; url?: string |
 export default function NotificationBell() {
   const { t, lang } = useLanguage();
   const router = useRouter();
-  const { notifications, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
+  const { notifications, unreadCount, markRead, markAllRead, deleteNotif } = useNotifications();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [actionPending, setActionPending] = useState<string | null>(null);
@@ -54,29 +54,26 @@ export default function NotificationBell() {
   const handleAccept = useCallback(async (notifId: string, friendshipId: string) => {
     setActionPending(notifId);
     await respondFriendRequest(friendshipId, 'accepted');
-    await markRead(notifId);
-    removeNotification(notifId);
+    await deleteNotif(notifId);
     setActionPending(null);
-  }, [markRead, removeNotification]);
+  }, [deleteNotif]);
 
   const handleReject = useCallback(async (notifId: string, friendshipId: string) => {
     setActionPending(notifId);
     await respondFriendRequest(friendshipId, 'rejected');
-    await markRead(notifId);
-    removeNotification(notifId);
+    await deleteNotif(notifId);
     setActionPending(null);
-  }, [markRead, removeNotification]);
+  }, [deleteNotif]);
 
   const handleJoinRoom = useCallback(async (notifId: string, roomId: string) => {
-    await markRead(notifId);
+    await deleteNotif(notifId);
     router.push(`/room/${roomId}`);
     setOpen(false);
-  }, [markRead, router]);
+  }, [deleteNotif, router]);
 
   const handleDeclineInvite = useCallback(async (notifId: string) => {
-    await markRead(notifId);
-    removeNotification(notifId);
-  }, [markRead, removeNotification]);
+    await deleteNotif(notifId);
+  }, [deleteNotif]);
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -263,9 +260,9 @@ export default function NotificationBell() {
                             </button>
                           </div>
                         )}
-                        {n.type === 'friend_accepted' && !n.read && (
+                        {n.type === 'friend_accepted' && (
                           <button
-                            onClick={() => markRead(n.id)}
+                            onClick={() => deleteNotif(n.id)}
                             style={{
                               height: 22, padding: '0 8px', borderRadius: 4,
                               background: 'none', color: 'var(--text-3)', border: 'none',
