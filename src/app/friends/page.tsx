@@ -60,7 +60,7 @@ function getActiveRoom(): { roomId: string; roomName: string } | null {
 function Spinner() {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-      <span style={{ width: 22, height: 22, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+      <span className="animate-spin" style={{ width: 22, height: 22, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
     </div>
   );
 }
@@ -356,8 +356,7 @@ export default function FriendsPage() {
   if (!authReady) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: 'var(--bg-app)' }}>
-        <span style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', animation: 'spin 0.7s linear infinite', display: 'block' }} />
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <span className="animate-spin" style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
       </div>
     );
   }
@@ -366,8 +365,6 @@ export default function FriendsPage() {
 
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit' }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-
       {/* ── Header ── */}
       <div style={{
         height: 52, borderBottom: '1px solid var(--border-subtle)',

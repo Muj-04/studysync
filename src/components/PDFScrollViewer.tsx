@@ -393,10 +393,10 @@ const ScrollPageItem = memo(function ScrollPageItem({
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(255,255,255,0.9)',
         }}>
-          <div style={{
+          <div className="animate-spin" style={{
             width: 18, height: 18,
             border: '2px solid #ddd', borderTopColor: '#666',
-            borderRadius: '50%', animation: 'spin 0.7s linear infinite',
+            borderRadius: '50%',
           }} />
         </div>
       )}
