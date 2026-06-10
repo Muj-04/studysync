@@ -91,6 +91,7 @@ interface Props {
   activeSide?: 'left' | 'right';
   onSwitchSide?: (side: 'left' | 'right') => void;
   containerRef?: React.RefObject<HTMLElement | null>;
+  bottomBarRef?: React.RefObject<HTMLElement | null>;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -100,15 +101,16 @@ export default function FloatingAnnotationToolbar({
   tool, setTool, penType, setPenType,
   color, setColor, strokeSize, setStrokeSize,
   onClear, onUndo, splitMode, activeSide, onSwitchSide,
-  containerRef,
+  containerRef, bottomBarRef,
 }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging]   = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showHint, setShowHint]       = useState(false);
 
-  const outerRef = useRef<HTMLDivElement>(null);
-  const rafRef   = useRef<number>(0);
+  const outerRef     = useRef<HTMLDivElement>(null);
+  const rafRef       = useRef<number>(0);
+  const clampRafRef  = useRef<number>(0);
 
   // Stable refs so pointer / timer handlers never go stale
   const isOpenRef  = useRef(isOpen);
@@ -120,6 +122,8 @@ export default function FloatingAnnotationToolbar({
 
   const containerRefRef = useRef(containerRef);
   containerRefRef.current = containerRef;
+  const bottomBarRefRef = useRef(bottomBarRef);
+  bottomBarRefRef.current = bottomBarRef;
 
   // Always-current position ref (avoids stale closure in pointer handlers)
   const posRef     = useRef<{ x: number; y: number } | null>(null);
@@ -137,12 +141,20 @@ export default function FloatingAnnotationToolbar({
     hasMoved: boolean;
   } | null>(null);
 
-  // Helper: allowed drag bounds from the container element
+  // Helper: allowed drag bounds — uses actual DOM rects so sidebar/panel widths
+  // and bottom-bar height are always accurate, including during CSS transitions.
   function getBounds() {
-    const el = containerRefRef.current?.current;
+    const el       = containerRefRef.current?.current;
+    const bottomEl = bottomBarRefRef.current?.current;
     if (el) {
-      const r = el.getBoundingClientRect();
-      return { minX: r.left, minY: r.top, maxX: r.right - BTN, maxY: r.bottom - BTN };
+      const r         = el.getBoundingClientRect();
+      const bottomBarH = bottomEl ? bottomEl.getBoundingClientRect().height : 0;
+      return {
+        minX: r.left,
+        minY: r.top,
+        maxX: r.right     - BTN,
+        maxY: r.bottom - bottomBarH - BTN,
+      };
     }
     return {
       minX: 0, minY: 0,
@@ -193,11 +205,39 @@ export default function FloatingAnnotationToolbar({
         }
       }
 
-      const x    = maxX - 16;
-      const midY = Math.round((minY + maxY + BTN) / 2) - Math.round(BTN / 2);
-      updatePos({ x, y: Math.min(Math.max(midY, minY + 8), maxY - 8) });
+      // Centre the button in the PDF viewer area
+      const x = Math.round((minX + maxX) / 2);
+      const y = Math.round((minY + maxY) / 2);
+      updatePos({ x, y });
     });
     return () => cancelAnimationFrame(raf);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Re-clamp position whenever the container resizes (sidebar animations) ──
+  useEffect(() => {
+    const el = containerRefRef.current?.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(clampRafRef.current);
+      clampRafRef.current = requestAnimationFrame(() => {
+        if (!posRef.current) return;
+        const { minX, minY, maxX, maxY } = getBounds();
+        const p = posRef.current;
+        const clamped = {
+          x: Math.min(Math.max(p.x, minX), maxX),
+          y: Math.min(Math.max(p.y, minY), maxY),
+        };
+        if (outerRef.current) {
+          outerRef.current.style.transform = `translate(${clamped.x}px, ${clamped.y}px)`;
+        }
+        if (clamped.x !== p.x || clamped.y !== p.y) {
+          posRef.current = clamped;
+          setPos(clamped);
+        }
+      });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── First-time hint ────────────────────────────────────────────────────────
