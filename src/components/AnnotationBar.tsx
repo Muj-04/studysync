@@ -73,8 +73,9 @@ export default function AnnotationBar({
 
   return (
     <div style={{
-      background: 'var(--bg-panel)',
-      borderTop: '1px solid var(--border)',
+      background: 'rgba(20,20,20,0.95)',
+      borderTop: '1px solid rgba(255,255,255,0.15)',
+      boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
       flexShrink: 0,
       userSelect: 'none',
     }}>

@@ -313,6 +313,8 @@ export default function FloatingAnnotationToolbar({
             width: PANEL_W,
             borderRadius: 4,
             transformOrigin,
+            border: '1px solid rgba(255,255,255,0.15)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
           }}
         >
           {/* Header */}
@@ -529,7 +531,8 @@ export default function FloatingAnnotationToolbar({
           bottom: BTN + 10,
           left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(15,15,15,0.95)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
           color: 'var(--text-1)',
           fontSize: 11.5, fontWeight: 500,
           whiteSpace: 'nowrap',

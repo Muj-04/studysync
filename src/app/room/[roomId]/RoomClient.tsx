@@ -912,9 +912,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       {/* ── Drawing toolbar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.1)',
-        background: 'var(--bg-panel)',
+        padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.15)',
+        background: 'rgba(20,20,20,0.95)',
         backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
         flexShrink: 0, flexWrap: 'wrap',
         rowGap: 6,
       }}>
