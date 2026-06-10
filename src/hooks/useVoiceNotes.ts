@@ -4,8 +4,7 @@ import type { VoiceNote } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle, getTotalVoiceStorageBytes, getProfile, deleteAllVoiceNotesForDocument } from '@/lib/supabase/db';
-
-const VOICE_STORAGE_LIMIT = 50 * 1024 * 1024; // 50 MB
+import { PLAN_LIMITS, type Plan } from '@/lib/planLimits';
 
 interface PersistedNote {
   id: string;
@@ -201,12 +200,15 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
 
       setNotes((prev) => [...prev, note]);
 
-      // Upload to Supabase in background (with storage limit check for free users)
+      // Upload to Supabase in background (with per-plan storage limit check)
       if (userIdRef.current) {
         (async () => {
           const [profile, usedBytes] = await Promise.all([getProfile(), getTotalVoiceStorageBytes()]);
-          const bypass = (profile?.isVip ?? false) || (profile?.plan ?? 'free') !== 'free';
-          if (!bypass && usedBytes + blob.size > VOICE_STORAGE_LIMIT) {
+          const isVip = profile?.isVip ?? false;
+          const plan  = (profile?.plan ?? 'free') as Plan;
+          // VIP bypasses all storage limits; every other plan has a specific cap
+          const storageLimit = isVip ? Infinity : PLAN_LIMITS[plan].voiceStorageBytes;
+          if (!isVip && usedBytes + blob.size > storageLimit) {
             onLimitRef.current?.();
             return;
           }
