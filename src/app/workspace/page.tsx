@@ -1186,6 +1186,7 @@ export default function WorkspacePage() {
   const blankDrawingRef    = useRef<DrawingCanvasHandle | null>(null);
   const rightDocDrawingRef = useRef<DrawingCanvasHandle | null>(null);
   const mainRef            = useRef<HTMLElement>(null);
+  const bottomBarRef       = useRef<HTMLDivElement>(null);
 
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -2463,7 +2464,7 @@ export default function WorkspacePage() {
                 </div>
 
                 {/* ── Bottom panels (collapsible) ── */}
-                <div style={{
+                <div ref={bottomBarRef} style={{
                   flexShrink: 0, overflow: 'hidden',
                   maxHeight: navBarVisible ? 800 : 0,
                   transition: navBarVisible
@@ -2532,6 +2533,7 @@ export default function WorkspacePage() {
                   activeSide={showSplit ? activeSide : undefined}
                   onSwitchSide={showSplit ? setActiveSide : undefined}
                   containerRef={mainRef}
+                  bottomBarRef={bottomBarRef}
                 />
 
                 {/* Restore bottom bar button */}
