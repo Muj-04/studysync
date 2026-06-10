@@ -1609,9 +1609,13 @@ export default function WorkspacePage() {
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const bypass = isVip || userPlan !== 'free';
-    if (!bypass && documents.length >= 3) {
-      setLimitModal('documents');
-      return;
+    if (!bypass) {
+      const remaining = 3 - documents.length;
+      if (remaining <= 0) {
+        setLimitModal('documents');
+        return;
+      }
+      files = files.slice(0, remaining);
     }
     let anyRestored = false;
     for (const f of files) {
@@ -1630,7 +1634,7 @@ export default function WorkspacePage() {
       }
     }
     if (anyRestored) showToast('Welcome back! Your notes have been restored.');
-  }, [addDocument, showToast]);
+  }, [addDocument, showToast, documents, isVip, userPlan]);
 
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';
