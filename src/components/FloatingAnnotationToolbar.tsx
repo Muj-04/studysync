@@ -2,7 +2,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { Pencil, Eraser, Trash2, X, Type, Undo2, MousePointer } from 'lucide-react';
 import type { Tool, PenType } from '@/lib/drawing';
-import { PRESET_COLORS, SIZES } from '@/lib/drawing';
+import { PRESET_COLORS } from '@/lib/drawing';
+import DragScrubber from './DragScrubber';
 
 const BTN      = 52;
 const PANEL_W  = 192;
@@ -105,6 +106,9 @@ export default function FloatingAnnotationToolbar({
   const [isDragging, setIsDragging]   = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showHint, setShowHint]       = useState(false);
+
+  const outerRef = useRef<HTMLDivElement>(null);
+  const rafRef   = useRef<number>(0);
 
   // Stable refs so pointer / timer handlers never go stale
   const isOpenRef  = useRef(isOpen);
@@ -226,9 +230,8 @@ export default function FloatingAnnotationToolbar({
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const el = e.currentTarget.parentElement;
-    const originX = el ? parseFloat(el.style.left) : 0;
-    const originY = el ? parseFloat(el.style.top)  : 0;
+    const originX = posRef.current?.x ?? 0;
+    const originY = posRef.current?.y ?? 0;
     dragRef.current = {
       startX: e.clientX, startY: e.clientY,
       originX, originY,
@@ -247,12 +250,17 @@ export default function FloatingAnnotationToolbar({
     }
     if (d.hasMoved) {
       const { minX, minY, maxX, maxY } = getBounds();
-      updatePos({
-        x: Math.min(Math.max(d.originX + dx, minX), maxX),
-        y: Math.min(Math.max(d.originY + dy, minY), maxY),
+      const newX = Math.min(Math.max(d.originX + dx, minX), maxX);
+      const newY = Math.min(Math.max(d.originY + dy, minY), maxY);
+      posRef.current = { x: newX, y: newY };
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        if (outerRef.current) {
+          outerRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
+        }
       });
     }
-  }, [updatePos]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePointerUp = useCallback(() => {
     const d = dragRef.current;
@@ -261,8 +269,8 @@ export default function FloatingAnnotationToolbar({
     if (!d) return;
 
     if (d.hasMoved) {
-      // Persist the final position
       if (posRef.current) {
+        setPos({ ...posRef.current });
         localStorage.setItem(POS_KEY, JSON.stringify(posRef.current));
       }
     } else {
@@ -285,9 +293,11 @@ export default function FloatingAnnotationToolbar({
   const transformOrigin = expandUp ? 'bottom right' : 'top right';
 
   return (
-    <div style={{
+    <div ref={outerRef} style={{
       position: 'fixed',
-      left: pos.x, top: pos.y,
+      left: 0, top: 0,
+      transform: `translate(${pos.x}px, ${pos.y}px)`,
+      willChange: 'transform',
       width: BTN, height: BTN,
       zIndex: 200, userSelect: 'none',
     }}>
@@ -459,35 +469,8 @@ export default function FloatingAnnotationToolbar({
           {/* Size */}
           <div style={{ padding: '8px 12px' }}>
             <SectionLabel>Size</SectionLabel>
-            <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-              {SIZES.map(({ label, value }) => (
-                <button
-                  key={value}
-                  onClick={() => setStrokeSize(value)}
-                  style={{
-                    flex: 1, height: 28,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    borderRadius: 4,
-                    border: `1px solid ${strokeSize === value ? 'var(--border-strong)' : 'var(--border)'}`,
-                    background: strokeSize === value ? 'var(--bg-active)' : 'transparent',
-                    color: strokeSize === value ? 'var(--text-1)' : 'var(--text-2)',
-                    cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-                    transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-                  }}
-                  onMouseOver={(e) => {
-                    if (strokeSize !== value) Object.assign(e.currentTarget.style, {
-                      background: 'var(--bg-hover)', color: 'var(--text-1)',
-                    });
-                  }}
-                  onMouseOut={(e) => {
-                    if (strokeSize !== value) Object.assign(e.currentTarget.style, {
-                      background: 'transparent', color: 'var(--text-2)',
-                    });
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+            <div style={{ marginTop: 6 }}>
+              <DragScrubber value={strokeSize} onChange={setStrokeSize} />
             </div>
           </div>
 
@@ -545,10 +528,8 @@ export default function FloatingAnnotationToolbar({
           position: 'absolute',
           bottom: BTN + 10,
           left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(9,9,11,0.85)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          border: '1px solid var(--border)',
+          background: 'rgba(15,15,15,0.95)',
+          border: '1px solid rgba(255,255,255,0.1)',
           color: 'var(--text-1)',
           fontSize: 11.5, fontWeight: 500,
           whiteSpace: 'nowrap',
@@ -582,15 +563,13 @@ export default function FloatingAnnotationToolbar({
           zIndex: 2,
         }}>
           <div style={{
-            background: 'rgba(255,255,255,0.15)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            background: 'rgba(15,15,15,0.9)',
             color: '#fff',
             padding: '6px 13px',
             borderRadius: 4,
             fontSize: 12.5, fontWeight: 600,
             whiteSpace: 'nowrap',
-            border: '1px solid rgba(255,255,255,0.2)',
+            border: '1px solid rgba(255,255,255,0.1)',
           }}>
             Tap to annotate
           </div>
@@ -599,7 +578,7 @@ export default function FloatingAnnotationToolbar({
             width: 0, height: 0,
             borderTop: '7px solid transparent',
             borderBottom: '7px solid transparent',
-            borderLeft: '9px solid rgba(255,255,255,0.15)',
+            borderLeft: '9px solid rgba(15,15,15,0.9)',
             flexShrink: 0,
           }} />
         </div>
@@ -629,7 +608,7 @@ export default function FloatingAnnotationToolbar({
           ) : tool === 'eraser' ? (
             <Eraser size={11} style={{ color: 'rgba(200,200,200,0.85)', flexShrink: 0 }} />
           ) : tool === 'text' ? (
-            <Type size={11} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+            <Type size={11} style={{ color: 'rgba(200,200,200,0.85)', flexShrink: 0 }} />
           ) : tool === 'line' ? (
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
               stroke={color} strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>

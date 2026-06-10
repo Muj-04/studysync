@@ -1,7 +1,8 @@
 'use client';
 import { Pencil, Eraser, Trash2, ChevronUp } from 'lucide-react';
 import type { Tool, PenType } from '@/lib/drawing';
-import { PRESET_COLORS, SIZES } from '@/lib/drawing';
+import { PRESET_COLORS } from '@/lib/drawing';
+import DragScrubber from './DragScrubber';
 
 interface Props {
   isOpen: boolean;
@@ -193,33 +194,7 @@ export default function AnnotationBar({
           <Sep />
 
           {/* Sizes */}
-          {SIZES.map(({ label, value }) => (
-            <button
-              key={value}
-              onClick={() => setStrokeSize(value)}
-              style={{
-                width: 30, height: 28, borderRadius: 4, flexShrink: 0,
-                border: `1px solid ${strokeSize === value ? 'var(--border-strong)' : 'var(--border)'}`,
-                background: strokeSize === value ? 'var(--bg-active)' : 'transparent',
-                color: strokeSize === value ? 'var(--text-1)' : 'var(--text-2)',
-                cursor: 'pointer', fontSize: 11, fontWeight: 600,
-                fontFamily: 'inherit',
-                transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-              }}
-              onMouseOver={(e) => {
-                if (strokeSize !== value) Object.assign(e.currentTarget.style, {
-                  background: 'var(--bg-hover)', color: 'var(--text-1)',
-                });
-              }}
-              onMouseOut={(e) => {
-                if (strokeSize !== value) Object.assign(e.currentTarget.style, {
-                  background: 'transparent', color: 'var(--text-2)',
-                });
-              }}
-            >
-              {label}
-            </button>
-          ))}
+          <DragScrubber value={strokeSize} onChange={setStrokeSize} label="Size" width={100} />
 
           <Sep />
 
