@@ -306,7 +306,46 @@ button:active:not(:disabled) {
 }
 
 /* ── Arabic RTL ── */
+
+/* Text inputs and textareas: align text to start (right in RTL) */
 [dir="rtl"] input:not([type="color"]):not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="number"]),
 [dir="rtl"] textarea {
   text-align: right;
+}
+
+/* Range sliders and number inputs keep LTR internals for correct rendering */
+[dir="rtl"] input[type="range"],
+[dir="rtl"] input[type="number"] {
+  direction: ltr;
+}
+
+/* Zoom % readout: keep LTR so "150%" doesn't render as "%150" */
+[dir="rtl"] .mono {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+/* PDF text layer: keep each page's text-layer LTR so selection works correctly */
+[dir="rtl"] .pdf-text-layer {
+  direction: ltr;
+}
+
+/* Nav zoom slider wrapper: keep internal flex order LTR */
+[dir="rtl"] .nav-zoom-slider-wrap {
+  direction: ltr;
+}
+
+/* Skeleton shimmer: keep animation direction consistent */
+[dir="rtl"] .skeleton::after {
+  animation-direction: reverse;
+}
+
+/* Scrollbar thumb: no directional change needed, but ensure it shows on the correct side */
+[dir="rtl"] ::-webkit-scrollbar {
+  /* browsers automatically place scrollbar on the left in RTL — no override needed */
+}
+
+/* Toast animations: slide in from correct side in RTL */
+[dir="rtl"] .animate-slide-up {
+  animation-name: slide-up; /* keep vertical slide, no horizontal flip needed */
 }

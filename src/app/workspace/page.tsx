@@ -28,6 +28,7 @@ import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import PomodoroWidget from '@/components/PomodoroWidget';
 import GlobalSearch from '@/components/GlobalSearch';
+import OnboardingTour, { shouldShowTour } from '@/components/OnboardingTour';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -1640,6 +1641,9 @@ export default function WorkspacePage() {
 
   // ── Remove document (with confirmation) ──────────────────────────────────
   const [confirmRemoveDocId, setConfirmRemoveDocId] = useState<string | null>(null);
+  const [showTour, setShowTour] = useState(() =>
+    typeof window !== 'undefined' ? shouldShowTour() : false
+  );
 
   const handleRemoveDocument = useCallback((docId: string) => {
     setConfirmRemoveDocId(docId);
@@ -2826,6 +2830,9 @@ export default function WorkspacePage() {
           </div>
         </div>
       )}
+
+      {/* ══ Onboarding tour ══ */}
+      {showTour && <OnboardingTour onComplete={() => setShowTour(false)} />}
 
       {/* ══ Toast ══ */}
       {toast && (
