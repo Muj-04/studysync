@@ -211,6 +211,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   ];
   const [status, setStatus]     = useState<'loading' | 'ready' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
+  const [planBlocked, setPlanBlocked] = useState(false);
   const [roomName, setRoomName] = useState('Study Room');
   const [copied, setCopied]       = useState(false);
   const [userName, setUserName]   = useState('');
@@ -438,6 +439,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       setUserId(user.id);
       if (profile?.avatarUrl) setUserAvatarUrl(profile.avatarUrl);
       if (profile?.isVip) setUserIsVip(true);
+
+      // Block free-plan users — VIP bypasses
+      const isVip = profile?.isVip ?? false;
+      const plan  = profile?.plan ?? 'free';
+      if (!isVip && plan === 'free') { setPlanBlocked(true); return; }
 
       const room = await fetchRoom(roomId);
       if (!room) { setErrorMsg('Room not found.'); setStatus('error'); return; }
@@ -681,6 +687,47 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [roomId, roomName]);
 
   // ── Loading / error states ────────────────────────────────────────────────
+  if (planBlocked) {
+    return (
+      <div style={{
+        minHeight: '100dvh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 16,
+        background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit',
+        padding: 24, textAlign: 'center',
+      }}>
+        <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
+          Study Rooms require a Premium or Pro plan
+        </p>
+        <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, maxWidth: 360, lineHeight: 1.6 }}>
+          Study Rooms are available on Premium and Pro plans. Free users cannot create or join rooms.
+        </p>
+        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <button
+            onClick={() => router.replace('/workspace')}
+            style={{
+              padding: '8px 20px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+              background: 'var(--bg-elevated)', color: 'var(--text-2)',
+              border: '1px solid var(--border)', cursor: 'pointer',
+            }}
+          >
+            Back to Workspace
+          </button>
+          <a
+            href="/pricing"
+            style={{
+              padding: '8px 20px', borderRadius: 4, fontSize: 13, fontWeight: 600,
+              background: '#ffffff', color: '#0f172a',
+              border: 'none', cursor: 'pointer', textDecoration: 'none',
+              display: 'inline-flex', alignItems: 'center',
+            }}
+          >
+            Upgrade Now
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   if (status === 'loading') {
     return (
       <div style={{

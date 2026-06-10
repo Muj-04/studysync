@@ -2649,7 +2649,7 @@ export default function WorkspacePage() {
         // Body copy
         const bodies: Record<typeof limitModal, string> = {
           documents: `You've reached the ${PLAN_LIMITS[userPlan].documents} document limit on the ${PLAN_LABELS[userPlan]} plan.${next ? ` Upgrade to ${nextLabel} for unlimited documents.` : ''}`,
-          room:      `Real-time study rooms are available on Premium and Pro plans. Free users can still join rooms they're invited to.`,
+          room:      `Study Rooms are available on Premium and Pro plans. Free users cannot create or join rooms.`,
           voice:     `You've used all ${VOICE_STORAGE_LABELS[userPlan]} of voice note storage on the ${PLAN_LABELS[userPlan]} plan.${next ? ` Upgrade to ${nextLabel} for ${VOICE_STORAGE_LABELS[next!]} of voice storage.` : ''}`,
         };
         return (
