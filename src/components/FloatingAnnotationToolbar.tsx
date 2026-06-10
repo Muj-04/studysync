@@ -617,19 +617,17 @@ export default function FloatingAnnotationToolbar({
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            background: 'rgba(9,9,11,0.7)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            border: '1px solid var(--border)',
+            background: 'rgba(15,15,15,0.95)',
+            border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 4,
             padding: '4px 9px 4px 7px',
             whiteSpace: 'nowrap',
           }}
         >
           {tool === 'cursor' ? (
-            <MousePointer size={11} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+            <MousePointer size={11} style={{ color: 'rgba(200,200,200,0.85)', flexShrink: 0 }} />
           ) : tool === 'eraser' ? (
-            <Eraser size={11} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+            <Eraser size={11} style={{ color: 'rgba(200,200,200,0.85)', flexShrink: 0 }} />
           ) : tool === 'text' ? (
             <Type size={11} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
           ) : tool === 'line' ? (
@@ -645,7 +643,7 @@ export default function FloatingAnnotationToolbar({
           )}
           <span style={{
             fontSize: 11, fontWeight: 500,
-            color: tool === 'cursor' ? 'var(--text-3)' : 'rgba(226,226,226,0.9)',
+            color: 'rgba(226,226,226,0.9)',
           }}>
             {tool === 'cursor' ? 'Cursor'
               : tool === 'eraser' ? 'Eraser'
