@@ -34,9 +34,9 @@ function useAnimatedPrice(target: number, duration = 420) {
 
 const FREE_FEATURES = [
   'Up to 3 documents',
-  '50 MB voice notes storage',
+  '30 MB voice notes storage',
   'Basic drawing tools',
-  'AI Summary (30/month)',
+  'AI Summary (15/month)',
   'Solo studying only',
   'Community: view only',
 ];
@@ -55,8 +55,8 @@ const PREMIUM_FEATURES = [
 const PRO_FEATURES = [
   'Everything in Premium',
   '5 GB voice notes storage',
-  'AI requests (unlimited)',
-  'Study Rooms up to 50 members',
+  'AI requests (1,000/month)',
+  'Study Rooms (up to 10 members)',
   'AI Flashcards & Quiz (coming soon)',
   'Study analytics dashboard',
   'Early access to new features',
