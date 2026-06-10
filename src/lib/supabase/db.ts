@@ -85,8 +85,14 @@ export async function deleteAllDataForDocument(docId: string): Promise<void> {
     sb().from('key_terms').delete().match({ user_id: uid, document_id: docId }),
     sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId }),
     sb().from('page_image_annotations').delete().match({ user_id: uid, document_id: docId }),
+    // flashcards uses doc_id (not document_id)
+    sb().from('flashcards').delete().match({ user_id: uid, doc_id: docId }),
+    // session_state: one row per user keyed on user_id; delete only if it points to this doc
+    sb().from('session_state').delete().match({ user_id: uid, doc_id: docId }),
   ]);
   await sb().from('documents').delete().eq('id', docId);
+  // Remove from in-process cache so a re-add starts fresh
+  registeredDocs.delete(docId);
 }
 
 // ── Library ───────────────────────────────────────────────────────────────────
