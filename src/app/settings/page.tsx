@@ -29,6 +29,7 @@ import {
 } from '@/lib/supabase/db';
 import type { UserAppSettings } from '@/lib/supabase/db';
 import { applyPreferences, ACCENT_PRESETS, FONT_STACKS } from '@/lib/preferences';
+import { PLAN_LIMITS, PLAN_LABELS } from '@/lib/planLimits';
 
 const NAV = [
   { id: 'account',       tKey: 'set_nav_account',       Icon: User },
@@ -1337,33 +1338,37 @@ function DataSection() {
           ))}
         </div>
 
-        {/* Free plan usage bars */}
-        {limitStats && !limitStats.isVip && limitStats.plan === 'free' && (
+        {/* Per-plan usage bars */}
+        {limitStats && !limitStats.isVip && (
           <div style={{
             padding: '14px 16px', borderRadius: 4,
             background: 'var(--bg-elevated)', border: '1px solid var(--border)',
           }}>
             <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
-              Free Plan Limits
+              {PLAN_LABELS[limitStats.plan]} Plan Limits
             </p>
-            <UsageBar
-              used={limitStats.documents}
-              max={3}
-              label="Documents"
-            />
+            {PLAN_LIMITS[limitStats.plan].documents !== Infinity && (
+              <UsageBar
+                used={limitStats.documents}
+                max={PLAN_LIMITS[limitStats.plan].documents}
+                label="Documents"
+              />
+            )}
             <UsageBar
               used={Math.round(limitStats.voiceStorageBytes / (1024 * 1024))}
-              max={50}
+              max={Math.round(PLAN_LIMITS[limitStats.plan].voiceStorageBytes / (1024 * 1024))}
               label="Voice storage (MB)"
             />
             <UsageBar
               used={limitStats.aiRequestsThisMonth}
-              max={30}
+              max={PLAN_LIMITS[limitStats.plan].aiRequestsPerMonth}
               label="AI requests this month"
             />
-            <a href="/pricing" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', display: 'inline-block', marginTop: 4 }}>
-              Upgrade for higher limits →
-            </a>
+            {limitStats.plan !== 'pro' && (
+              <a href="/pricing" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', display: 'inline-block', marginTop: 4 }}>
+                Upgrade for higher limits →
+              </a>
+            )}
           </div>
         )}
       </div>
