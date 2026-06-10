@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { PLAN_LIMITS, PLAN_LABELS, nextUpgradePlan, type Plan } from '@/lib/planLimits';
 
 export const runtime = 'nodejs';
 
@@ -35,8 +36,6 @@ function getAdmin() {
   );
 }
 
-const FREE_MONTHLY_LIMIT = 30;
-
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -64,7 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Monthly limit check for free users
+  // Per-plan monthly AI limit check
   const month = new Date().toISOString().slice(0, 7); // "YYYY-MM"
   const { data: profile } = await admin
     .from('profiles')
@@ -72,9 +71,10 @@ export async function POST(req: NextRequest) {
     .eq('id', user.id)
     .maybeSingle();
 
-  const isVip  = profile?.is_vip ?? false;
-  const plan   = profile?.plan ?? 'free';
-  const bypass = isVip || plan !== 'free';
+  const isVip       = profile?.is_vip ?? false;
+  const plan        = (profile?.plan ?? 'free') as Plan;
+  // VIP bypasses all limits; every other plan has a specific monthly cap
+  const monthlyLimit = isVip ? Infinity : PLAN_LIMITS[plan].aiRequestsPerMonth;
 
   const { data: usageRow } = await admin
     .from('ai_usage')
@@ -85,9 +85,13 @@ export async function POST(req: NextRequest) {
 
   const currentCount = usageRow?.count ?? 0;
 
-  if (!bypass && currentCount >= FREE_MONTHLY_LIMIT) {
+  if (!isVip && currentCount >= monthlyLimit) {
+    const next = nextUpgradePlan(plan);
+    const upgradeHint = next
+      ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerMonth} requests/month.`
+      : '';
     return NextResponse.json(
-      { error: `Monthly AI limit reached (${FREE_MONTHLY_LIMIT}/${FREE_MONTHLY_LIMIT}). Upgrade to Premium for 300 requests/month.` },
+      { error: `Monthly AI limit reached (${currentCount}/${monthlyLimit} on ${PLAN_LABELS[plan]} plan).${upgradeHint}` },
       { status: 429 },
     );
   }
@@ -116,7 +120,8 @@ export async function POST(req: NextRequest) {
         messages: [{ role: 'user', content: prompt }],
       });
       const raw = (msg.content[0] as { type: string; text: string }).text ?? '[]';
-      if (!bypass) {
+      // Increment counter for all non-VIP plans (fire-and-forget)
+      if (!isVip) {
         admin.from('ai_usage').upsert(
           { user_id: user.id, month, count: currentCount + 1 },
           { onConflict: 'user_id,month' },
@@ -160,8 +165,8 @@ export async function POST(req: NextRequest) {
 
     const result = (message.content[0] as { type: string; text: string }).text ?? '';
 
-    // Increment usage counter (fire-and-forget — don't block the response)
-    if (!bypass) {
+    // Increment counter for all non-VIP plans (fire-and-forget — don't block response)
+    if (!isVip) {
       admin.from('ai_usage').upsert(
         { user_id: user.id, month, count: currentCount + 1 },
         { onConflict: 'user_id,month' },

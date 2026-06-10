@@ -31,6 +31,7 @@ import GlobalSearch from '@/components/GlobalSearch';
 import OnboardingTour, { shouldShowTour } from '@/components/OnboardingTour';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
+import { PLAN_LIMITS, PLAN_LABELS, VOICE_STORAGE_LABELS, nextUpgradePlan } from '@/lib/planLimits';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -2636,65 +2637,79 @@ export default function WorkspacePage() {
       )}
 
       {/* ══ Feature limit modals ══ */}
-      {limitModal && (
-        <div
-          onClick={() => setLimitModal(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1300,
-            background: 'rgba(0,0,0,0.62)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-          }}
-        >
+      {limitModal && (() => {
+        const next       = nextUpgradePlan(userPlan);
+        const nextLabel  = next ? PLAN_LABELS[next] : null;
+        // Titles
+        const titles: Record<typeof limitModal, string> = {
+          documents: `${PLAN_LABELS[userPlan]} plan: document limit reached`,
+          room:      'Study Rooms require Premium or Pro',
+          voice:     `${PLAN_LABELS[userPlan]} plan: voice storage full (${VOICE_STORAGE_LABELS[userPlan]})`,
+        };
+        // Body copy
+        const bodies: Record<typeof limitModal, string> = {
+          documents: `You've reached the ${PLAN_LIMITS[userPlan].documents} document limit on the ${PLAN_LABELS[userPlan]} plan.${next ? ` Upgrade to ${nextLabel} for unlimited documents.` : ''}`,
+          room:      `Real-time study rooms are available on Premium and Pro plans. Free users can still join rooms they're invited to.`,
+          voice:     `You've used all ${VOICE_STORAGE_LABELS[userPlan]} of voice note storage on the ${PLAN_LABELS[userPlan]} plan.${next ? ` Upgrade to ${nextLabel} for ${VOICE_STORAGE_LABELS[next!]} of voice storage.` : ''}`,
+        };
+        return (
           <div
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setLimitModal(null)}
             style={{
-              width: '100%', maxWidth: 400,
-              background: 'var(--bg-panel)',
-              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 8, padding: '28px 28px 24px',
-              display: 'flex', flexDirection: 'column', gap: 14,
+              position: 'fixed', inset: 0, zIndex: 1300,
+              background: 'rgba(0,0,0,0.62)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
             }}
           >
-            <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
-              Free Plan Limit
-            </p>
-            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
-              {limitModal === 'documents' && "You've reached the 3 document limit"}
-              {limitModal === 'room'      && 'Study Rooms are a Premium feature'}
-              {limitModal === 'voice'     && 'Voice note storage full (50 MB limit)'}
-            </p>
-            <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
-              {limitModal === 'documents' && "You've reached the 3 document limit on the Free plan. Upgrade to Premium for unlimited documents."}
-              {limitModal === 'room'      && 'Upgrade to Premium to access real-time collaboration in study rooms. Free users can still join rooms they\'re invited to.'}
-              {limitModal === 'voice'     && 'Upgrade to Premium for 1 GB of voice note storage.'}
-            </p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button
-                onClick={() => setLimitModal(null)}
-                style={{
-                  padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 500,
-                  background: 'var(--bg-elevated)', color: 'var(--text-2)',
-                  border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                Cancel
-              </button>
-              <a
-                href="/pricing"
-                style={{
-                  padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 600,
-                  background: '#ffffff', color: '#0f172a',
-                  border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none',
-                  display: 'inline-flex', alignItems: 'center',
-                }}
-              >
-                Upgrade to Premium
-              </a>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 400,
+                background: 'var(--bg-panel)',
+                backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 8, padding: '28px 28px 24px',
+                display: 'flex', flexDirection: 'column', gap: 14,
+              }}
+            >
+              <p style={{ margin: 0, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+                {PLAN_LABELS[userPlan]} Plan Limit
+              </p>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+                {titles[limitModal]}
+              </p>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                {bodies[limitModal]}
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                <button
+                  onClick={() => setLimitModal(null)}
+                  style={{
+                    padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+                    background: 'var(--bg-elevated)', color: 'var(--text-2)',
+                    border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Cancel
+                </button>
+                {nextLabel && (
+                  <a
+                    href="/pricing"
+                    style={{
+                      padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 600,
+                      background: '#ffffff', color: '#0f172a',
+                      border: 'none', cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none',
+                      display: 'inline-flex', alignItems: 'center',
+                    }}
+                  >
+                    Upgrade to {nextLabel}
+                  </a>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══ Remove document confirmation ══ */}
       {confirmRemoveDocId && (() => {
