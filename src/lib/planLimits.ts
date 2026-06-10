@@ -3,8 +3,8 @@ export type Plan = 'free' | 'premium' | 'pro';
 export const PLAN_LIMITS = {
   free: {
     documents:          3,
-    voiceStorageBytes:  50 * 1024 * 1024,               // 50 MB
-    aiRequestsPerMonth: 30,
+    voiceStorageBytes:  30 * 1024 * 1024,               // 30 MB
+    aiRequestsPerMonth: 15,
     canCreateRooms:     false,
   },
   premium: {
@@ -34,7 +34,7 @@ export const PLAN_LABELS: Record<Plan, string> = {
 };
 
 export const VOICE_STORAGE_LABELS: Record<Plan, string> = {
-  free:    '50 MB',
+  free:    '30 MB',
   premium: '1 GB',
   pro:     '5 GB',
 };
