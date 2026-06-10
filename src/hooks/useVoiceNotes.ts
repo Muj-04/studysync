@@ -3,7 +3,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
-import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle, getTotalVoiceStorageBytes, getProfile } from '@/lib/supabase/db';
+import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle, getTotalVoiceStorageBytes, getProfile, deleteAllVoiceNotesForDocument } from '@/lib/supabase/db';
 
 const VOICE_STORAGE_LIMIT = 50 * 1024 * 1024; // 50 MB
 
@@ -277,6 +277,14 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     [notes]
   );
 
+  const deleteNotesForDocument = useCallback((docId: string) => {
+    setNotes((prev) => {
+      prev.filter((n) => n.documentId === docId).forEach((n) => URL.revokeObjectURL(n.audioUrl));
+      return prev.filter((n) => n.documentId !== docId);
+    });
+    if (userIdRef.current) deleteAllVoiceNotesForDocument(docId);
+  }, []);
+
   // Called from syncDoc after canonical docId is resolved. Adds any remote notes
   // not already in local state (idempotent — duplicate IDs are skipped).
   const seedVoiceNotes = useCallback((remote: Array<{
@@ -310,6 +318,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     startRecording,
     stopRecording,
     deleteNote,
+    deleteNotesForDocument,
     updateNoteTitle,
     getNotesForPage,
     seedVoiceNotes,
