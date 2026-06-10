@@ -257,9 +257,6 @@ export default function FriendsPage() {
           <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {displayN}
           </p>
-          <p style={{ margin: '1px 0 0', fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {u.email}
-          </p>
         </div>
         {status === 'none' && (
           <button onClick={() => handleSendRequest(u.id)} disabled={isPending} style={{ ...primaryBtnStyle, opacity: isPending ? 0.6 : 1, cursor: isPending ? 'not-allowed' : 'pointer' }}>
