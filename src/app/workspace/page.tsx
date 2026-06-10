@@ -1726,7 +1726,7 @@ export default function WorkspacePage() {
       const roomId = crypto.randomUUID();
       const pdfPath = await uploadRoomPdf(roomId, blob, activeDocument.name);
       if (!pdfPath) throw new Error('upload failed');
-      const created = await createRoom(roomId, activeDocument.name, pdfPath);
+      const created = await createRoom(roomId, activeDocument.name, pdfPath, PLAN_LIMITS[userPlan].maxRoomMembers);
       if (!created) throw new Error('createRoom failed');
       setRoomUrl(`${window.location.origin}/room/${roomId}`);
       setRoomModal('done');

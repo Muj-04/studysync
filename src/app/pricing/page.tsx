@@ -38,6 +38,7 @@ const FREE_FEATURES = [
   'Basic drawing tools',
   'AI Summary (15/month)',
   'Solo studying only',
+  'Cannot join or create rooms',
   'Community: view only',
 ];
 
@@ -46,7 +47,7 @@ const PREMIUM_FEATURES = [
   '1 GB voice notes storage',
   'All drawing tools + image annotations',
   'AI (300 requests/month)',
-  'Study Rooms (up to 10 members)',
+  'Study Rooms (up to 5 members)',
   'Friends & invites',
   'Community: post & share',
   'Custom themes & Priority support',
@@ -56,7 +57,7 @@ const PRO_FEATURES = [
   'Everything in Premium',
   '5 GB voice notes storage',
   'AI requests (1,000/month)',
-  'Study Rooms (up to 10 members)',
+  'Study Rooms (up to 20 members)',
   'AI Flashcards & Quiz (coming soon)',
   'Study analytics dashboard',
   'Early access to new features',
@@ -94,9 +95,9 @@ export default function PricingPage() {
 
   // Animated prices
   const premiumPrice = useAnimatedPrice(yearly ? 39    : 4.99);
-  const proPrice     = useAnimatedPrice(yearly ? 79    : 9.99);
+  const proPrice     = useAnimatedPrice(yearly ? 109   : 13.99);
   const premiumSub   = useAnimatedPrice(yearly ? 3.25  : 4.99);
-  const proSub       = useAnimatedPrice(yearly ? 6.58  : 9.99);
+  const proSub       = useAnimatedPrice(yearly ? 9.08  : 13.99);
 
   // Load user plan
   useEffect(() => {
