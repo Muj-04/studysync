@@ -1649,10 +1649,10 @@ export default function WorkspacePage() {
     setConfirmRemoveDocId(docId);
   }, []);
 
-  const executeRemoveDocument = useCallback((docId: string) => {
+  const executeRemoveDocument = useCallback(async (docId: string) => {
     setConfirmRemoveDocId(null);
 
-    // localStorage cleanup
+    // ── localStorage cleanup ────────────────────────────────────────────────
     const drawings = storageGet<Record<string, string>>(KEYS.DRAWINGS) ?? {};
     storageSet(KEYS.DRAWINGS, Object.fromEntries(Object.entries(drawings).filter(([k]) => !k.startsWith(`${docId}:`))));
 
@@ -1667,7 +1667,21 @@ export default function WorkspacePage() {
     const filename = Object.keys(docMap).find((k) => docMap[k] === docId);
     if (filename) { delete docMap[filename]; storageSet(KEYS.DOC_MAP, docMap); }
 
-    // In-memory state cleanup
+    const blankPagesStored = storageGet<Array<{ documentId: string }>>(KEYS.BLANK_PAGES) ?? [];
+    storageSet(KEYS.BLANK_PAGES, blankPagesStored.filter((p) => p.documentId !== docId));
+
+    const voiceNotesStored = storageGet<Array<{ documentId: string }>>(KEYS.VOICE_NOTES) ?? [];
+    storageSet(KEYS.VOICE_NOTES, voiceNotesStored.filter((n) => n.documentId !== docId));
+
+    const pageImagesStored = storageGet<Record<string, unknown>>(KEYS.PAGE_IMAGES) ?? {};
+    delete pageImagesStored[docId];
+    storageSet(KEYS.PAGE_IMAGES, pageImagesStored);
+
+    const keyTermsStored = storageGet<Record<string, unknown>>(KEYS.KEY_TERMS) ?? {};
+    delete keyTermsStored[docId];
+    storageSet(KEYS.KEY_TERMS, keyTermsStored);
+
+    // ── In-memory state cleanup ─────────────────────────────────────────────
     setPageTextNotes((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${docId}:`))));
     setBookmarks((prev) => prev.filter((b) => b.documentId !== docId));
     deleteNotesForDocument(docId);
@@ -1675,11 +1689,19 @@ export default function WorkspacePage() {
     clearAllDrawings(docId);
     removePageImagesForDocument(docId);
 
-    // Supabase cleanup (fire-and-forget; voice note storage files require auth)
-    if (userIdRef.current) deleteAllDataForDocument(docId);
-
+    // Remove from document list — usePDF auto-switches active doc to the next one (or null)
     removeDocument(docId);
-  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument]);
+    showToast('Document deleted successfully.');
+
+    // ── Supabase cleanup (background; errors are non-fatal since local state is clean) ──
+    if (userIdRef.current) {
+      try {
+        await deleteAllDataForDocument(docId);
+      } catch (err) {
+        console.error('[Delete] Supabase cleanup failed:', err);
+      }
+    }
+  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast]);
 
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';
