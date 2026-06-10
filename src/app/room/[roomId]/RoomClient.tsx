@@ -135,7 +135,7 @@ function VoiceWaveform({ speaking, size = 10 }: { speaking: boolean; size?: numb
 // ── Toolbar primitives ────────────────────────────────────────────────────────
 
 function Divider() {
-  return <div style={{ width: 1, height: 22, background: 'var(--border)', flexShrink: 0 }} />;
+  return <div style={{ width: 1, height: 22, background: '#333333', flexShrink: 0 }} />;
 }
 
 function ToolBtn({
@@ -154,15 +154,15 @@ function ToolBtn({
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: 30, padding: '0 9px', gap: 5,
         borderRadius: 4, fontSize: 12, fontWeight: 500,
-        background: active ? 'var(--accent)' : 'var(--bg-elevated)',
-        color: active ? '#fff' : 'var(--text-2)',
-        border: `1px solid ${active ? 'transparent' : 'var(--border)'}`,
+        background: active ? '#3a3a3a' : '#222222',
+        color: '#ffffff',
+        border: `1px solid ${active ? '#555555' : '#333333'}`,
         cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+        transition: 'background 0.12s, border-color 0.12s',
         whiteSpace: 'nowrap',
       }}
-      onMouseOver={(e) => { if (!active) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' }); }}
-      onMouseOut={(e)  => { if (!active) Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' }); }}
+      onMouseOver={(e) => { if (!active) Object.assign(e.currentTarget.style, { background: '#2a2a2a', borderColor: '#444444' }); }}
+      onMouseOut={(e)  => { if (!active) Object.assign(e.currentTarget.style, { background: '#222222', borderColor: '#333333' }); }}
     >
       {children}
     </button>
@@ -185,15 +185,15 @@ function IconBtn({
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         width: 30, height: 30, borderRadius: 4,
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        color: disabled ? 'var(--text-3)' : 'var(--text-2)',
+        background: '#222222',
+        border: '1px solid #333333',
+        color: disabled ? '#555555' : '#ffffff',
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1, flexShrink: 0,
-        transition: 'background 0.12s, color 0.12s',
+        transition: 'background 0.12s',
       }}
-      onMouseOver={(e) => { if (!disabled) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' }); }}
-      onMouseOut={(e)  => { if (!disabled) Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' }); }}
+      onMouseOver={(e) => { if (!disabled) Object.assign(e.currentTarget.style, { background: '#2a2a2a' }); }}
+      onMouseOut={(e)  => { if (!disabled) Object.assign(e.currentTarget.style, { background: '#222222' }); }}
     >
       {children}
     </button>
@@ -912,10 +912,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       {/* ── Drawing toolbar ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 14px', borderBottom: '1px solid rgba(255,255,255,0.15)',
-        background: 'rgba(20,20,20,0.95)',
+        padding: '6px 14px', borderBottom: '1px solid #333333',
+        background: '#1a1a1a',
         backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
         flexShrink: 0, flexWrap: 'wrap',
         rowGap: 6,
       }}>

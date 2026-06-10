@@ -22,7 +22,7 @@ function Sep() {
   return (
     <div style={{
       width: 1, height: 24,
-      background: 'var(--border)',
+      background: '#333333',
       flexShrink: 0, margin: '0 3px',
     }} />
   );
@@ -42,21 +42,21 @@ function ToolBtn({
         display: 'flex', alignItems: 'center', gap: 5,
         height: 30, padding: '0 9px',
         borderRadius: 4, flexShrink: 0,
-        border: `1px solid ${active ? 'var(--border-strong)' : 'transparent'}`,
-        background: active ? 'var(--bg-active)' : 'transparent',
-        color: active ? 'var(--text-1)' : 'var(--text-2)',
+        border: `1px solid ${active ? '#555555' : 'transparent'}`,
+        background: active ? '#3a3a3a' : 'transparent',
+        color: '#ffffff',
         cursor: 'pointer', fontFamily: 'inherit',
         fontSize: 12, fontWeight: 500,
-        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+        transition: 'background 0.12s, border-color 0.12s',
       }}
       onMouseOver={(e) => {
         if (!active) Object.assign(e.currentTarget.style, {
-          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+          background: '#2a2a2a', borderColor: '#444444',
         });
       }}
       onMouseOut={(e) => {
         if (!active) Object.assign(e.currentTarget.style, {
-          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+          background: 'transparent', borderColor: 'transparent',
         });
       }}
     >
@@ -69,13 +69,13 @@ export default function AnnotationBar({
   isOpen, onToggle, tool, setTool, penType, setPenType,
   color, setColor, strokeSize, setStrokeSize, onClear,
 }: Props) {
-  const previewColor = tool === 'eraser' ? 'var(--text-3)' : color;
+  const previewColor = tool === 'eraser' ? '#888888' : color;
 
   return (
     <div style={{
-      background: 'rgba(20,20,20,0.95)',
-      borderTop: '1px solid rgba(255,255,255,0.15)',
-      boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
+      background: '#1a1a1a',
+      borderTop: '1px solid #333333',
+      boxShadow: '0 -4px 24px rgba(0,0,0,0.6)',
       flexShrink: 0,
       userSelect: 'none',
     }}>
@@ -91,19 +91,19 @@ export default function AnnotationBar({
         <Pencil
           size={11}
           style={{
-            color: isOpen ? 'var(--violet)' : 'var(--text-3)',
+            color: isOpen ? '#7c3aed' : '#888888',
             transition: 'color 0.18s', flexShrink: 0,
           }}
         />
         <span style={{
           flex: 1, fontSize: 10.5, fontWeight: 600,
           letterSpacing: '0.07em', textTransform: 'uppercase',
-          color: 'var(--text-2)',
+          color: '#cccccc',
         }}>
           Annotation Tools
         </span>
         {!isOpen && (
-          <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+          <span style={{ fontSize: 10.5, color: '#888888' }}>
             {tool === 'eraser'
               ? 'Eraser'
               : `${penType.charAt(0).toUpperCase()}${penType.slice(1)}`}
@@ -112,7 +112,7 @@ export default function AnnotationBar({
         <ChevronUp
           size={13}
           style={{
-            color: 'var(--text-3)', flexShrink: 0,
+            color: '#888888', flexShrink: 0,
             transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
           }}
@@ -128,7 +128,7 @@ export default function AnnotationBar({
           : 'max-height 0.18s cubic-bezier(0.4,0,1,1)',
       }}>
         <div style={{
-          borderTop: '1px solid var(--border)',
+          borderTop: '1px solid #333333',
           height: 52, display: 'flex', alignItems: 'center',
           padding: '0 10px', gap: 3, overflowX: 'auto',
         }}>
@@ -171,7 +171,7 @@ export default function AnnotationBar({
                 background: c, border: 'none',
                 cursor: 'pointer', flexShrink: 0,
                 outline: color === c && tool !== 'eraser'
-                  ? '2px solid var(--accent-hover)'
+                  ? '2px solid #3b82f6'
                   : '1.5px solid transparent',
                 outlineOffset: 2,
                 transform: color === c && tool !== 'eraser' ? 'scale(1.2)' : 'scale(1)',
@@ -186,9 +186,9 @@ export default function AnnotationBar({
             title="Custom color"
             style={{
               width: 18, height: 18,
-              border: '1px solid var(--border-strong)',
+              border: '1px solid #555555',
               borderRadius: 3, padding: 0,
-              cursor: 'pointer', background: 'var(--bg-input)',
+              cursor: 'pointer', background: '#2a2a2a',
             }}
           />
 
@@ -206,13 +206,13 @@ export default function AnnotationBar({
               display: 'flex', alignItems: 'center', gap: 5,
               height: 30, padding: '0 10px', borderRadius: 4, flexShrink: 0,
               border: '1px solid transparent',
-              background: 'transparent', color: 'var(--red)',
+              background: 'transparent', color: '#ef4444',
               cursor: 'pointer', fontSize: 12, fontWeight: 500,
               fontFamily: 'inherit',
               transition: 'background 0.12s, border-color 0.12s',
             }}
             onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-              background: 'var(--red-muted)', borderColor: 'rgba(229,72,77,.2)',
+              background: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)',
             })}
             onMouseOut={(e) => Object.assign(e.currentTarget.style, {
               background: 'transparent', borderColor: 'transparent',

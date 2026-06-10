@@ -28,22 +28,22 @@ function ToolRow({
         display: 'flex', alignItems: 'center', gap: 10,
         width: '100%', height: 32, padding: '0 8px',
         borderRadius: 4,
-        border: `1px solid ${active ? 'var(--border-strong)' : 'transparent'}`,
-        background: active ? 'var(--bg-active)' : 'transparent',
-        color: active ? 'var(--text-1)' : 'var(--text-2)',
+        border: `1px solid ${active ? '#555555' : 'transparent'}`,
+        background: active ? '#3a3a3a' : 'transparent',
+        color: '#ffffff',
         cursor: 'pointer', fontFamily: 'inherit',
         fontSize: 12.5, fontWeight: active ? 500 : 400,
         textAlign: 'left',
-        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+        transition: 'background 0.12s, border-color 0.12s',
       }}
       onMouseOver={(e) => {
         if (!active) Object.assign(e.currentTarget.style, {
-          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+          background: '#2a2a2a', borderColor: '#444444',
         });
       }}
       onMouseOut={(e) => {
         if (!active) Object.assign(e.currentTarget.style, {
-          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+          background: 'transparent', borderColor: 'transparent',
         });
       }}
     >
@@ -56,7 +56,7 @@ function ToolRow({
 }
 
 function Hr() {
-  return <div style={{ height: 1, background: 'var(--border)', margin: '2px 8px' }} />;
+  return <div style={{ height: 1, background: '#333333', margin: '2px 8px' }} />;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -64,7 +64,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <span style={{
       fontSize: 9.5, fontWeight: 600,
       textTransform: 'uppercase', letterSpacing: '0.08em',
-      color: 'var(--text-3)', display: 'block',
+      color: '#888888', display: 'block',
     }}>
       {children}
     </span>
@@ -305,7 +305,7 @@ export default function FloatingAnnotationToolbar({
       {/* ── Expanding panel ── */}
       {isOpen && (
         <div
-          className="animate-scale-in glass"
+          className="animate-scale-in"
           style={{
             position: 'absolute',
             ...panelEdge,
@@ -313,28 +313,29 @@ export default function FloatingAnnotationToolbar({
             width: PANEL_W,
             borderRadius: 4,
             transformOrigin,
-            border: '1px solid rgba(255,255,255,0.15)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+            background: '#1a1a1a',
+            border: '1px solid #333333',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
           }}
         >
           {/* Header */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '10px 12px 8px',
-            borderBottom: '1px solid var(--border)',
+            borderBottom: '1px solid #333333',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Pencil size={11} style={{ color: 'var(--violet)' }} />
+              <Pencil size={11} style={{ color: '#7c3aed' }} />
               <span style={{
                 fontSize: 10.5, fontWeight: 600, letterSpacing: '0.07em',
-                textTransform: 'uppercase', color: 'var(--text-2)',
+                textTransform: 'uppercase', color: '#cccccc',
               }}>
                 Annotate
               </span>
               {splitMode && onSwitchSide && (
                 <div style={{
                   display: 'flex', gap: 1,
-                  background: 'var(--bg-elevated)',
+                  background: '#2a2a2a',
                   borderRadius: 4, padding: 2, marginLeft: 4,
                 }}>
                   {(['left', 'right'] as const).map((side) => (
@@ -344,9 +345,9 @@ export default function FloatingAnnotationToolbar({
                       style={{
                         width: 22, height: 18,
                         borderRadius: 3, fontSize: 9.5, fontWeight: 700,
-                        background: activeSide === side ? 'var(--bg-active)' : 'transparent',
-                        border: `1px solid ${activeSide === side ? 'var(--border-strong)' : 'transparent'}`,
-                        color: activeSide === side ? 'var(--text-1)' : 'var(--text-3)',
+                        background: activeSide === side ? '#3a3a3a' : 'transparent',
+                        border: `1px solid ${activeSide === side ? '#555555' : 'transparent'}`,
+                        color: activeSide === side ? '#ffffff' : '#888888',
                         cursor: 'pointer', fontFamily: 'inherit', textTransform: 'uppercase',
                         transition: 'background 0.12s, color 0.12s',
                       }}
@@ -363,14 +364,14 @@ export default function FloatingAnnotationToolbar({
                 width: 22, height: 22,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 borderRadius: 4, background: 'transparent', border: '1px solid transparent',
-                color: 'var(--text-3)', cursor: 'pointer',
+                color: '#888888', cursor: 'pointer',
                 transition: 'background 0.12s, color 0.12s, border-color 0.12s',
               }}
               onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+                background: '#2a2a2a', color: '#ffffff', borderColor: '#444444',
               })}
               onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                background: 'transparent', color: 'var(--text-3)', borderColor: 'transparent',
+                background: 'transparent', color: '#888888', borderColor: 'transparent',
               })}
             >
               <X size={12} />
@@ -444,7 +445,7 @@ export default function FloatingAnnotationToolbar({
                     width: 20, height: 20, borderRadius: '50%', background: c,
                     border: 'none', cursor: 'pointer', flexShrink: 0,
                     outline: color === c && tool !== 'eraser'
-                      ? '2px solid var(--accent-hover)' : '1.5px solid transparent',
+                      ? '2px solid #3b82f6' : '1.5px solid transparent',
                     outlineOffset: 2,
                     transform: color === c && tool !== 'eraser' ? 'scale(1.18)' : 'scale(1)',
                     transition: 'transform 0.12s',
@@ -458,8 +459,8 @@ export default function FloatingAnnotationToolbar({
                 title="Custom color"
                 style={{
                   width: 20, height: 20,
-                  border: '1px solid var(--border-strong)',
-                  borderRadius: 4, background: 'var(--bg-input)',
+                  border: '1px solid #555555',
+                  borderRadius: 4, background: '#2a2a2a',
                   padding: 0, cursor: 'pointer',
                 }}
               />
@@ -486,15 +487,15 @@ export default function FloatingAnnotationToolbar({
                 width: '100%', height: 30,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 borderRadius: 4, border: '1px solid transparent',
-                background: 'transparent', color: 'var(--text-2)',
+                background: 'transparent', color: '#ffffff',
                 cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
-                transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                transition: 'background 0.12s, border-color 0.12s',
               }}
               onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
+                background: '#2a2a2a', borderColor: '#444444',
               })}
               onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
+                background: 'transparent', borderColor: 'transparent',
               })}
             >
               <Undo2 size={12} />
@@ -506,12 +507,12 @@ export default function FloatingAnnotationToolbar({
                 width: '100%', height: 30,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 borderRadius: 4, border: '1px solid transparent',
-                background: 'transparent', color: 'var(--red)',
+                background: 'transparent', color: '#ef4444',
                 cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
                 transition: 'background 0.12s, border-color 0.12s',
               }}
               onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                background: 'var(--red-muted)', borderColor: 'rgba(229,72,77,.2)',
+                background: 'rgba(239,68,68,0.15)', borderColor: 'rgba(239,68,68,0.3)',
               })}
               onMouseOut={(e) => Object.assign(e.currentTarget.style, {
                 background: 'transparent', borderColor: 'transparent',
@@ -530,10 +531,10 @@ export default function FloatingAnnotationToolbar({
           position: 'absolute',
           bottom: BTN + 10,
           left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(15,15,15,0.95)',
-          border: '1px solid rgba(255,255,255,0.15)',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
-          color: 'var(--text-1)',
+          background: '#1a1a1a',
+          border: '1px solid #333333',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
+          color: '#ffffff',
           fontSize: 11.5, fontWeight: 500,
           whiteSpace: 'nowrap',
           padding: '5px 11px',
@@ -549,7 +550,7 @@ export default function FloatingAnnotationToolbar({
             width: 0, height: 0,
             borderLeft: '5px solid transparent',
             borderRight: '5px solid transparent',
-            borderTop: '5px solid var(--border)',
+            borderTop: '5px solid #333333',
           }} />
         </div>
       )}
@@ -566,13 +567,14 @@ export default function FloatingAnnotationToolbar({
           zIndex: 2,
         }}>
           <div style={{
-            background: 'rgba(15,15,15,0.9)',
-            color: '#fff',
+            background: '#1a1a1a',
+            color: '#ffffff',
             padding: '6px 13px',
             borderRadius: 4,
             fontSize: 12.5, fontWeight: 600,
             whiteSpace: 'nowrap',
-            border: '1px solid rgba(255,255,255,0.1)',
+            border: '1px solid #333333',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
           }}>
             Tap to annotate
           </div>
@@ -581,7 +583,7 @@ export default function FloatingAnnotationToolbar({
             width: 0, height: 0,
             borderTop: '7px solid transparent',
             borderBottom: '7px solid transparent',
-            borderLeft: '9px solid rgba(15,15,15,0.9)',
+            borderLeft: '9px solid #1a1a1a',
             flexShrink: 0,
           }} />
         </div>
@@ -599,19 +601,19 @@ export default function FloatingAnnotationToolbar({
             display: 'flex',
             alignItems: 'center',
             gap: 5,
-            background: 'rgba(15,15,15,0.95)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: '#1a1a1a',
+            border: '1px solid #333333',
             borderRadius: 4,
             padding: '4px 9px 4px 7px',
             whiteSpace: 'nowrap',
           }}
         >
           {tool === 'cursor' ? (
-            <MousePointer size={11} style={{ color: 'rgba(200,200,200,0.85)', flexShrink: 0 }} />
+            <MousePointer size={11} style={{ color: '#ffffff', flexShrink: 0 }} />
           ) : tool === 'eraser' ? (
-            <Eraser size={11} style={{ color: 'rgba(200,200,200,0.85)', flexShrink: 0 }} />
+            <Eraser size={11} style={{ color: '#ffffff', flexShrink: 0 }} />
           ) : tool === 'text' ? (
-            <Type size={11} style={{ color: 'rgba(200,200,200,0.85)', flexShrink: 0 }} />
+            <Type size={11} style={{ color: '#ffffff', flexShrink: 0 }} />
           ) : tool === 'line' ? (
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none"
               stroke={color} strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
@@ -625,7 +627,7 @@ export default function FloatingAnnotationToolbar({
           )}
           <span style={{
             fontSize: 11, fontWeight: 500,
-            color: 'rgba(226,226,226,0.9)',
+            color: '#ffffff',
           }}>
             {tool === 'cursor' ? 'Cursor'
               : tool === 'eraser' ? 'Eraser'
@@ -651,9 +653,9 @@ export default function FloatingAnnotationToolbar({
           position: 'absolute',
           inset: 0,
           borderRadius: '50%',
-          border: `1.5px solid ${isOpen ? 'rgba(37,99,235,.6)' : 'var(--border-strong)'}`,
-          background: isOpen ? 'var(--accent-muted)' : 'var(--bg-elevated)',
-          color: isOpen ? 'var(--accent-hover)' : 'var(--text-1)',
+          border: `1.5px solid ${isOpen ? 'rgba(59,130,246,0.6)' : '#555555'}`,
+          background: isOpen ? '#1e3a5f' : '#222222',
+          color: isOpen ? '#60a5fa' : '#ffffff',
           cursor: isDragging ? 'grabbing' : 'grab',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           // Pulse only when closed and not being dragged
