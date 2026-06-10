@@ -64,6 +64,31 @@ export async function deleteDocument(docId: string) {
   await sb().from('documents').delete().eq('id', docId);
 }
 
+export async function deleteAllVoiceNotesForDocument(docId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const { data } = await sb().from('voice_notes').select('id').match({ user_id: uid, document_id: docId });
+  if (data?.length) {
+    const exts = ['webm', 'ogg', 'mp4'];
+    const paths = data.flatMap((r) => exts.map((e) => `${uid}/${docId}/${r.id}.${e}`));
+    await sb().storage.from('voice-notes').remove(paths);
+    await sb().from('voice_notes').delete().match({ user_id: uid, document_id: docId });
+  }
+}
+
+export async function deleteAllDataForDocument(docId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  await deleteAllVoiceNotesForDocument(docId);
+  await Promise.all([
+    sb().from('drawings').delete().match({ user_id: uid, document_id: docId }),
+    sb().from('text_notes').delete().match({ user_id: uid, document_id: docId }),
+    sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId }),
+    sb().from('key_terms').delete().match({ user_id: uid, document_id: docId }),
+    sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId }),
+    sb().from('page_image_annotations').delete().match({ user_id: uid, document_id: docId }),
+  ]);
+  await sb().from('documents').delete().eq('id', docId);
+}
+
 // ── Library ───────────────────────────────────────────────────────────────────
 
 export interface LibraryDocument {

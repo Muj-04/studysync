@@ -50,6 +50,7 @@ import {
   loadDocumentOrder,
   getProfile,
   createCommunityPost,
+  deleteAllDataForDocument,
 } from '@/lib/supabase/db';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
@@ -979,16 +980,17 @@ export default function WorkspacePage() {
   const {
     notes: voiceNotes,
     isRecording, recordingDuration, recordingContext,
-    startRecording, stopRecording, deleteNote, updateNoteTitle, getNotesForPage,
+    startRecording, stopRecording, deleteNote, deleteNotesForDocument,
+    updateNoteTitle, getNotesForPage,
     seedVoiceNotes,
   } = useVoiceNotes({ onStorageLimitReached: () => setLimitModal('voice') });
   const {
     insertBlankPage, removeBlankPage,
     updateCanvasData, updateImages, updateBgTheme, getBlankPagesForDocument,
-    seedBlankPages,
+    seedBlankPages, removePagesForDocument,
   } = useBlankPages();
   const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
-  const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, allPageImages } = usePDFPageImages();
+  const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages } = usePDFPageImages();
   useStudySession(activeDocumentId, userId);
 
   // ── Document order ────────────────────────────────────────────────────────
@@ -1636,6 +1638,45 @@ export default function WorkspacePage() {
     if (anyRestored) showToast('Welcome back! Your notes have been restored.');
   }, [addDocument, showToast, documents, isVip, userPlan]);
 
+  // ── Remove document (with confirmation) ──────────────────────────────────
+  const [confirmRemoveDocId, setConfirmRemoveDocId] = useState<string | null>(null);
+
+  const handleRemoveDocument = useCallback((docId: string) => {
+    setConfirmRemoveDocId(docId);
+  }, []);
+
+  const executeRemoveDocument = useCallback((docId: string) => {
+    setConfirmRemoveDocId(null);
+
+    // localStorage cleanup
+    const drawings = storageGet<Record<string, string>>(KEYS.DRAWINGS) ?? {};
+    storageSet(KEYS.DRAWINGS, Object.fromEntries(Object.entries(drawings).filter(([k]) => !k.startsWith(`${docId}:`))));
+
+    const textNotes = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES) ?? {};
+    storageSet(KEYS.TEXT_NOTES, Object.fromEntries(Object.entries(textNotes).filter(([k]) => !k.startsWith(`${docId}:`))));
+
+    const storedBMs = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
+    delete storedBMs[docId];
+    storageSet(KEYS.BOOKMARKS, storedBMs);
+
+    const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
+    const filename = Object.keys(docMap).find((k) => docMap[k] === docId);
+    if (filename) { delete docMap[filename]; storageSet(KEYS.DOC_MAP, docMap); }
+
+    // In-memory state cleanup
+    setPageTextNotes((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${docId}:`))));
+    setBookmarks((prev) => prev.filter((b) => b.documentId !== docId));
+    deleteNotesForDocument(docId);
+    removePagesForDocument(docId);
+    clearAllDrawings(docId);
+    removePageImagesForDocument(docId);
+
+    // Supabase cleanup (fire-and-forget; voice note storage files require auth)
+    if (userIdRef.current) deleteAllDataForDocument(docId);
+
+    removeDocument(docId);
+  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument]);
+
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';
   const isPPTX       = activeDocument?.type === 'pptx';
@@ -2150,7 +2191,7 @@ export default function WorkspacePage() {
               virtualPages={virtualSequence}
               currentVirtualIndex={virtualIndex}
               onSelectDocument={setActiveDocument}
-              onRemoveDocument={removeDocument}
+              onRemoveDocument={handleRemoveDocument}
               onNavigate={setVirtualIndex}
               bookmarks={bookmarks}
               onRemoveBookmark={handleRemoveBookmark}
@@ -2628,6 +2669,62 @@ export default function WorkspacePage() {
           </div>
         </div>
       )}
+
+      {/* ══ Remove document confirmation ══ */}
+      {confirmRemoveDocId && (() => {
+        const docToRemove = documents.find((d) => d.id === confirmRemoveDocId);
+        return (
+          <div
+            onClick={() => setConfirmRemoveDocId(null)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 1350,
+              background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%', maxWidth: 380,
+                background: 'var(--bg-panel)',
+                backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 8, padding: '24px 24px 20px',
+                display: 'flex', flexDirection: 'column', gap: 14,
+              }}
+            >
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+                Remove &ldquo;{docToRemove?.name ?? 'this document'}&rdquo;?
+              </p>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                This will permanently delete all notes, drawings, bookmarks, and voice notes for this document. This action cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                <button
+                  onClick={() => setConfirmRemoveDocId(null)}
+                  style={{
+                    padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+                    background: 'transparent', color: 'var(--text-2)',
+                    border: '1px solid var(--border-strong)', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => executeRemoveDocument(confirmRemoveDocId)}
+                  style={{
+                    padding: '7px 16px', borderRadius: 4, fontSize: 13, fontWeight: 600,
+                    background: 'var(--red, #ef4444)', color: '#fff',
+                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══ Study Room modal ══ */}
       {roomModal !== 'idle' && (

@@ -91,5 +91,16 @@ export function usePDFPageImages() {
     });
   }, [ensureUserId]);
 
-  return { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, allPageImages, fetchAllPageImages };
+  const removePageImagesForDocument = useCallback((docId: string) => {
+    setAllPageImages((prev) => {
+      const next = { ...prev };
+      delete next[docId];
+      const stored = storageGet<Record<string, unknown>>(KEYS.PAGE_IMAGES) ?? {};
+      delete stored[docId];
+      storageSet(KEYS.PAGE_IMAGES, stored);
+      return next;
+    });
+  }, []);
+
+  return { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages, fetchAllPageImages };
 }
