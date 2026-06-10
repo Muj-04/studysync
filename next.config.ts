@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const securityHeaders = [
   { key: 'X-Frame-Options',              value: 'DENY' },
@@ -24,4 +25,13 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Suppress Sentry CLI output unless on CI
+  silent: !process.env.CI,
+  // Don't upload source maps (requires SENTRY_AUTH_TOKEN)
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  // Disable automatic instrumentation of Vercel cron monitors
+  automaticVercelMonitors: false,
+  // Disable Sentry telemetry
+  telemetry: false,
+});

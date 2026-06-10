@@ -192,13 +192,20 @@ const ScrollPageItem = memo(function ScrollPageItem({
   const drawCanvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  // nearViewport: true when within 2000px of viewport — drives virtualization
+  const [nearViewport, setNearViewport] = useState(false);
   const [cssDims, setCssDims] = useState<{ w: number; h: number } | null>(null);
+  // Ref mirrors cssDims so the IO callback can read it without stale closure
+  const cssDimsRef = useRef<{ w: number; h: number } | null>(null);
   const renderKeyRef = useRef(0);
 
   // Drawing state
   const isDrawing = useRef(false);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
   const canvasDimsRef = useRef<{ w: number; h: number } | null>(null);
+
+  // Keep cssDimsRef in sync
+  useEffect(() => { cssDimsRef.current = cssDims; }, [cssDims]);
 
   // Register in parent scroll-tracking map
   useEffect(() => {
@@ -208,7 +215,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
     return () => { pageRefsMap.delete(index); };
   }, [index, pageRefsMap]);
 
-  // Lazy-load via IntersectionObserver
+  // Initial lazy-load observer — triggers first render when within 600px
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return;
@@ -220,9 +227,30 @@ const ScrollPageItem = memo(function ScrollPageItem({
     return () => obs.disconnect();
   }, []);
 
-  // PDF render — DPR baked into viewport scale (correct, matches PDFViewer.tsx)
+  // Virtualization observer — pages > 2000px away become lightweight placeholders
+  // Only virtualizes once height is known (prevents layout shifts from unknown heights)
   useEffect(() => {
-    if (!visible || vp.type !== 'pdf') return;
+    const el = outerRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setNearViewport(true);
+        } else if (cssDimsRef.current || vp.type === 'blank') {
+          setNearViewport(false);
+        }
+      },
+      { rootMargin: '2000px' },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  // vp.type is stable per page; re-running on type change is intentional
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vp.type]);
+
+  // PDF render — nearViewport added so pages re-render when returning to window
+  useEffect(() => {
+    if (!visible || !nearViewport || vp.type !== 'pdf') return;
     const canvas = canvasRef.current;
     if (!canvas || containerWidth < 10) return;
     const key = ++renderKeyRef.current;
@@ -266,11 +294,11 @@ const ScrollPageItem = memo(function ScrollPageItem({
         }
       } catch { /* cancelled or PDF error */ }
     })();
-  }, [visible, vp, document.url, containerWidth, zoom]);
+  }, [visible, nearViewport, vp, document.url, containerWidth, zoom]);
 
-  // Drawing canvas setup — runs when PDF CSS dims change (zoom/resize/first render)
+  // Drawing canvas setup — nearViewport added so drawings reload when returning to window
   useEffect(() => {
-    if (vp.type !== 'pdf' || !cssDims) return;
+    if (vp.type !== 'pdf' || !cssDims || !nearViewport) return;
     const drawCanvas = drawCanvasRef.current;
     if (!drawCanvas) return;
     const dpr = window.devicePixelRatio || 1;
@@ -291,7 +319,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
     isDrawing.current = false;
     lastPos.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cssDims?.w, cssDims?.h, vp.type]);
+  }, [cssDims?.w, cssDims?.h, vp.type, nearViewport]);
 
   const getPos = (e: { clientX: number; clientY: number }) => {
     const dims = canvasDimsRef.current;
@@ -352,6 +380,23 @@ const ScrollPageItem = memo(function ScrollPageItem({
   const pageW = containerWidth * zoom;
   const pageH = cssDims?.h ?? pageW * 1.414;
   const shadow = '0 2px 16px rgba(0,0,0,0.45)';
+
+  // Lightweight placeholder for pages far outside the viewport
+  // Only used after height is established to prevent layout shifts
+  const isVirtualized = !nearViewport && (vp.type === 'blank' || cssDims !== null);
+  if (isVirtualized) {
+    const vh = vp.type === 'blank' ? pageW * 1.414 : cssDims!.h;
+    const bg = vp.type === 'blank'
+      ? (vp.blankPage.bgTheme === 'dark' ? '#1e1e2e' : '#ffffff')
+      : '#fff';
+    return (
+      <div ref={outerRef} style={{
+        position: 'relative', width: pageW, height: vh,
+        borderRadius: 4, boxShadow: shadow, flexShrink: 0,
+        background: bg,
+      }} />
+    );
+  }
 
   if (vp.type === 'blank') {
     const isDark = vp.blankPage.bgTheme === 'dark';
@@ -472,7 +517,9 @@ export default function PDFScrollViewer({
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
   const [containerWidth, setContainerWidth] = useState(600);
   const programmaticRef = useRef(false);
-  const lastUserScrollRef = useRef(0);
+  // Tracks last index reported via user scroll — prevents feedback loop where
+  // onScroll → onPageChange → currentVirtualIndex → programmatic scroll back
+  const lastScrollReportedIdxRef = useRef(currentVirtualIndex);
   const mountedRef = useRef(false);
   const initialIndexRef = useRef(currentVirtualIndex);
 
@@ -503,14 +550,20 @@ export default function PDFScrollViewer({
   }, []);
 
   // External index change (nav buttons / thumbnails) → smooth scroll
+  // Skipped when currentVirtualIndex matches what the user already scrolled to,
+  // preventing the feedback loop: user scroll → index update → scroll-back jitter
   useEffect(() => {
     if (!mountedRef.current) return;
-    if (Date.now() - lastUserScrollRef.current < 400) return;
+    if (currentVirtualIndex === lastScrollReportedIdxRef.current) return;
     const el = pageRefsMap.current.get(currentVirtualIndex);
     if (!el || !containerRef.current) return;
     programmaticRef.current = true;
     containerRef.current.scrollTo({ top: Math.max(0, el.offsetTop - 24), behavior: 'smooth' });
-    const t = setTimeout(() => { programmaticRef.current = false; }, 900);
+    const t = setTimeout(() => {
+      programmaticRef.current = false;
+      // Sync ref so subsequent user scrolls from this position don't re-trigger
+      lastScrollReportedIdxRef.current = currentVirtualIndex;
+    }, 900);
     return () => clearTimeout(t);
   }, [currentVirtualIndex]);
 
@@ -519,7 +572,6 @@ export default function PDFScrollViewer({
     if (programmaticRef.current) return;
     const container = containerRef.current;
     if (!container) return;
-    lastUserScrollRef.current = Date.now();
     const viewMid = container.scrollTop + container.clientHeight / 2;
     let bestIdx = 0;
     let bestDist = Infinity;
@@ -528,7 +580,11 @@ export default function PDFScrollViewer({
       const dist = Math.abs(elMid - viewMid);
       if (dist < bestDist) { bestDist = dist; bestIdx = idx; }
     });
-    onPageChange(bestIdx);
+    // Only report if index actually changed — prevents redundant parent re-renders
+    if (bestIdx !== lastScrollReportedIdxRef.current) {
+      lastScrollReportedIdxRef.current = bestIdx;
+      onPageChange(bestIdx);
+    }
   }, [onPageChange]);
 
   return (

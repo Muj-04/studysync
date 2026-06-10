@@ -50,6 +50,7 @@ if(sc){r.style.setProperty('--bg-panel',sc);r.style.setProperty('--bg-sidebar',s
 var FF={'default':"'Geist','Inter',system-ui,sans-serif",'serif':"Georgia,'Times New Roman',serif",'mono':"'JetBrains Mono','Fira Code',Consolas,monospace"};
 var ff=g('studysync_font_family');
 if(ff&&FF[ff])r.style.setProperty('--font-body',FF[ff]);
+var ln=g('studysync_language');if(ln==='ar'){r.setAttribute('lang','ar');r.setAttribute('dir','rtl');}
 }catch(e){}` }} />
         {/* Geist — primary UI font */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
