@@ -103,6 +103,15 @@ export function useBlankPages() {
     if (docId) syncDoc(docId);
   }, [persist, syncDoc]);
 
+  const removePagesForDocument = useCallback((docId: string) => {
+    setBlankPages((prev) => {
+      const next = prev.filter((p) => p.documentId !== docId);
+      blankPagesRef.current = next;
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
   const getBlankPagesForDocument = useCallback(
     (documentId: string): BlankPage[] => blankPages.filter((p) => p.documentId === documentId),
     [blankPages]
@@ -125,6 +134,7 @@ export function useBlankPages() {
   return {
     insertBlankPage,
     removeBlankPage,
+    removePagesForDocument,
     updateCanvasData,
     updateImages,
     updateBgTheme,
