@@ -64,6 +64,10 @@ var ln=g('studysync_language');if(ln==='ar'){r.setAttribute('lang','ar');r.setAt
           rel="stylesheet"
           href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css"
         />
+        {/* PWA */}
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#0f0f0f" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="min-h-full flex flex-col antialiased">
         {/* Brick-wall background — visible on login page only */}
