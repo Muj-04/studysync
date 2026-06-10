@@ -30,7 +30,8 @@ import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
 import type { DrawingCanvasHandle as BlankCanvasHandle } from '@/components/BlankPageCanvas';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
-import { PRESET_COLORS, SIZES } from '@/lib/drawing';
+import { PRESET_COLORS } from '@/lib/drawing';
+import DragScrubber from '@/components/DragScrubber';
 import type { Tool, PenType } from '@/lib/drawing';
 import type { BlankPage } from '@/types';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
@@ -996,18 +997,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         <Divider />
 
         {/* ── Stroke size ── */}
-        <div style={{ display: 'flex', gap: 3 }}>
-          {SIZES.map(({ label, value }) => (
-            <ToolBtn
-              key={value}
-              active={strokeSize === value}
-              onClick={() => setStrokeSize(value)}
-              title={`Size ${label}`}
-            >
-              {label}
-            </ToolBtn>
-          ))}
-        </div>
+        <DragScrubber value={strokeSize} onChange={setStrokeSize} label="Size" width={110} />
 
         <Divider />
 
