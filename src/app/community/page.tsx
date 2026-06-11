@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Heart, MessageSquare, Users, Globe, Trash2, Send, ChevronDown, ChevronUp,
-  Search, UserPlus, UserMinus, Flame, Clock, TrendingUp, X,
+  Search, UserPlus, UserMinus, Flame, Clock, TrendingUp, X, Bookmark,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -127,9 +127,10 @@ function CommentSection({ post, myUserId, onAddComment, onDeleteComment }: {
 
 // ── Post card ─────────────────────────────────────────────────────────────────
 
-function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDeleteComment, onDelete, onFollowToggle }: {
-  post: CommunityPost; myUserId: string | null; followingIds: Set<string>;
+function PostCard({ post, myUserId, followingIds, savedPostIds, onLike, onSave, onAddComment, onDeleteComment, onDelete, onFollowToggle }: {
+  post: CommunityPost; myUserId: string | null; followingIds: Set<string>; savedPostIds: Set<string>;
   onLike: (id: string) => void;
+  onSave: (id: string) => void;
   onAddComment: (postId: string, content: string) => Promise<void>;
   onDeleteComment: (postId: string, commentId: string) => Promise<void>;
   onDelete: (id: string) => void;
@@ -139,6 +140,7 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
   const [showComments, setShowComments] = useState(false);
   const isFollowing = followingIds.has(post.userId);
   const isOwn = post.userId === myUserId;
+  const isSaved = savedPostIds.has(post.id);
 
   const hasContent = post.pages.some((p) => (p.textNotes && p.textNotes.length > 0) || p.canvasData);
 
@@ -219,6 +221,13 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
           {post.comments.length > 0 && post.comments.length}
           {showComments ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
         </button>
+        {myUserId && (
+          <button onClick={() => onSave(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, padding: 0, marginLeft: 'auto', fontFamily: 'inherit', color: isSaved ? 'var(--accent)' : 'var(--text-3)', transition: 'color 0.12s' }}
+            title={isSaved ? 'Remove from saved' : 'Save post'}
+          >
+            <Bookmark size={14} fill={isSaved ? 'currentColor' : 'none'} />
+          </button>
+        )}
       </div>
 
       {showComments && <CommentSection post={post} myUserId={myUserId} onAddComment={onAddComment} onDeleteComment={onDeleteComment} />}
@@ -227,26 +236,35 @@ function PostCard({ post, myUserId, followingIds, onLike, onAddComment, onDelete
 }
 
 const COMMON_TAGS = ['Math', 'CS', 'Physics', 'Biology', 'Chemistry', 'History', 'Literature', 'Economics', 'Psychology', 'Law'];
+const SAVED_POSTS_KEY = 'community_saved_posts';
+
+type LocalTab = CommunityFeedTab | 'saved';
 
 export default function CommunityPage() {
   const { t } = useLanguage();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<CommunityFeedTab>('latest');
+  const [tab, setTab] = useState<LocalTab>('latest');
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try { return new Set(JSON.parse(localStorage.getItem(SAVED_POSTS_KEY) ?? '[]')); }
+    catch { return new Set(); }
+  });
   const [userEmail, setUserEmail] = useState('');
   const [userDisplayName, setUserDisplayName] = useState('');
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
   const [isVip, setIsVip] = useState(false);
 
-  const tabs: { id: CommunityFeedTab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: LocalTab; label: string; icon: React.ReactNode }[] = [
     { id: 'latest', label: t('com_tab_latest'), icon: <Clock size={13} /> },
     { id: 'top', label: t('com_tab_top'), icon: <TrendingUp size={13} /> },
     { id: 'trending', label: t('com_tab_trending'), icon: <Flame size={13} /> },
     { id: 'following', label: t('com_tab_following'), icon: <Users size={13} /> },
+    { id: 'saved', label: 'Saved', icon: <Bookmark size={13} /> },
   ];
 
   useEffect(() => {
@@ -284,12 +302,18 @@ export default function CommunityPage() {
 
   useEffect(() => {
     setLoading(true);
+    if (tab === 'saved') {
+      const ids = [...savedPostIds];
+      if (!ids.length) { setPosts([]); setLoading(false); return; }
+      fetchCommunityPosts({ ids }).then((data) => { setPosts(data); setLoading(false); });
+      return;
+    }
     const followingArr = [...followingIds];
-    fetchCommunityPosts({ tab, tag: filterTag, followingIds: tab === 'following' ? followingArr : undefined }).then((data) => {
+    fetchCommunityPosts({ tab: tab as CommunityFeedTab, tag: filterTag, followingIds: tab === 'following' ? followingArr : undefined }).then((data) => {
       setPosts(data);
       setLoading(false);
     });
-  }, [tab, filterTag, followingIds]);
+  }, [tab, filterTag, followingIds, savedPostIds]);
 
   const handleLike = useCallback(async (postId: string) => {
     if (!myUserId) return;
@@ -321,6 +345,15 @@ export default function CommunityPage() {
       await followUser(userId);
       setFollowingIds((prev) => new Set([...prev, userId]));
     }
+  }, []);
+
+  const handleSavePost = useCallback((postId: string) => {
+    setSavedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId); else next.add(postId);
+      localStorage.setItem(SAVED_POSTS_KEY, JSON.stringify([...next]));
+      return next;
+    });
   }, []);
 
   const visiblePosts = posts.filter((p) => {
@@ -411,12 +444,12 @@ export default function CommunityPage() {
 
         {!loading && visiblePosts.length === 0 && (
           <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-3)' }}>
-            <Globe size={36} style={{ opacity: 0.25, marginBottom: 12 }} />
+            {tab === 'saved' ? <Bookmark size={36} style={{ opacity: 0.25, marginBottom: 12 }} /> : <Globe size={36} style={{ opacity: 0.25, marginBottom: 12 }} />}
             <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px', color: 'var(--text-2)' }}>
-              {tab === 'following' ? t('com_no_following') : search ? t('com_no_search') : t('com_no_posts_yet')}
+              {tab === 'saved' ? 'No saved posts' : tab === 'following' ? t('com_no_following') : search ? t('com_no_search') : t('com_no_posts_yet')}
             </p>
             <p style={{ fontSize: 13, margin: 0 }}>
-              {tab === 'following' ? t('com_no_following_hint') : t('com_no_posts')}
+              {tab === 'saved' ? 'Bookmark posts to save them for later.' : tab === 'following' ? t('com_no_following_hint') : t('com_no_posts')}
             </p>
           </div>
         )}
@@ -425,8 +458,8 @@ export default function CommunityPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {visiblePosts.map((post) => (
               <PostCard
-                key={post.id} post={post} myUserId={myUserId} followingIds={followingIds}
-                onLike={handleLike} onAddComment={handleAddComment}
+                key={post.id} post={post} myUserId={myUserId} followingIds={followingIds} savedPostIds={savedPostIds}
+                onLike={handleLike} onSave={handleSavePost} onAddComment={handleAddComment}
                 onDeleteComment={handleDeleteComment} onDelete={handleDeletePost}
                 onFollowToggle={handleFollowToggle}
               />

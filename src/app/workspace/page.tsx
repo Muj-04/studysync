@@ -54,6 +54,7 @@ import {
   createCommunityPost,
   deleteAllDataForDocument,
 } from '@/lib/supabase/db';
+import { getPendingReopenFile, clearPendingReopenFile } from '@/lib/pendingReopenFile';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
 import type { Tool, PenType } from '@/lib/drawing';
@@ -994,6 +995,17 @@ export default function WorkspacePage() {
   const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
   const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages } = usePDFPageImages();
   useStudySession(activeDocumentId, userId);
+
+  // ── Pending reopen file (from Library page "Open" button) ─────────────────
+  useEffect(() => {
+    getPendingReopenFile().then(async (file) => {
+      if (!file) return;
+      await clearPendingReopenFile();
+      sessionStorage.removeItem('reopen_doc_id');
+      sessionStorage.removeItem('reopen_doc_name');
+      addDocument(file).catch(console.error);
+    }).catch(console.error);
+  }, [addDocument]);
 
   // ── Document order ────────────────────────────────────────────────────────
   const savedOrderRef = useRef<string[]>([]);

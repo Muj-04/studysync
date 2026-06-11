@@ -200,9 +200,10 @@ export async function fetchCommunityPosts(opts: {
   tab?: CommunityFeedTab;
   tag?: string | null;
   followingIds?: string[];
+  ids?: string[];
 } = {}): Promise<CommunityPost[]> {
   const uid = await userId();
-  const { tab = 'latest', tag = null, followingIds } = opts;
+  const { tab = 'latest', tag = null, followingIds, ids } = opts;
 
   let query = sb()
     .from('community_posts')
@@ -223,8 +224,9 @@ export async function fetchCommunityPosts(opts: {
   }
 
   if (tag) query = query.contains('tags', [tag]);
+  if (ids?.length) query = query.in('id', ids);
 
-  const { data: posts } = await query.limit(60);
+  const { data: posts } = await query.limit(ids?.length ?? 60);
   if (!posts?.length) return [];
 
   const authorIds = [...new Set(posts.map((p) => p.user_id))];
