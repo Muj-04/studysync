@@ -37,8 +37,13 @@ export default function ForgotPasswordPage() {
     setSent(true);
   };
 
+  const BG = "https://i.pinimg.com/originals/d7/b9/0c/d7b90cc80898e8823455a127945719af.jpg";
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <>
+      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, backgroundImage: `url('${BG}')`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', zIndex: -2, pointerEvents: 'none' }} />
+      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.52)', zIndex: -1, pointerEvents: 'none' }} />
+      <div className="min-h-screen flex items-center justify-center p-4">
       <div
         style={{
           width: '100%',
@@ -144,6 +149,7 @@ export default function ForgotPasswordPage() {
           </p>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
