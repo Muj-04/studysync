@@ -306,12 +306,14 @@ export default function PricingPage() {
         <div
           style={{
             ...cardBase,
-            background: 'rgba(10,15,25,0.85)',
+            background: hoveredCard === 'free' ? 'rgba(16,24,48,0.97)' : 'rgba(10,15,25,0.85)',
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            boxShadow: hoveredCard === 'free' ? '0 20px 40px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.35)',
-            transform: hoveredCard === 'free' ? 'translateY(-8px)' : 'translateY(0)',
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            boxShadow: hoveredCard === 'free'
+              ? '0 0 0 1px rgba(59,130,246,0.3), 0 24px 60px rgba(0,0,0,0.5), 0 0 50px rgba(37,99,235,0.12)'
+              : '0 4px 24px rgba(0,0,0,0.3)',
+            transform: hoveredCard === 'free' ? 'translateY(-12px) scale(1.03)' : 'translateY(0) scale(1)',
+            transition: 'transform 0.35s ease-out, box-shadow 0.35s ease-out, background 0.35s ease-out',
             animation: 'slideUpFade 0.55s 0.2s cubic-bezier(0.22,1,0.36,1) both',
           }}
           onMouseEnter={() => setHoveredCard('free')}
@@ -366,12 +368,14 @@ export default function PricingPage() {
         <div
           style={{
             ...cardBase,
-            background: 'rgba(10,15,25,0.92)',
+            background: hoveredCard === 'premium' ? 'rgba(14,20,42,0.98)' : 'rgba(10,15,25,0.92)',
             backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
             animation: 'premiumGlow 3s 1s ease-in-out infinite, slideUpFade 0.55s 0.3s cubic-bezier(0.22,1,0.36,1) both',
-            transform: hoveredCard === 'premium' ? 'scale(1.03) translateY(-8px)' : 'scale(1.03)',
-            boxShadow: hoveredCard === 'premium' ? '0 20px 40px rgba(0,0,0,0.5)' : undefined,
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            transform: hoveredCard === 'premium' ? 'scale(1.03) translateY(-12px)' : 'scale(1.03)',
+            boxShadow: hoveredCard === 'premium'
+              ? '0 0 0 1.5px rgba(59,130,246,0.5), 0 24px 60px rgba(0,0,0,0.55), 0 0 60px rgba(37,99,235,0.22)'
+              : undefined,
+            transition: 'transform 0.35s ease-out, box-shadow 0.35s ease-out, background 0.35s ease-out',
           }}
           onMouseEnter={() => setHoveredCard('premium')}
           onMouseLeave={() => setHoveredCard(null)}
@@ -473,12 +477,14 @@ export default function PricingPage() {
         <div
           style={{
             ...cardBase,
-            background: 'rgba(10,15,25,0.85)',
+            background: hoveredCard === 'pro' ? 'rgba(18,14,44,0.97)' : 'rgba(10,15,25,0.85)',
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            boxShadow: hoveredCard === 'pro' ? '0 20px 40px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.35)',
-            transform: hoveredCard === 'pro' ? 'translateY(-8px)' : 'translateY(0)',
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+            boxShadow: hoveredCard === 'pro'
+              ? '0 0 0 1px rgba(139,92,246,0.35), 0 24px 60px rgba(0,0,0,0.5), 0 0 50px rgba(124,58,237,0.14)'
+              : '0 4px 24px rgba(0,0,0,0.3)',
+            transform: hoveredCard === 'pro' ? 'translateY(-12px) scale(1.03)' : 'translateY(0) scale(1)',
+            transition: 'transform 0.35s ease-out, box-shadow 0.35s ease-out, background 0.35s ease-out',
             animation: 'slideUpFade 0.55s 0.4s cubic-bezier(0.22,1,0.36,1) both',
           }}
           onMouseEnter={() => setHoveredCard('pro')}
