@@ -204,6 +204,7 @@ function RightPaneHeader({
   rightZoom: number;
   onRightZoomChange: (z: number) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div style={{
       height: 34, flexShrink: 0,
@@ -234,7 +235,7 @@ function RightPaneHeader({
               transition: 'background 0.12s, color 0.12s',
             }}
           >
-            {m === 'blank' ? 'Blank' : 'Doc'}
+            {m === 'blank' ? t('ws_blank_tab') : t('ws_doc_tab')}
           </button>
         ))}
       </div>
@@ -320,6 +321,7 @@ function RightPaneHeader({
 // ── Pane empty states ─────────────────────────────────────────────────────────
 
 function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
+  const { t } = useLanguage();
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
@@ -336,10 +338,10 @@ function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
       </div>
       <div style={{ textAlign: 'center' }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}>
-          No blank page here
+          {t('ws_no_blank_page')}
         </p>
         <p style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
-          Add a blank page to take notes<br />alongside this PDF page.
+          {t('ws_add_blank_hint')}
         </p>
       </div>
       <button
@@ -359,22 +361,23 @@ function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
         onMouseOut={(e) => { e.currentTarget.style.background = '#ffffff'; }}
       >
         <FilePlus size={13} />
-        Add Blank Page
+        {t('ws_add_blank')}
       </button>
     </div>
   );
 }
 
 function DocPickEmpty() {
+  const { t } = useLanguage();
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       gap: 8, background: 'var(--bg-app)', padding: 32,
     }}>
-      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>No document selected</p>
+      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>{t('ws_no_doc_selected')}</p>
       <p style={{ fontSize: 11.5, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
-        Choose a document from the picker above.
+        {t('ws_choose_doc_hint')}
       </p>
     </div>
   );
@@ -2006,7 +2009,7 @@ export default function WorkspacePage() {
           )}
 
           {/* Global search */}
-          <HdrBtn onClick={() => setGlobalSearchOpen(true)} title="Global Search (Ctrl+Shift+F)">
+          <HdrBtn onClick={() => setGlobalSearchOpen(true)} title={t('ws_global_search_title')}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
               <line x1="8" y1="11" x2="14" y2="11" /><line x1="11" y1="8" x2="11" y2="14" />
@@ -2014,14 +2017,14 @@ export default function WorkspacePage() {
           </HdrBtn>
 
           {/* Pomodoro */}
-          <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title="Pomodoro Timer" active={pomodoroOpen}>
+          <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title={t('ws_pomodoro_title')} active={pomodoroOpen}>
             <Timer size={17} />
           </HdrBtn>
 
           {/* Export notes */}
           {hasDocument && (
             <div ref={exportMenuRef} style={{ position: 'relative' }}>
-              <HdrBtn onClick={() => setExportMenuOpen((o) => !o)} title="Export Notes" active={exportMenuOpen}>
+              <HdrBtn onClick={() => setExportMenuOpen((o) => !o)} title={t('ws_export_notes_title')} active={exportMenuOpen}>
                 <Download size={17} />
               </HdrBtn>
               {exportMenuOpen && (
@@ -2552,8 +2555,8 @@ export default function WorkspacePage() {
                 {!navBarVisible && (
                   <button
                     onClick={() => setNavBarVisible(true)}
-                    title="Show toolbar"
-                    aria-label="Show toolbar"
+                    title={t('ws_show_toolbar')}
+                    aria-label={t('ws_show_toolbar')}
                     className="animate-scale-in"
                     style={{
                       position: 'absolute', bottom: 14, right: 14, zIndex: 30,

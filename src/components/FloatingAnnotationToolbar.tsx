@@ -4,6 +4,7 @@ import { Pencil, Eraser, Trash2, X, Type, Undo2, MousePointer } from 'lucide-rea
 import type { Tool, PenType } from '@/lib/drawing';
 import { PRESET_COLORS } from '@/lib/drawing';
 import DragScrubber from './DragScrubber';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const BTN      = 52;
 const PANEL_W  = 192;
@@ -103,6 +104,7 @@ export default function FloatingAnnotationToolbar({
   onClear, onUndo, splitMode, activeSide, onSwitchSide,
   containerRef, bottomBarRef,
 }: Props) {
+  const { t } = useLanguage();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [isDragging, setIsDragging]   = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -370,7 +372,7 @@ export default function FloatingAnnotationToolbar({
                 fontSize: 10.5, fontWeight: 600, letterSpacing: '0.07em',
                 textTransform: 'uppercase', color: '#cccccc',
               }}>
-                Annotate
+                {t('ann_annotate')}
               </span>
               {splitMode && onSwitchSide && (
                 <div style={{
@@ -424,26 +426,26 @@ export default function FloatingAnnotationToolbar({
               active={tool === 'cursor'}
               onClick={() => setTool('cursor')}
               icon={<MousePointer size={13} />}
-              label="Cursor"
+              label={t('ann_cursor')}
             />
             <Hr />
             <ToolRow
               active={tool === 'pen' && penType === 'normal'}
               onClick={() => { setTool('pen'); setPenType('normal'); }}
               icon={<div style={{ width: 14, height: 2.5, borderRadius: 9999, background: 'currentColor' }} />}
-              label="Pen"
+              label={t('ann_pen')}
             />
             <ToolRow
               active={tool === 'pen' && penType === 'marker'}
               onClick={() => { setTool('pen'); setPenType('marker'); }}
               icon={<div style={{ width: 14, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.65 }} />}
-              label="Marker"
+              label={t('ann_marker')}
             />
             <ToolRow
               active={tool === 'pen' && penType === 'highlighter'}
               onClick={() => { setTool('pen'); setPenType('highlighter'); }}
               icon={<div style={{ width: 14, height: 9, borderRadius: 2, background: 'currentColor', opacity: 0.35 }} />}
-              label="Highlighter"
+              label={t('ann_highlighter')}
             />
             <ToolRow
               active={tool === 'line'}
@@ -454,19 +456,19 @@ export default function FloatingAnnotationToolbar({
                   <line x1="4" y1="20" x2="20" y2="4" />
                 </svg>
               }
-              label="Line"
+              label={t('ann_line')}
             />
             <ToolRow
               active={tool === 'text'}
               onClick={() => setTool('text')}
               icon={<Type size={13} />}
-              label="Text Note"
+              label={t('ann_text_note')}
             />
             <ToolRow
               active={tool === 'eraser'}
               onClick={() => setTool('eraser')}
               icon={<Eraser size={13} />}
-              label="Eraser"
+              label={t('ann_eraser')}
             />
           </div>
 
@@ -474,7 +476,7 @@ export default function FloatingAnnotationToolbar({
 
           {/* Color */}
           <div style={{ padding: '8px 12px' }}>
-            <SectionLabel>Color</SectionLabel>
+            <SectionLabel>{t('ann_color')}</SectionLabel>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
               {PRESET_COLORS.map((c) => (
                 <button
@@ -496,7 +498,7 @@ export default function FloatingAnnotationToolbar({
                 type="color"
                 value={color}
                 onChange={(e) => { setColor(e.target.value); if (tool === 'eraser') setTool('pen'); }}
-                title="Custom color"
+                title={t('ann_custom_color')}
                 style={{
                   width: 20, height: 20,
                   border: '1px solid #555555',
@@ -511,7 +513,7 @@ export default function FloatingAnnotationToolbar({
 
           {/* Size */}
           <div style={{ padding: '8px 12px' }}>
-            <SectionLabel>Size</SectionLabel>
+            <SectionLabel>{t('ann_size')}</SectionLabel>
             <div style={{ marginTop: 6 }}>
               <DragScrubber value={strokeSize} onChange={setStrokeSize} />
             </div>
@@ -539,7 +541,7 @@ export default function FloatingAnnotationToolbar({
               })}
             >
               <Undo2 size={12} />
-              Undo
+              {t('ann_undo')}
             </button>
             <button
               onClick={onClear}
@@ -559,7 +561,7 @@ export default function FloatingAnnotationToolbar({
               })}
             >
               <Trash2 size={12} />
-              Clear page
+              {t('ann_clear_page')}
             </button>
           </div>
         </div>
@@ -582,7 +584,7 @@ export default function FloatingAnnotationToolbar({
           pointerEvents: 'none',
           zIndex: 1,
         }}>
-          Annotation Tools
+          {t('ann_tools')}
           {/* Downward arrow */}
           <div style={{
             position: 'absolute', top: '100%', left: '50%',
@@ -616,7 +618,7 @@ export default function FloatingAnnotationToolbar({
             border: '1px solid #333333',
             boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
           }}>
-            Tap to annotate
+            {t('ann_tap_to_annotate')}
           </div>
           {/* Arrow pointing right toward the button */}
           <div style={{
