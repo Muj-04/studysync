@@ -493,13 +493,13 @@ export default function PricingPage() {
             ...cardBase,
             background: hoveredCard === 'pro' ? 'rgba(18,14,44,0.97)' : 'rgba(10,15,25,0.85)',
             border: hoveredCard === 'pro'
-              ? '1px solid rgba(139,92,246,0.3)'
-              : '1px solid rgba(255,255,255,0.1)',
+              ? '1px solid rgba(139,92,246,0.5)'
+              : '1px solid rgba(139,92,246,0.15)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
             boxShadow: hoveredCard === 'pro'
-              ? '0 0 0 1px rgba(139,92,246,0.4), 0 20px 50px rgba(0,0,0,0.5), 0 0 70px rgba(124,58,237,0.18)'
-              : '0 4px 24px rgba(0,0,0,0.25)',
-            transform: hoveredCard === 'pro' ? 'translateY(-12px) scale(1.02)' : 'translateY(0) scale(1)',
+              ? '0 0 0 1px rgba(139,92,246,0.55), 0 24px 56px rgba(0,0,0,0.55), 0 0 90px rgba(124,58,237,0.28), 0 0 160px rgba(109,40,217,0.1)'
+              : '0 4px 24px rgba(0,0,0,0.25), 0 0 60px rgba(124,58,237,0.07)',
+            transform: hoveredCard === 'pro' ? 'translateY(-14px) scale(1.03)' : 'translateY(0) scale(1)',
             transition: 'transform 0.35s ease-out, box-shadow 0.35s ease-out, background 0.35s ease-out, border-color 0.35s ease-out',
             animation: 'slideUpFade 0.55s 0.4s cubic-bezier(0.22,1,0.36,1) both',
           }}
@@ -511,9 +511,9 @@ export default function PricingPage() {
               width: 40, height: 40, borderRadius: 10, marginBottom: 16,
               background: hoveredCard === 'pro' ? 'rgba(124,58,237,0.32)' : 'rgba(124,58,237,0.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transform: hoveredCard === 'pro' ? 'scale(1.12)' : 'scale(1)',
+              transform: hoveredCard === 'pro' ? 'scale(1.1)' : 'scale(1)',
               transition: 'transform 0.35s ease-out, background 0.3s ease-out, box-shadow 0.3s ease-out',
-              boxShadow: hoveredCard === 'pro' ? '0 0 14px rgba(124,58,237,0.38)' : 'none',
+              boxShadow: hoveredCard === 'pro' ? '0 0 18px rgba(124,58,237,0.45)' : '0 0 0px rgba(124,58,237,0)',
             }}>
               <Sparkles size={20} style={{ color: hoveredCard === 'pro' ? '#ddd6fe' : '#a78bfa', transition: 'color 0.3s' }} />
             </div>
@@ -555,14 +555,14 @@ export default function PricingPage() {
               disabled={!!loadingPlan}
               style={{
                 width: '100%', padding: '11px', borderRadius: 8,
-                background: hoveredCard === 'pro' ? 'rgba(124,58,237,0.22)' : 'rgba(255,255,255,0.07)',
-                border: hoveredCard === 'pro' ? '1px solid rgba(139,92,246,0.55)' : '1px solid rgba(255,255,255,0.2)',
+                background: hoveredCard === 'pro' ? 'rgba(124,58,237,0.26)' : 'rgba(255,255,255,0.07)',
+                border: hoveredCard === 'pro' ? '1px solid rgba(139,92,246,0.6)' : '1px solid rgba(139,92,246,0.2)',
                 color: '#fff', fontSize: 14, fontWeight: 600,
                 cursor: loadingPlan ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit', boxSizing: 'border-box',
                 transition: 'background 0.35s ease-out, border-color 0.35s ease-out, transform 0.35s ease-out, box-shadow 0.35s ease-out',
-                transform: hoveredCard === 'pro' ? 'translateY(-2px) scale(1.01)' : 'translateY(0) scale(1)',
-                boxShadow: hoveredCard === 'pro' ? '0 6px 18px rgba(124,58,237,0.3)' : 'none',
+                transform: hoveredCard === 'pro' ? 'translateY(-2px) scale(1.015)' : 'translateY(0) scale(1)',
+                boxShadow: hoveredCard === 'pro' ? '0 8px 24px rgba(124,58,237,0.4)' : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}
             >
