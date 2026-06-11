@@ -122,11 +122,10 @@ export default function GlobalSearch({ onClose, onNavigate }: Props) {
             }}
           />
           {loading && (
-            <div style={{
+            <div className="spinner" style={{
               width: 14, height: 14, borderRadius: '50%',
               border: '2px solid var(--border-strong)',
               borderTopColor: 'var(--accent)',
-              animation: 'spin 0.7s linear infinite',
               flexShrink: 0,
             }} />
           )}

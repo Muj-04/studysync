@@ -736,10 +736,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         alignItems: 'center', justifyContent: 'center', gap: 16,
         background: 'var(--bg-app)', color: 'var(--text-2)', fontFamily: 'inherit',
       }}>
-        <div style={{
+        <div className="spinner" style={{
           width: 40, height: 40, borderRadius: '50%',
           border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
-          animation: 'spin 0.8s linear infinite',
         }} />
         <p style={{ fontSize: 14, margin: 0 }}>{t('room_loading')}</p>
       </div>
@@ -1126,7 +1125,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             }}
           >
             {voiceConnecting
-              ? <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+              ? <span className="spinner" style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block' }} />
               : <Mic size={12} />
             }
             <span>{voiceConnected ? t('room_voice_in') : voiceConnecting ? t('room_voice_joining') : t('room_voice_chat')}</span>
@@ -1353,7 +1352,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             <div style={{ maxHeight: 360, overflowY: 'auto' }}>
               {friendsLoading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
-                  <span style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block', animation: 'spin 0.8s linear infinite' }} />
+                  <span className="spinner" style={{ width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
                 </div>
               ) : friendsList.length === 0 ? (
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
