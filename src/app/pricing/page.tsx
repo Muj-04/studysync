@@ -66,6 +66,7 @@ export default function PricingPage() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [toast, setToast]             = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const [ready, setReady]             = useState(false);
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
 
   // Animated prices
   const premiumPrice = useAnimatedPrice(yearly ? 39    : 4.99);
@@ -158,7 +159,6 @@ export default function PricingPage() {
     flex: 1,
     minWidth: 0,
     position: 'relative',
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
   };
 
   return (
@@ -309,17 +309,13 @@ export default function PricingPage() {
             background: 'rgba(10,15,25,0.85)',
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+            boxShadow: hoveredCard === 'free' ? '0 20px 40px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.35)',
+            transform: hoveredCard === 'free' ? 'translateY(-8px)' : 'translateY(0)',
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
             animation: 'slideUpFade 0.55s 0.2s cubic-bezier(0.22,1,0.36,1) both',
           }}
-          onMouseOver={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'translateY(-8px)';
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 20px 40px rgba(0,0,0,0.4)';
-          }}
-          onMouseOut={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = '';
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.35)';
-          }}
+          onMouseEnter={() => setHoveredCard('free')}
+          onMouseLeave={() => setHoveredCard(null)}
         >
           <div style={{ marginBottom: 20 }}>
             <div style={{
@@ -373,16 +369,12 @@ export default function PricingPage() {
             background: 'rgba(10,15,25,0.92)',
             backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
             animation: 'premiumGlow 3s 1s ease-in-out infinite, slideUpFade 0.55s 0.3s cubic-bezier(0.22,1,0.36,1) both',
-            transform: 'scale(1.03)',
+            transform: hoveredCard === 'premium' ? 'scale(1.03) translateY(-8px)' : 'scale(1.03)',
+            boxShadow: hoveredCard === 'premium' ? '0 20px 40px rgba(0,0,0,0.5)' : undefined,
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
           }}
-          onMouseOver={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'scale(1.03) translateY(-8px)';
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 20px 40px rgba(0,0,0,0.4)';
-          }}
-          onMouseOut={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'scale(1.03)';
-            (e.currentTarget as HTMLElement).style.boxShadow = '';
-          }}
+          onMouseEnter={() => setHoveredCard('premium')}
+          onMouseLeave={() => setHoveredCard(null)}
         >
           {/* Popular badge */}
           <div style={{
@@ -484,17 +476,13 @@ export default function PricingPage() {
             background: 'rgba(10,15,25,0.85)',
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+            boxShadow: hoveredCard === 'pro' ? '0 20px 40px rgba(0,0,0,0.5)' : '0 8px 32px rgba(0,0,0,0.35)',
+            transform: hoveredCard === 'pro' ? 'translateY(-8px)' : 'translateY(0)',
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
             animation: 'slideUpFade 0.55s 0.4s cubic-bezier(0.22,1,0.36,1) both',
           }}
-          onMouseOver={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'translateY(-8px)';
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 20px 40px rgba(0,0,0,0.4)';
-          }}
-          onMouseOut={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = '';
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 32px rgba(0,0,0,0.35)';
-          }}
+          onMouseEnter={() => setHoveredCard('pro')}
+          onMouseLeave={() => setHoveredCard(null)}
         >
           <div style={{ marginBottom: 20 }}>
             <div style={{
