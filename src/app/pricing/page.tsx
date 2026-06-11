@@ -158,7 +158,7 @@ export default function PricingPage() {
     flex: 1,
     minWidth: 0,
     position: 'relative',
-    transition: 'transform 0.22s cubic-bezier(0.22,1,0.36,1), box-shadow 0.22s',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
   };
 
   return (
@@ -313,8 +313,8 @@ export default function PricingPage() {
             animation: 'slideUpFade 0.55s 0.2s cubic-bezier(0.22,1,0.36,1) both',
           }}
           onMouseOver={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'translateY(-6px)';
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 16px 48px rgba(0,0,0,0.5)';
+            (e.currentTarget as HTMLElement).style.transform = 'translateY(-8px)';
+            (e.currentTarget as HTMLElement).style.boxShadow = '0 20px 40px rgba(0,0,0,0.4)';
           }}
           onMouseOut={(e) => {
             (e.currentTarget as HTMLElement).style.transform = '';
@@ -377,9 +377,11 @@ export default function PricingPage() {
           }}
           onMouseOver={(e) => {
             (e.currentTarget as HTMLElement).style.transform = 'scale(1.03) translateY(-8px)';
+            (e.currentTarget as HTMLElement).style.boxShadow = '0 20px 40px rgba(0,0,0,0.4)';
           }}
           onMouseOut={(e) => {
             (e.currentTarget as HTMLElement).style.transform = 'scale(1.03)';
+            (e.currentTarget as HTMLElement).style.boxShadow = '';
           }}
         >
           {/* Popular badge */}
@@ -486,8 +488,8 @@ export default function PricingPage() {
             animation: 'slideUpFade 0.55s 0.4s cubic-bezier(0.22,1,0.36,1) both',
           }}
           onMouseOver={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'translateY(-6px)';
-            (e.currentTarget as HTMLElement).style.boxShadow = '0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.15)';
+            (e.currentTarget as HTMLElement).style.transform = 'translateY(-8px)';
+            (e.currentTarget as HTMLElement).style.boxShadow = '0 20px 40px rgba(0,0,0,0.4)';
           }}
           onMouseOut={(e) => {
             (e.currentTarget as HTMLElement).style.transform = '';
