@@ -21,9 +21,6 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-const BG =
-  "https://i.pinimg.com/originals/d7/b9/0c/d7b90cc80898e8823455a127945719af.jpg";
-
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -66,35 +63,10 @@ var ln=g('studysync_language');if(ln==='ar'){r.setAttribute('lang','ar');r.setAt
         />
         {/* PWA */}
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0f0f0f" />
+        <meta name="theme-color" content="#0f1117" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="min-h-full flex flex-col antialiased">
-        {/* Brick-wall background — visible on login page only */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundImage: `url('${BG}')`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            zIndex: -2,
-            pointerEvents: "none",
-          }}
-        />
-        {/* Dark overlay — helps login glassmorphism pop */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.52)",
-            zIndex: -1,
-            pointerEvents: "none",
-          }}
-        />
         <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>
