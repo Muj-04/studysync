@@ -223,7 +223,7 @@ function PostCard({ post, myUserId, followingIds, savedPostIds, onLike, onSave, 
         </button>
         {myUserId && (
           <button onClick={() => onSave(post.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, padding: 0, marginLeft: 'auto', fontFamily: 'inherit', color: isSaved ? 'var(--accent)' : 'var(--text-3)', transition: 'color 0.12s' }}
-            title={isSaved ? 'Remove from saved' : 'Save post'}
+            title={isSaved ? t('com_unsave_post') : t('com_save_post')}
           >
             <Bookmark size={14} fill={isSaved ? 'currentColor' : 'none'} />
           </button>
@@ -264,7 +264,7 @@ export default function CommunityPage() {
     { id: 'top', label: t('com_tab_top'), icon: <TrendingUp size={13} /> },
     { id: 'trending', label: t('com_tab_trending'), icon: <Flame size={13} /> },
     { id: 'following', label: t('com_tab_following'), icon: <Users size={13} /> },
-    { id: 'saved', label: 'Saved', icon: <Bookmark size={13} /> },
+    { id: 'saved', label: t('com_tab_saved'), icon: <Bookmark size={13} /> },
   ];
 
   useEffect(() => {
@@ -446,10 +446,10 @@ export default function CommunityPage() {
           <div style={{ textAlign: 'center', padding: '80px 0', color: 'var(--text-3)' }}>
             {tab === 'saved' ? <Bookmark size={36} style={{ opacity: 0.25, marginBottom: 12 }} /> : <Globe size={36} style={{ opacity: 0.25, marginBottom: 12 }} />}
             <p style={{ fontSize: 15, fontWeight: 600, margin: '0 0 6px', color: 'var(--text-2)' }}>
-              {tab === 'saved' ? 'No saved posts' : tab === 'following' ? t('com_no_following') : search ? t('com_no_search') : t('com_no_posts_yet')}
+              {tab === 'saved' ? t('com_no_saved') : tab === 'following' ? t('com_no_following') : search ? t('com_no_search') : t('com_no_posts_yet')}
             </p>
             <p style={{ fontSize: 13, margin: 0 }}>
-              {tab === 'saved' ? 'Bookmark posts to save them for later.' : tab === 'following' ? t('com_no_following_hint') : t('com_no_posts')}
+              {tab === 'saved' ? t('com_no_saved_hint') : tab === 'following' ? t('com_no_following_hint') : t('com_no_posts')}
             </p>
           </div>
         )}

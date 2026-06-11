@@ -360,7 +360,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   );
 
   const handleRoomClosed = useCallback(() => {
-    setErrorMsg('This room has ended. Redirecting…');
+    setErrorMsg(t('room_ended_redirect'));
     setStatus('error');
     setTimeout(() => router.replace('/workspace'), 3000);
   }, [router]);
@@ -447,11 +447,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       if (!isVip && plan === 'free') { setPlanBlocked(true); return; }
 
       const room = await fetchRoom(roomId);
-      if (!room) { setErrorMsg('Room not found.'); setStatus('error'); return; }
-      if (room.status === 'closed') { setErrorMsg('This room has ended.'); setStatus('error'); return; }
+      if (!room) { setErrorMsg(t('room_not_found')); setStatus('error'); return; }
+      if (room.status === 'closed') { setErrorMsg(t('room_ended_msg')); setStatus('error'); return; }
       if (room.expiresAt && new Date(room.expiresAt) < new Date()) {
         closeRoom(roomId).catch(() => {});
-        setErrorMsg('This room has expired.'); setStatus('error'); return;
+        setErrorMsg(t('room_expired_msg')); setStatus('error'); return;
       }
       setRoomName(room.documentName);
       setHostUserId(room.hostUserId);
@@ -461,12 +461,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const { data: signed, error: signErr } = await supabase.storage
         .from('pdfs').createSignedUrl(room.pdfPath, 3600);
       if (signErr || !signed?.signedUrl) {
-        setErrorMsg('Could not access the room PDF. It may have been deleted.');
+        setErrorMsg(t('room_pdf_deleted'));
         setStatus('error'); return;
       }
 
       const resp = await fetch(signed.signedUrl);
-      if (!resp.ok) { setErrorMsg('Failed to download the PDF.'); setStatus('error'); return; }
+      if (!resp.ok) { setErrorMsg(t('room_pdf_failed')); setStatus('error'); return; }
 
       const blob = await resp.blob();
       const file = new File([blob], room.documentName + '.pdf', { type: 'application/pdf' });
@@ -558,12 +558,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     if (ms <= 0) {
       closeRoom(roomId).catch(() => {});
       broadcastRoomClosed();
-      setErrorMsg('This room has expired.'); setStatus('error'); return;
+      setErrorMsg(t('room_expired_msg')); setStatus('error'); return;
     }
     const timer = setTimeout(async () => {
       await closeRoom(roomId).catch(() => {});
       broadcastRoomClosed();
-      setErrorMsg('This room has expired.'); setStatus('error');
+      setErrorMsg(t('room_expired_msg')); setStatus('error');
     }, ms);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -697,10 +697,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         padding: 24, textAlign: 'center',
       }}>
         <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>
-          Study Rooms require a Premium or Pro plan
+          {t('room_premium_required')}
         </p>
         <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, maxWidth: 360, lineHeight: 1.6 }}>
-          Study Rooms are available on Premium and Pro plans. Free users cannot create or join rooms.
+          {t('room_premium_body')}
         </p>
         <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
           <button
@@ -711,7 +711,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               border: '1px solid var(--border)', cursor: 'pointer',
             }}
           >
-            Back to Workspace
+            {t('room_back_workspace')}
           </button>
           <a
             href="/pricing"
@@ -722,7 +722,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               display: 'inline-flex', alignItems: 'center',
             }}
           >
-            Upgrade Now
+            {t('room_upgrade_now')}
           </a>
         </div>
       </div>
@@ -883,7 +883,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.3)'; }}
             onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.18)'; }}
           >
-            End Room
+            {t('room_end_room_btn')}
           </button>
         )}
 
@@ -1111,7 +1111,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           <button
             onClick={voiceConnected ? voiceLeave : voiceJoin}
             disabled={voiceConnecting}
-            title={voiceConnected ? 'Leave voice chat' : 'Join voice chat'}
+            title={voiceConnected ? t('room_voice_in') : t('room_voice_chat')}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               height: 30, padding: '0 9px',
@@ -1129,14 +1129,14 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               ? <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
               : <Mic size={12} />
             }
-            <span>{voiceConnected ? 'In Voice' : voiceConnecting ? 'Joining…' : 'Voice'}</span>
+            <span>{voiceConnected ? t('room_voice_in') : voiceConnecting ? t('room_voice_joining') : t('room_voice_chat')}</span>
             {voiceConnected && <VoiceWaveform speaking={speakingIds.size > 0} size={10} />}
           </button>
 
           {voiceConnected && (
             <button
               onClick={voiceToggleMute}
-              title={voiceMuted ? 'Unmute (or hold Space)' : 'Mute'}
+              title={voiceMuted ? t('room_unmute') : t('room_mute')}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 width: 30, height: 30, borderRadius: 4,
@@ -1283,10 +1283,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             }}
           >
             <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: '0 0 8px' }}>
-              End this room?
+              {t('room_end_title')}
             </p>
             <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 20px' }}>
-              The room will be closed for everyone and cannot be reopened.
+              {t('room_end_body')}
             </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
@@ -1297,7 +1297,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                   border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
-                Cancel
+                {t('common_cancel')}
               </button>
               <button
                 onClick={handleEndRoom}
@@ -1307,7 +1307,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                   border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >
-                End Room
+                {t('room_end_room_btn')}
               </button>
             </div>
           </div>

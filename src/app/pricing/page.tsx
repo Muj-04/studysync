@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Check, Zap, Crown, Sparkles, ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // ── Animated price number ─────────────────────────────────────────────────────
 
@@ -30,38 +31,10 @@ function useAnimatedPrice(target: number, duration = 420) {
   return display;
 }
 
-// ── Plan data ─────────────────────────────────────────────────────────────────
-
-const FREE_FEATURES = [
-  'Up to 3 documents',
-  '30 MB voice notes storage',
-  'Basic drawing tools',
-  'AI Summary (15/month)',
-  'Solo studying only',
-  'Cannot join or create rooms',
-  'Community: view only',
-];
-
-const PREMIUM_FEATURES = [
-  'Unlimited documents',
-  '1 GB voice notes storage',
-  'All drawing tools + image annotations',
-  'AI (300 requests/month)',
-  'Study Rooms (up to 5 members)',
-  'Friends & invites',
-  'Community: post & share',
-  'Custom themes & Priority support',
-];
-
-const PRO_FEATURES = [
-  'Everything in Premium',
-  '5 GB voice notes storage',
-  'AI requests (1,000/month)',
-  'Study Rooms (up to 20 members)',
-  'AI Flashcards & Quiz (coming soon)',
-  'Study analytics dashboard',
-  'Early access to new features',
-];
+// Plan feature keys – resolved inside the component via t()
+const FREE_FEATURE_KEYS = ['price_free_f1','price_free_f2','price_free_f3','price_free_f4','price_free_f5','price_free_f6','price_free_f7'] as const;
+const PREMIUM_FEATURE_KEYS = ['price_prem_f1','price_prem_f2','price_prem_f3','price_prem_f4','price_prem_f5','price_prem_f6','price_prem_f7','price_prem_f8'] as const;
+const PRO_FEATURE_KEYS = ['price_pro_f1','price_pro_f2','price_pro_f3','price_pro_f4','price_pro_f5','price_pro_f6','price_pro_f7'] as const;
 
 // ── Feature row ───────────────────────────────────────────────────────────────
 
@@ -87,6 +60,7 @@ function Feature({ text, accent = false }: { text: string; accent?: boolean }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function PricingPage() {
+  const { t } = useLanguage();
   const [yearly, setYearly]           = useState(false);
   const [userPlan, setUserPlan]       = useState<'free' | 'premium' | 'pro' | null>(null);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -209,7 +183,7 @@ export default function PricingPage() {
             onMouseOut={(e)  => (e.currentTarget.style.color = 'rgba(255,255,255,0.55)')}
           >
             <ArrowLeft size={14} />
-            Back
+            {t('price_back')}
           </Link>
           <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.12)' }} />
           <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em' }}>
@@ -234,7 +208,7 @@ export default function PricingPage() {
             onMouseOver={(e) => ((e.currentTarget as HTMLElement).style.background = '#3b82f6')}
             onMouseOut={(e)  => ((e.currentTarget as HTMLElement).style.background = '#2563eb')}
           >
-            Open App
+            {t('price_open_app')}
           </Link>
         </div>
       </nav>
@@ -249,7 +223,7 @@ export default function PricingPage() {
           animation: 'badgePop 0.4s cubic-bezier(0.22,1,0.36,1) both',
         }}>
           <Sparkles size={12} />
-          Simple, transparent pricing
+          {t('price_badge')}
         </div>
 
         <h1 style={{
@@ -257,13 +231,13 @@ export default function PricingPage() {
           margin: '0 0 12px', lineHeight: 1.1,
           animation: 'slideUpFade 0.5s 0.05s cubic-bezier(0.22,1,0.36,1) both',
         }}>
-          Invest in your studies.
+          {t('price_hero_title')}
         </h1>
         <p style={{
           fontSize: 17, color: 'rgba(255,255,255,0.55)', margin: '0 0 40px', fontWeight: 400,
           animation: 'slideUpFade 0.5s 0.1s cubic-bezier(0.22,1,0.36,1) both',
         }}>
-          Start free, no credit card required. Upgrade when you&apos;re ready.
+          {t('price_hero_sub')}
         </p>
 
         {/* ── Billing toggle ── */}
@@ -276,7 +250,7 @@ export default function PricingPage() {
             color: !yearly ? '#fff' : 'rgba(255,255,255,0.4)',
             transition: 'color 0.2s',
           }}>
-            Monthly
+            {t('price_monthly')}
           </span>
 
           {/* Animated switch */}
@@ -306,7 +280,7 @@ export default function PricingPage() {
             transition: 'color 0.2s',
             display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            Yearly
+            {t('price_yearly')}
             <span style={{
               fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 9999,
               background: 'rgba(34,197,94,0.18)', border: '1px solid rgba(34,197,94,0.4)',
@@ -316,7 +290,7 @@ export default function PricingPage() {
               transition: 'opacity 0.25s, transform 0.25s',
               display: 'inline-block',
             }}>
-              Save 35%
+              {t('price_save_pct')}
             </span>
           </span>
         </div>
@@ -355,19 +329,19 @@ export default function PricingPage() {
             }}>
               <Zap size={20} style={{ color: 'rgba(255,255,255,0.5)' }} />
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>Free</h2>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>Perfect for getting started</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>{t('price_free_name')}</h2>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>{t('price_free_sub')}</p>
           </div>
 
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-0.04em' }}>$0</span>
-              <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>/ forever</span>
+              <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>{t('price_forever')}</span>
             </div>
           </div>
 
           <div style={{ flex: 1, marginBottom: 28 }}>
-            {FREE_FEATURES.map((f) => <Feature key={f} text={f} />)}
+            {FREE_FEATURE_KEYS.map((k) => <Feature key={k} text={t(k)} />)}
           </div>
 
           {userPlan === 'free' || userPlan === null ? (
@@ -377,7 +351,7 @@ export default function PricingPage() {
               fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.55)',
               boxSizing: 'border-box',
             }}>
-              {userPlan === 'free' ? 'Current Plan' : 'Get Started Free'}
+              {userPlan === 'free' ? t('price_current_plan') : t('price_get_started_free')}
             </div>
           ) : (
             <Link href="/workspace" style={{
@@ -387,7 +361,7 @@ export default function PricingPage() {
               fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.55)',
               boxSizing: 'border-box',
             }}>
-              Open App
+              {t('price_open_app')}
             </Link>
           )}
         </div>
@@ -417,7 +391,7 @@ export default function PricingPage() {
             boxShadow: '0 4px 16px rgba(37,99,235,0.5)',
             animation: 'badgePop 0.4s 0.5s cubic-bezier(0.22,1,0.36,1) both',
           }}>
-            ★ Most Popular
+            {t('price_popular')}
           </div>
 
           <div style={{ marginBottom: 20 }}>
@@ -428,8 +402,8 @@ export default function PricingPage() {
             }}>
               <Crown size={20} style={{ color: '#60a5fa' }} />
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>Premium</h2>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>For serious students</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>{t('price_premium_name')}</h2>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>{t('price_premium_sub')}</p>
           </div>
 
           <div style={{ marginBottom: 24 }}>
@@ -438,18 +412,18 @@ export default function PricingPage() {
                 ${yearly ? premiumPrice.toFixed(0) : premiumPrice.toFixed(2)}
               </span>
               <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>
-                {yearly ? '/ year' : '/ month'}
+                {yearly ? t('price_per_year') : t('price_per_month')}
               </span>
             </div>
             {yearly && (
               <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.4)', margin: '4px 0 0' }}>
-                ${premiumSub.toFixed(2)}/mo — billed annually
+                ${premiumSub.toFixed(2)}{t('price_billed_mo')}
               </p>
             )}
           </div>
 
           <div style={{ flex: 1, marginBottom: 28 }}>
-            {PREMIUM_FEATURES.map((f) => <Feature key={f} text={f} accent />)}
+            {PREMIUM_FEATURE_KEYS.map((k) => <Feature key={k} text={t(k)} accent />)}
           </div>
 
           {userPlan === 'premium' ? (
@@ -458,7 +432,7 @@ export default function PricingPage() {
               background: 'rgba(37,99,235,0.15)', border: '1px solid rgba(37,99,235,0.4)',
               fontSize: 14, fontWeight: 600, color: '#60a5fa', boxSizing: 'border-box',
             }}>
-              ✓ Current Plan
+              {t('price_current_plan_check')}
             </div>
           ) : (
             <button
@@ -492,10 +466,10 @@ export default function PricingPage() {
               {loadingPlan === 'premium' ? (
                 <>
                   <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} />
-                  Processing…
+                  {t('price_processing')}
                 </>
               ) : (
-                `Get Premium →`
+                t('price_get_premium')
               )}
             </button>
           )}
@@ -528,8 +502,8 @@ export default function PricingPage() {
             }}>
               <Sparkles size={20} style={{ color: '#a78bfa' }} />
             </div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>Pro</h2>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>For power users</p>
+            <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>{t('price_pro_name')}</h2>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>{t('price_pro_sub')}</p>
           </div>
 
           <div style={{ marginBottom: 24 }}>
@@ -538,18 +512,18 @@ export default function PricingPage() {
                 ${yearly ? proPrice.toFixed(0) : proPrice.toFixed(2)}
               </span>
               <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>
-                {yearly ? '/ year' : '/ month'}
+                {yearly ? t('price_per_year') : t('price_per_month')}
               </span>
             </div>
             {yearly && (
               <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.4)', margin: '4px 0 0' }}>
-                ${proSub.toFixed(2)}/mo — billed annually
+                ${proSub.toFixed(2)}{t('price_billed_mo')}
               </p>
             )}
           </div>
 
           <div style={{ flex: 1, marginBottom: 28 }}>
-            {PRO_FEATURES.map((f) => <Feature key={f} text={f} />)}
+            {PRO_FEATURE_KEYS.map((k) => <Feature key={k} text={t(k)} />)}
           </div>
 
           {userPlan === 'pro' ? (
@@ -558,7 +532,7 @@ export default function PricingPage() {
               background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.35)',
               fontSize: 14, fontWeight: 600, color: '#a78bfa', boxSizing: 'border-box',
             }}>
-              ✓ Current Plan
+              {t('price_current_plan_check')}
             </div>
           ) : (
             <button
@@ -588,10 +562,10 @@ export default function PricingPage() {
               {loadingPlan === 'pro' ? (
                 <>
                   <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} />
-                  Processing…
+                  {t('price_processing')}
                 </>
               ) : (
-                `Get Pro →`
+                t('price_get_pro')
               )}
             </button>
           )}
@@ -604,10 +578,10 @@ export default function PricingPage() {
         textAlign: 'center',
       }}>
         <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.35)', lineHeight: 1.7 }}>
-          All plans include a 7-day free trial on first upgrade. Cancel anytime — no questions asked.
-          {' '}Prices shown in USD.{' '}
+          {t('price_faq_strip')}
+          {' '}
           <a href="mailto:support@studysync.app" style={{ color: 'rgba(255,255,255,0.5)', textDecoration: 'none' }}>
-            Questions? Contact support →
+            {t('price_faq_contact')}
           </a>
         </p>
       </section>

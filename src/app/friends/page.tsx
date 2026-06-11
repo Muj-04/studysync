@@ -310,7 +310,7 @@ export default function FriendsPage() {
             <button
               onClick={() => handleInvite(f.userId)}
               disabled={sent}
-              title={sent ? 'Invite sent' : `Invite to ${activeRoom.roomName}`}
+              title={sent ? t('fr_invite_sent') : `${t('fr_invite_to')} ${activeRoom.roomName}`}
               style={{
                 ...ghostBtnStyle,
                 color: sent ? 'var(--accent)' : 'var(--text-2)',
