@@ -256,6 +256,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const currentPageRef  = useRef<number>(1);
   const currentVPRef    = useRef<VirtualPage | null>(null);
   const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pdfContainerRef  = useRef<HTMLDivElement>(null);
+  const wheelCooldownRef = useRef(false);
+  const touchStartYRef   = useRef<number | null>(null);
 
   // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
   const addIncomingNoteRef    = useRef<((p: RoomVoiceNotePayload) => void) | null>(null);
@@ -631,6 +634,61 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   const nextPage = useCallback(() => {
     setVirtualIndex((i) => Math.min(virtualSequence.length - 1, i + 1));
+  }, [virtualSequence.length]);
+
+  // Wheel / touch-swipe → page navigation
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const el = pdfContainerRef.current!;
+    if (!el) return;
+
+    function navigate(direction: 'prev' | 'next') {
+      if (wheelCooldownRef.current) return;
+      wheelCooldownRef.current = true;
+      if (direction === 'prev') setVirtualIndex((i) => Math.max(0, i - 1));
+      else setVirtualIndex((i) => Math.min(virtualSequence.length - 1, i + 1));
+      setTimeout(() => { wheelCooldownRef.current = false; }, 500);
+    }
+
+    function onWheel(e: WheelEvent) {
+      if (e.ctrlKey || e.metaKey) return; // let PDFViewer handle zoom
+      // Find the inner scroll container to check if content is scrollable
+      const inner = el.querySelector<HTMLElement>('[style*="overflow: auto"], [style*="overflow:auto"]')
+        ?? el.querySelector<HTMLElement>('div');
+      if (inner) {
+        const atTop    = inner.scrollTop <= 2;
+        const atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 2;
+        const scrollable = inner.scrollHeight > inner.clientHeight + 4;
+        if (scrollable) {
+          // Only navigate when at the edge of the inner content
+          if (e.deltaY < 0 && !atTop) return;
+          if (e.deltaY > 0 && !atBottom) return;
+        }
+      }
+      e.preventDefault();
+      navigate(e.deltaY < 0 ? 'prev' : 'next');
+    }
+
+    function onTouchStart(e: TouchEvent) {
+      touchStartYRef.current = e.touches[0]?.clientY ?? null;
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (touchStartYRef.current === null) return;
+      const deltaY = touchStartYRef.current - (e.changedTouches[0]?.clientY ?? touchStartYRef.current);
+      touchStartYRef.current = null;
+      if (Math.abs(deltaY) < 50) return; // ignore small swipes
+      navigate(deltaY > 0 ? 'next' : 'prev');
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
   }, [virtualSequence.length]);
 
   const handleZoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), []);
@@ -1153,7 +1211,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       </div>
 
       {/* ── PDF / blank page viewer ── */}
-      <div style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
+      <div ref={pdfContainerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
         {activeDocument && !isBlankPage && (
           <PDFWithDrawing
             key={`${activeDocument.id}-p${currentPdfPage}`}
