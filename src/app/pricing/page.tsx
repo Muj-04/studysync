@@ -474,7 +474,7 @@ export default function PricingPage() {
             >
               {loadingPlan === 'premium' ? (
                 <>
-                  <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} />
+                  <div className="spinner" style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
                   {t('price_processing')}
                 </>
               ) : (
@@ -568,7 +568,7 @@ export default function PricingPage() {
             >
               {loadingPlan === 'pro' ? (
                 <>
-                  <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} />
+                  <div className="spinner" style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }} />
                   {t('price_processing')}
                 </>
               ) : (

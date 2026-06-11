@@ -204,6 +204,12 @@ textarea, select {
 
 .rec-dot          { animation: pulse-dot 1.2s ease-in-out infinite; }
 
+/* Functional loading spinner — must rotate even when prefers-reduced-motion is set */
+.spinner {
+  animation: spin 0.8s linear infinite !important;
+  animation-play-state: running !important;
+}
+
 /* ── Skeleton shimmer ── */
 @keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
 
