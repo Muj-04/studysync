@@ -444,11 +444,11 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
   }, [email, sb]);
 
   const savePassword = useCallback(async () => {
-    if (newPwd !== cfmPwd) { setPwdErr("Passwords don't match"); setPwdSt('err'); return; }
-    if (newPwd.length < 8) { setPwdErr('Password must be at least 8 characters'); setPwdSt('err'); return; }
+    if (newPwd !== cfmPwd) { setPwdErr(t('set_acc_pw_mismatch')); setPwdSt('err'); return; }
+    if (newPwd.length < 8) { setPwdErr(t('set_acc_pw_short')); setPwdSt('err'); return; }
     setPwdSt('loading');
     const { error } = await sb.auth.signInWithPassword({ email: userEmail, password: curPwd });
-    if (error) { setPwdErr('Current password is incorrect'); setPwdSt('err'); return; }
+    if (error) { setPwdErr(t('set_acc_current_pw_wrong')); setPwdSt('err'); return; }
     const { error: updErr } = await sb.auth.updateUser({ password: newPwd });
     if (updErr) { setPwdErr(updErr.message); setPwdSt('err'); }
     else {
@@ -616,6 +616,7 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
   onReset: () => void;
   sub?: string;
 }) {
+  const { t } = useLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <div style={{ marginBottom: 0 }}>
@@ -624,7 +625,7 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
         {/* Swatch / trigger */}
         <button
           onClick={() => inputRef.current?.click()}
-          title="Pick color"
+          title={t('set_app_pick_color')}
           style={{
             width: 38, height: 38, borderRadius: 4,
             background: value,
@@ -652,7 +653,7 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
         {/* Reset */}
         <button
           onClick={onReset}
-          title="Reset to default"
+          title={t('set_app_reset_default')}
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
             padding: '4px 10px', borderRadius: 4,
@@ -665,7 +666,7 @@ function ColorPickerField({ label, value, onChange, onReset, sub }: {
           onMouseOut={(e)  => Object.assign(e.currentTarget.style, { color: 'var(--text-3)', background: 'var(--bg-elevated)' })}
         >
           <RotateCcw size={10} />
-          Reset
+          {t('set_app_reset')}
         </button>
       </div>
       {sub && <SubLabel>{sub}</SubLabel>}
@@ -1345,28 +1346,28 @@ function DataSection() {
             background: 'var(--bg-elevated)', border: '1px solid var(--border)',
           }}>
             <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
-              {PLAN_LABELS[limitStats.plan]} Plan Limits
+              {PLAN_LABELS[limitStats.plan]} {t('set_data_plan_limits')}
             </p>
             {PLAN_LIMITS[limitStats.plan].documents !== Infinity && (
               <UsageBar
                 used={limitStats.documents}
                 max={PLAN_LIMITS[limitStats.plan].documents}
-                label="Documents"
+                label={t('set_data_documents')}
               />
             )}
             <UsageBar
               used={Math.round(limitStats.voiceStorageBytes / (1024 * 1024))}
               max={Math.round(PLAN_LIMITS[limitStats.plan].voiceStorageBytes / (1024 * 1024))}
-              label="Voice storage (MB)"
+              label={t('set_data_voice_storage')}
             />
             <UsageBar
               used={limitStats.aiRequestsThisMonth}
               max={PLAN_LIMITS[limitStats.plan].aiRequestsPerMonth}
-              label="AI requests this month"
+              label={t('set_data_ai_requests')}
             />
             {limitStats.plan !== 'pro' && (
               <a href="/pricing" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none', display: 'inline-block', marginTop: 4 }}>
-                Upgrade for higher limits →
+                {t('set_data_upgrade_limits')}
               </a>
             )}
           </div>

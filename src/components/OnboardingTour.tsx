@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { Upload, Pencil, Mic, Sparkles, Users, X, ChevronRight, ChevronLeft } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const TOUR_KEY = 'studysync_onboarding_v1';
 
@@ -11,46 +12,47 @@ interface Step {
   hint?: string;
 }
 
-const STEPS: Step[] = [
-  {
-    icon: <Upload size={28} />,
-    title: 'Upload your PDFs',
-    description: 'Drag and drop PDF or PPTX files onto the workspace, or click the upload button in the sidebar. Open multiple documents side by side.',
-    hint: 'Free plan: up to 3 documents',
-  },
-  {
-    icon: <Pencil size={28} />,
-    title: 'Annotate with drawing tools',
-    description: 'Use the floating toolbar to draw, highlight, and add text notes on any page. Your annotations sync across devices.',
-    hint: 'Press A to toggle the annotation toolbar',
-  },
-  {
-    icon: <Mic size={28} />,
-    title: 'Record voice notes',
-    description: 'Attach voice notes to any page using the mic button in the bottom-right corner of each page. Play them back instantly.',
-    hint: 'Voice notes are linked to the exact page you were on',
-  },
-  {
-    icon: <Sparkles size={28} />,
-    title: 'AI-powered summaries',
-    description: 'Open the Document Tools panel (right side) to generate AI summaries, extract key terms, and get instant answers about your document.',
-    hint: 'Powered by Gemini — works with any text PDF',
-  },
-  {
-    icon: <Users size={28} />,
-    title: 'Study together',
-    description: 'Create a Study Room to collaborate with classmates in real time. Share documents, discuss notes, and study smarter together.',
-    hint: 'Find Study Rooms in the header toolbar',
-  },
-];
-
 interface Props {
   onComplete: () => void;
 }
 
 export default function OnboardingTour({ onComplete }: Props) {
+  const { t } = useLanguage();
   const [step, setStep] = useState(0);
   const [leaving, setLeaving] = useState(false);
+
+  const STEPS: Step[] = [
+    {
+      icon: <Upload size={28} />,
+      title: t('tour_step1_title'),
+      description: t('tour_step1_desc'),
+      hint: t('tour_step1_hint'),
+    },
+    {
+      icon: <Pencil size={28} />,
+      title: t('tour_step2_title'),
+      description: t('tour_step2_desc'),
+      hint: t('tour_step2_hint'),
+    },
+    {
+      icon: <Mic size={28} />,
+      title: t('tour_step3_title'),
+      description: t('tour_step3_desc'),
+      hint: t('tour_step3_hint'),
+    },
+    {
+      icon: <Sparkles size={28} />,
+      title: t('tour_step4_title'),
+      description: t('tour_step4_desc'),
+      hint: t('tour_step4_hint'),
+    },
+    {
+      icon: <Users size={28} />,
+      title: t('tour_step5_title'),
+      description: t('tour_step5_desc'),
+      hint: t('tour_step5_hint'),
+    },
+  ];
 
   const dismiss = useCallback(() => {
     setLeaving(true);
@@ -114,7 +116,7 @@ export default function OnboardingTour({ onComplete }: Props) {
         {/* Skip button */}
         <button
           onClick={dismiss}
-          title="Skip tour"
+          title={t('tour_skip')}
           style={{
             position: 'absolute', top: 14, right: 14,
             width: 28, height: 28, borderRadius: '50%',
@@ -207,7 +209,7 @@ export default function OnboardingTour({ onComplete }: Props) {
               }}
             >
               <ChevronLeft size={14} />
-              Back
+              {t('common_back')}
             </button>
           )}
           <button
@@ -222,7 +224,7 @@ export default function OnboardingTour({ onComplete }: Props) {
               marginLeft: 'auto',
             }}
           >
-            {isLast ? "Let's go!" : 'Next'}
+            {isLast ? t('tour_finish') : t('tour_next')}
             {!isLast && <ChevronRight size={14} />}
           </button>
         </div>

@@ -127,7 +127,7 @@ export default function DashboardPage() {
               { label: t('nav_library'),   href: '/library',   active: false },
               { label: t('nav_community'), href: '/community', active: false },
               { label: t('nav_settings'),  href: '/settings',  active: false },
-              { label: 'Pricing',          href: '/pricing',   active: false },
+              { label: t('dash_pricing'),   href: '/pricing',   active: false },
             ].map(({ label, href, active }) => (
               <a
                 key={label}
@@ -160,7 +160,7 @@ export default function DashboardPage() {
               onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
               onMouseOut={(e)  => { e.currentTarget.style.background = '#ffffff'; }}
             >
-              Upgrade
+              {t('dash_upgrade')}
             </a>
           )}
           <a
