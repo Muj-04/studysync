@@ -13,8 +13,8 @@ const PLAN_CONFIG = {
     yearly:  { amount: 3900, label: 'StudySync Premium (Yearly)'  },
   },
   pro: {
-    monthly: { amount: 999,  label: 'StudySync Pro (Monthly)' },
-    yearly:  { amount: 7900, label: 'StudySync Pro (Yearly)'  },
+    monthly: { amount: 1399,  label: 'StudySync Pro (Monthly)' },
+    yearly:  { amount: 10900, label: 'StudySync Pro (Yearly)'  },
   },
 } as const;
 
