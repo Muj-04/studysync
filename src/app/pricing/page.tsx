@@ -310,7 +310,7 @@ export default function PricingPage() {
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
             boxShadow: hoveredCard === 'free'
-              ? '0 0 0 1px rgba(59,130,246,0.3), 0 24px 60px rgba(0,0,0,0.5), 0 0 50px rgba(37,99,235,0.12)'
+              ? '0 0 0 2px rgba(59,130,246,0.7), 0 32px 80px rgba(0,0,0,0.65), 0 0 100px rgba(37,99,235,0.35)'
               : '0 4px 24px rgba(0,0,0,0.3)',
             transform: hoveredCard === 'free' ? 'translateY(-12px) scale(1.03)' : 'translateY(0) scale(1)',
             transition: 'transform 0.35s ease-out, box-shadow 0.35s ease-out, background 0.35s ease-out',
@@ -322,10 +322,13 @@ export default function PricingPage() {
           <div style={{ marginBottom: 20 }}>
             <div style={{
               width: 40, height: 40, borderRadius: 10, marginBottom: 16,
-              background: 'rgba(255,255,255,0.07)',
+              background: hoveredCard === 'free' ? 'rgba(59,130,246,0.22)' : 'rgba(255,255,255,0.07)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transform: hoveredCard === 'free' ? 'scale(1.25) rotate(-10deg)' : 'scale(1) rotate(0deg)',
+              transition: 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1), background 0.3s ease-out, box-shadow 0.3s ease-out',
+              boxShadow: hoveredCard === 'free' ? '0 0 20px rgba(59,130,246,0.45)' : 'none',
             }}>
-              <Zap size={20} style={{ color: 'rgba(255,255,255,0.5)' }} />
+              <Zap size={20} style={{ color: hoveredCard === 'free' ? '#93c5fd' : 'rgba(255,255,255,0.5)', transition: 'color 0.3s' }} />
             </div>
             <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>{t('price_free_name')}</h2>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>{t('price_free_sub')}</p>
@@ -373,7 +376,7 @@ export default function PricingPage() {
             animation: 'premiumGlow 3s 1s ease-in-out infinite, slideUpFade 0.55s 0.3s cubic-bezier(0.22,1,0.36,1) both',
             transform: hoveredCard === 'premium' ? 'scale(1.03) translateY(-12px)' : 'scale(1.03)',
             boxShadow: hoveredCard === 'premium'
-              ? '0 0 0 1.5px rgba(59,130,246,0.5), 0 24px 60px rgba(0,0,0,0.55), 0 0 60px rgba(37,99,235,0.22)'
+              ? '0 0 0 2px rgba(59,130,246,0.85), 0 32px 80px rgba(0,0,0,0.65), 0 0 120px rgba(37,99,235,0.5)'
               : undefined,
             transition: 'transform 0.35s ease-out, box-shadow 0.35s ease-out, background 0.35s ease-out',
           }}
@@ -395,10 +398,13 @@ export default function PricingPage() {
           <div style={{ marginBottom: 20 }}>
             <div style={{
               width: 40, height: 40, borderRadius: 10, marginBottom: 16,
-              background: 'rgba(37,99,235,0.2)',
+              background: hoveredCard === 'premium' ? 'rgba(37,99,235,0.5)' : 'rgba(37,99,235,0.2)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transform: hoveredCard === 'premium' ? 'scale(1.25) rotate(10deg)' : 'scale(1) rotate(0deg)',
+              transition: 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1), background 0.3s ease-out, box-shadow 0.3s ease-out',
+              boxShadow: hoveredCard === 'premium' ? '0 0 24px rgba(37,99,235,0.65)' : 'none',
             }}>
-              <Crown size={20} style={{ color: '#60a5fa' }} />
+              <Crown size={20} style={{ color: hoveredCard === 'premium' ? '#bfdbfe' : '#60a5fa', transition: 'color 0.3s' }} />
             </div>
             <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>{t('price_premium_name')}</h2>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>{t('price_premium_sub')}</p>
@@ -440,25 +446,18 @@ export default function PricingPage() {
                 width: '100%', padding: '12px', borderRadius: 8, border: 'none',
                 background: loadingPlan === 'premium'
                   ? 'rgba(37,99,235,0.6)'
-                  : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                  : hoveredCard === 'premium'
+                    ? 'linear-gradient(135deg, #3b82f6, #2563eb)'
+                    : 'linear-gradient(135deg, #2563eb, #1d4ed8)',
                 color: '#fff', fontSize: 14, fontWeight: 700,
                 cursor: loadingPlan ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit', boxSizing: 'border-box',
-                transition: 'background 0.2s, transform 0.15s, box-shadow 0.2s',
-                boxShadow: '0 4px 16px rgba(37,99,235,0.35)',
+                transition: 'background 0.35s ease-out, transform 0.35s ease-out, box-shadow 0.35s ease-out',
+                boxShadow: hoveredCard === 'premium'
+                  ? '0 10px 36px rgba(37,99,235,0.75), 0 0 0 1px rgba(59,130,246,0.4)'
+                  : '0 4px 16px rgba(37,99,235,0.35)',
+                transform: hoveredCard === 'premium' ? 'translateY(-4px)' : 'translateY(0)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}
-              onMouseOver={(e) => {
-                if (!loadingPlan) {
-                  (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, #3b82f6, #2563eb)';
-                  (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
-                  (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px rgba(37,99,235,0.55)';
-                }
-              }}
-              onMouseOut={(e) => {
-                (e.currentTarget as HTMLElement).style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)';
-                (e.currentTarget as HTMLElement).style.transform = '';
-                (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(37,99,235,0.35)';
               }}
             >
               {loadingPlan === 'premium' ? (
@@ -481,7 +480,7 @@ export default function PricingPage() {
             border: '1px solid rgba(255,255,255,0.1)',
             backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
             boxShadow: hoveredCard === 'pro'
-              ? '0 0 0 1px rgba(139,92,246,0.35), 0 24px 60px rgba(0,0,0,0.5), 0 0 50px rgba(124,58,237,0.14)'
+              ? '0 0 0 2px rgba(139,92,246,0.8), 0 32px 80px rgba(0,0,0,0.65), 0 0 100px rgba(124,58,237,0.45)'
               : '0 4px 24px rgba(0,0,0,0.3)',
             transform: hoveredCard === 'pro' ? 'translateY(-12px) scale(1.03)' : 'translateY(0) scale(1)',
             transition: 'transform 0.35s ease-out, box-shadow 0.35s ease-out, background 0.35s ease-out',
@@ -493,10 +492,13 @@ export default function PricingPage() {
           <div style={{ marginBottom: 20 }}>
             <div style={{
               width: 40, height: 40, borderRadius: 10, marginBottom: 16,
-              background: 'rgba(124,58,237,0.15)',
+              background: hoveredCard === 'pro' ? 'rgba(124,58,237,0.45)' : 'rgba(124,58,237,0.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transform: hoveredCard === 'pro' ? 'scale(1.25) rotate(12deg)' : 'scale(1) rotate(0deg)',
+              transition: 'transform 0.4s cubic-bezier(0.34,1.56,0.64,1), background 0.3s ease-out, box-shadow 0.3s ease-out',
+              boxShadow: hoveredCard === 'pro' ? '0 0 24px rgba(124,58,237,0.6)' : 'none',
             }}>
-              <Sparkles size={20} style={{ color: '#a78bfa' }} />
+              <Sparkles size={20} style={{ color: hoveredCard === 'pro' ? '#ddd6fe' : '#a78bfa', transition: 'color 0.3s' }} />
             </div>
             <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 6px', letterSpacing: '-0.02em' }}>{t('price_pro_name')}</h2>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)', margin: 0 }}>{t('price_pro_sub')}</p>
@@ -536,23 +538,15 @@ export default function PricingPage() {
               disabled={!!loadingPlan}
               style={{
                 width: '100%', padding: '11px', borderRadius: 8,
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.2)',
+                background: hoveredCard === 'pro' ? 'rgba(124,58,237,0.28)' : 'rgba(255,255,255,0.07)',
+                border: hoveredCard === 'pro' ? '1px solid rgba(139,92,246,0.65)' : '1px solid rgba(255,255,255,0.2)',
                 color: '#fff', fontSize: 14, fontWeight: 600,
                 cursor: loadingPlan ? 'not-allowed' : 'pointer',
                 fontFamily: 'inherit', boxSizing: 'border-box',
-                transition: 'background 0.18s, border-color 0.18s',
+                transition: 'background 0.35s ease-out, border-color 0.35s ease-out, transform 0.35s ease-out, box-shadow 0.35s ease-out',
+                transform: hoveredCard === 'pro' ? 'translateY(-4px)' : 'translateY(0)',
+                boxShadow: hoveredCard === 'pro' ? '0 10px 28px rgba(124,58,237,0.5)' : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              }}
-              onMouseOver={(e) => {
-                if (!loadingPlan) {
-                  (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.13)';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.4)';
-                }
-              }}
-              onMouseOut={(e) => {
-                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)';
-                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.2)';
               }}
             >
               {loadingPlan === 'pro' ? (
