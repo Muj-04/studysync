@@ -16,6 +16,7 @@ import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { setPendingReopenFile } from '@/lib/pendingReopenFile';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -315,10 +316,12 @@ function DocCard({ doc, tags, isFavorite, studySeconds, allTags, onDelete, onOpe
 function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => void }) {
   const { t } = useLanguage();
   const fileRef = useRef<HTMLInputElement>(null);
-  const handleFile = (_file: File) => {
-    sessionStorage.setItem('reopen_doc_id', doc.id);
-    sessionStorage.setItem('reopen_doc_name', doc.name);
-    window.location.href = '/workspace';
+  const handleFile = (file: File) => {
+    setPendingReopenFile(file).finally(() => {
+      sessionStorage.setItem('reopen_doc_id', doc.id);
+      sessionStorage.setItem('reopen_doc_name', doc.name);
+      window.location.href = '/workspace';
+    });
   };
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
@@ -415,8 +418,12 @@ export default function LibraryPage() {
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
-    await deleteLibraryDocument(deleteTarget.id);
-    setDocs((prev) => prev.filter((d) => d.id !== deleteTarget.id));
+    const id = deleteTarget.id;
+    await deleteLibraryDocument(id);
+    setDocs((prev) => prev.filter((d) => d.id !== id));
+    setTagsMap((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    setStudyMap((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    setFavorites((prev) => { const next = new Set(prev); next.delete(id); return next; });
     setDeleteTarget(null);
   }, [deleteTarget]);
 
