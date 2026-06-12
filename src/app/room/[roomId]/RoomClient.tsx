@@ -256,8 +256,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const currentPageRef  = useRef<number>(1);
   const currentVPRef    = useRef<VirtualPage | null>(null);
   const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pdfContainerRef  = useRef<HTMLDivElement>(null);
-  const wheelCooldownRef = useRef(false);
+  const pdfContainerRef          = useRef<HTMLDivElement>(null);
+  const wheelCooldownRef         = useRef(false);
+  const virtualSequenceLengthRef = useRef(0);
   const touchStartYRef   = useRef<number | null>(null);
 
   // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
@@ -282,6 +283,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     }));
     return buildVirtualSequence(activeDocument.pageCount, blankPages);
   }, [docId, activeDocument, roomBlankPages]);
+
+  virtualSequenceLengthRef.current = virtualSequence.length;
 
   const currentVP = virtualSequence[virtualIndex] ?? null;
   useEffect(() => { currentVPRef.current = currentVP; }, [currentVP]);
@@ -637,16 +640,19 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [virtualSequence.length]);
 
   // Wheel / touch-swipe → page navigation
+  // Dependency is [status]: we need the effect to re-run when status becomes
+  // 'ready' because that is when pdfContainerRef.current first becomes non-null.
+  // Using [virtualSequence.length] was the bug — it fires while still loading
+  // (ref is null), then never re-fires when the DOM element appears.
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const el = pdfContainerRef.current!;
+    const el = pdfContainerRef.current;
     if (!el) return;
 
     function navigate(direction: 'prev' | 'next') {
       if (wheelCooldownRef.current) return;
       wheelCooldownRef.current = true;
       if (direction === 'prev') setVirtualIndex((i) => Math.max(0, i - 1));
-      else setVirtualIndex((i) => Math.min(virtualSequence.length - 1, i + 1));
+      else setVirtualIndex((i) => Math.min(virtualSequenceLengthRef.current - 1, i + 1));
       setTimeout(() => { wheelCooldownRef.current = false; }, 500);
     }
 
@@ -676,7 +682,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchend', onTouchEnd);
     };
-  }, [virtualSequence.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   const handleZoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), []);
   const handleZoomIn  = useCallback(() => setZoom((z) => clampZoom(z + 0.1)), []);
