@@ -640,29 +640,31 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [virtualSequence.length]);
 
   // Wheel / touch-swipe → page navigation
-  // Dependency is [status]: we need the effect to re-run when status becomes
-  // 'ready' because that is when pdfContainerRef.current first becomes non-null.
-  // Using [virtualSequence.length] was the bug — it fires while still loading
-  // (ref is null), then never re-fires when the DOM element appears.
+  // Registered on `document` (not pdfContainerRef) so there is no dependency on
+  // when pdfContainerRef mounts or on event bubbling through scrollable children.
+  // We check pdfContainerRef.current.contains(target) at call-time to scope the
+  // handler to the PDF area only. Empty deps: register once, read state via refs.
   useEffect(() => {
-    const el = pdfContainerRef.current;
-    if (!el) return;
-
-    function navigate(direction: 'prev' | 'next') {
+    function navigatePage(direction: 'prev' | 'next') {
       if (wheelCooldownRef.current) return;
       wheelCooldownRef.current = true;
+      const len = virtualSequenceLengthRef.current;
       if (direction === 'prev') setVirtualIndex((i) => Math.max(0, i - 1));
-      else setVirtualIndex((i) => Math.min(virtualSequenceLengthRef.current - 1, i + 1));
+      else setVirtualIndex((i) => Math.min(Math.max(0, len - 1), i + 1));
       setTimeout(() => { wheelCooldownRef.current = false; }, 500);
     }
 
     function onWheel(e: WheelEvent) {
-      if (e.ctrlKey || e.metaKey) return; // let PDFViewer handle zoom
+      if (e.ctrlKey || e.metaKey) return; // ctrl+scroll = zoom, handled by PDFViewer
+      const container = pdfContainerRef.current;
+      if (!container || !container.contains(e.target as Node)) return;
       e.preventDefault();
-      navigate(e.deltaY < 0 ? 'prev' : 'next');
+      navigatePage(e.deltaY < 0 ? 'prev' : 'next');
     }
 
     function onTouchStart(e: TouchEvent) {
+      const container = pdfContainerRef.current;
+      if (!container || !container.contains(e.target as Node)) return;
       touchStartYRef.current = e.touches[0]?.clientY ?? null;
     }
 
@@ -670,20 +672,22 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       if (touchStartYRef.current === null) return;
       const deltaY = touchStartYRef.current - (e.changedTouches[0]?.clientY ?? touchStartYRef.current);
       touchStartYRef.current = null;
-      if (Math.abs(deltaY) < 50) return; // ignore small swipes
-      navigate(deltaY > 0 ? 'next' : 'prev');
+      if (Math.abs(deltaY) < 50) return;
+      const len = virtualSequenceLengthRef.current;
+      if (deltaY > 0) setVirtualIndex((i) => Math.min(Math.max(0, len - 1), i + 1));
+      else setVirtualIndex((i) => Math.max(0, i - 1));
     }
 
-    el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    document.addEventListener('wheel', onWheel, { passive: false });
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
     return () => {
-      el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchend', onTouchEnd);
+      document.removeEventListener('wheel', onWheel);
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchend', onTouchEnd);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, []);
 
   const handleZoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), []);
   const handleZoomIn  = useCallback(() => setZoom((z) => clampZoom(z + 0.1)), []);
