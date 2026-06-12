@@ -115,16 +115,16 @@ export async function POST(req: NextRequest) {
         ? `Current page content:\n${(text as string).slice(0, 6000)}\n\n`
         : 'No document is open.\n\n';
       prompt =
-        'You are a helpful AI study assistant embedded in a PDF study tool. ' +
-        'The student is asking about the document they are reading. Be concise and helpful.\n\n' +
+        'You are a helpful AI assistant. The user is currently studying with a PDF tool. ' +
+        'Answer any question they ask — whether about the document, a general topic, math, coding, or anything else. ' +
+        'If document content is provided below, use it as context when relevant, but never refuse a question just because it is off-topic.\n\n' +
         pageContext +
-        `Student: ${chatMessage.slice(0, 1000)}\n\n` +
+        `User: ${chatMessage.slice(0, 1000)}\n\n` +
         'Guidelines:\n' +
         '- For summary requests: use bullet points starting with •\n' +
         '- For flashcard requests: format as Q: [question] / A: [answer], one per line\n' +
         '- For quiz requests: ask a question from the content\n' +
-        '- For explanations: be clear and simple\n' +
-        '- Keep responses focused and concise for studying';
+        '- Be friendly, clear, and concise';
     } else if (action === 'flashcards') {
       prompt =
         'Generate 5 to 10 flashcard question-answer pairs from the text below. ' +
