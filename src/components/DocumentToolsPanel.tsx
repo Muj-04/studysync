@@ -1098,9 +1098,9 @@ export default function DocumentToolsPanel({
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 800,
-            background: 'rgba(0,0,0,0.65)',
-            backdropFilter: 'blur(5px)',
-            WebkitBackdropFilter: 'blur(5px)',
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: 40,
           }}
@@ -1111,10 +1111,10 @@ export default function DocumentToolsPanel({
             style={{
               width: '80%', maxWidth: 760,
               height: '80vh',
-              background: 'var(--bg-panel)',
+              background: '#1a1c24',
               border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 10,
-              boxShadow: '0 24px 72px rgba(0,0,0,0.55)',
+              boxShadow: '0 24px 72px rgba(0,0,0,0.7)',
               display: 'flex', flexDirection: 'column',
               overflow: 'hidden',
             }}
@@ -1294,11 +1294,11 @@ export default function DocumentToolsPanel({
 
             {/* Input area */}
             <div style={{
-              borderTop: '1px solid var(--border-subtle)',
+              borderTop: '1px solid rgba(255,255,255,0.08)',
               padding: '12px 16px',
               flexShrink: 0,
               position: 'relative',
-              background: 'var(--bg-elevated)',
+              background: '#14161d',
             }}>
               <textarea
                 ref={expandedInputRef}
@@ -1314,8 +1314,8 @@ export default function DocumentToolsPanel({
                 rows={3}
                 style={{
                   width: '100%', resize: 'none',
-                  background: 'var(--bg-panel)',
-                  border: '1px solid var(--border)',
+                  background: '#1e2030',
+                  border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: 8, outline: 'none',
                   fontSize: 13, color: 'var(--text-1)',
                   fontFamily: 'inherit', lineHeight: 1.55,
