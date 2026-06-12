@@ -191,8 +191,9 @@ export default function PageNavigation({
         {showBgPicker && (
           <div style={{
             position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
-            background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.15)',
+            background: 'var(--bg-float)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid var(--bg-float-border)',
+            boxShadow: 'var(--shadow-float)',
             borderRadius: 4, padding: '10px',
             zIndex: 100,
           }}>

@@ -94,10 +94,12 @@ export default function GlobalSearch({ onClose, onNavigate }: Props) {
       <div
         style={{
           width: 520, maxHeight: '70vh',
-          background: 'var(--bg-panel)',
-          border: '1px solid rgba(255,255,255,0.12)',
+          background: 'var(--bg-float)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid var(--bg-float-border)',
           borderRadius: 10,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 4px 16px rgba(0,0,0,0.4)',
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}

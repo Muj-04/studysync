@@ -439,9 +439,10 @@ function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
     >
       <div
         style={{
-          background: 'var(--bg-panel)',
-          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'var(--bg-float)',
+          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid var(--bg-float-border)',
+          boxShadow: 'var(--shadow-float)',
           borderRadius: 4, padding: '28px', width: 420,
         }}
         onClick={(e) => e.stopPropagation()}
@@ -667,9 +668,10 @@ function HelpModal({ onClose }: { onClose: () => void }) {
           width: 460,
           maxHeight: '82vh',
           display: 'flex', flexDirection: 'column',
-          background: 'var(--bg-panel)',
-          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          background: 'var(--bg-float)',
+          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+          border: '1px solid var(--bg-float-border)',
+          boxShadow: 'var(--shadow-float)',
           borderRadius: 4,
           overflow: 'hidden',
         }}
@@ -2030,9 +2032,10 @@ export default function WorkspacePage() {
               {exportMenuOpen && (
                 <div style={{
                   position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                  background: 'var(--bg-panel)', border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'var(--bg-float)', border: '1px solid var(--bg-float-border)',
+                  backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
                   borderRadius: 6, padding: '4px 0', minWidth: 160,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 200,
+                  boxShadow: 'var(--shadow-float)', zIndex: 200,
                 }}>
                   {[
                     { label: 'Export as PDF', ext: 'pdf' },
@@ -2681,9 +2684,10 @@ export default function WorkspacePage() {
               onClick={(e) => e.stopPropagation()}
               style={{
                 width: '100%', maxWidth: 400,
-                background: 'var(--bg-panel)',
-                backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'var(--bg-float)',
+                backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                border: '1px solid var(--bg-float-border)',
+                boxShadow: 'var(--shadow-float)',
                 borderRadius: 8, padding: '28px 28px 24px',
                 display: 'flex', flexDirection: 'column', gap: 14,
               }}
@@ -2743,9 +2747,10 @@ export default function WorkspacePage() {
               onClick={(e) => e.stopPropagation()}
               style={{
                 width: '100%', maxWidth: 380,
-                background: 'var(--bg-panel)',
-                backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'var(--bg-float)',
+                backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                border: '1px solid var(--bg-float-border)',
+                boxShadow: 'var(--shadow-float)',
                 borderRadius: 8, padding: '24px 24px 20px',
                 display: 'flex', flexDirection: 'column', gap: 14,
               }}
@@ -2797,9 +2802,10 @@ export default function WorkspacePage() {
           <div
             style={{
               width: '100%', maxWidth: 420,
-              background: 'var(--bg-panel)',
-              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'var(--bg-float)',
+              backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+              border: '1px solid var(--bg-float-border)',
+              boxShadow: 'var(--shadow-float)',
               borderRadius: 4,
               padding: '24px',
               display: 'flex', flexDirection: 'column', gap: 16,
@@ -2896,9 +2902,10 @@ export default function WorkspacePage() {
             display: 'flex', alignItems: 'center', gap: 10,
             padding: '11px 16px',
             borderRadius: 4,
-            background: 'var(--bg-panel)',
-            backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'var(--bg-float)',
+            backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid var(--bg-float-border)',
+            boxShadow: 'var(--shadow-float)',
             color: 'var(--text-1)',
             fontSize: 13, fontWeight: 500,
             pointerEvents: 'none',
