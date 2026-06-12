@@ -1086,6 +1086,15 @@ export async function fetchRoomDrawing(roomId: string, pageNumber: number): Prom
   return data?.data ?? null;
 }
 
+export async function fetchAllRoomDrawings(roomId: string): Promise<Array<{ pageNumber: number; data: string }>> {
+  const { data, error } = await sb()
+    .from('room_drawings')
+    .select('page_number, data')
+    .eq('room_id', roomId);
+  if (error) { console.error('[DB] fetchAllRoomDrawings error:', error.message); return []; }
+  return (data ?? []).map((row) => ({ pageNumber: row.page_number as number, data: row.data as string }));
+}
+
 // ── Friends ───────────────────────────────────────────────────────────────────
 
 export interface UserResult {
