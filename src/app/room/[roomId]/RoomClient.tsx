@@ -658,6 +658,20 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       if (e.ctrlKey || e.metaKey) return; // ctrl+scroll = zoom, handled by PDFViewer
       const container = pdfContainerRef.current;
       if (!container || !container.contains(e.target as Node)) return;
+
+      // Only navigate pages when the nearest scrollable ancestor is already at its boundary.
+      // Otherwise let native scroll handle it (e.g. zoomed-in PDF page).
+      let el = e.target as HTMLElement | null;
+      while (el && el !== container) {
+        const { overflowY } = getComputedStyle(el);
+        if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+          if (e.deltaY < 0 && el.scrollTop > 0) return;
+          if (e.deltaY > 0 && el.scrollTop + el.clientHeight < el.scrollHeight - 1) return;
+          break;
+        }
+        el = el.parentElement;
+      }
+
       e.preventDefault();
       navigatePage(e.deltaY < 0 ? 'prev' : 'next');
     }
@@ -1212,7 +1226,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       <div ref={pdfContainerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
         {activeDocument && !isBlankPage && (
           <PDFWithDrawing
-            key={`${activeDocument.id}-p${currentPdfPage}`}
+            key={activeDocument.id}
             ref={drawingRef}
             document={activeDocument}
             tool={tool}
