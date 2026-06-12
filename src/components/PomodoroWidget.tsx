@@ -49,14 +49,14 @@ export default function PomodoroWidget({ onClose }: Props) {
         left: pos.x, top: pos.y,
         zIndex: 600,
         width: 200,
-        background: 'var(--bg-panel)',
-        border: '1px solid rgba(255,255,255,0.12)',
+        background: 'var(--bg-float)',
+        border: '1px solid var(--bg-float-border)',
         borderRadius: 10,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.45)',
+        boxShadow: 'var(--shadow-float)',
         cursor: 'grab',
         userSelect: 'none',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
       }}
     >
       {/* Header */}

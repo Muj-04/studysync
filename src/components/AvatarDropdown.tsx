@@ -92,12 +92,13 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
             ...(lang === 'ar' ? { left: 0 } : { right: 0 }),
             width: 200,
             transformOrigin: lang === 'ar' ? 'top left' : 'top right',
-            background: 'var(--bg-panel)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'var(--bg-float)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid var(--bg-float-border)',
+            boxShadow: 'var(--shadow-float)',
             borderRadius: 4,
-                        zIndex: 300,
+            zIndex: 300,
             overflow: 'hidden',
           }}
         >
