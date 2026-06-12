@@ -99,15 +99,33 @@ export async function POST(req: NextRequest) {
   // Process the AI request
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   try {
-    const { action, text, language } = await req.json();
+    const { action, text, language, message: chatMessage } = await req.json();
 
-    if (!text || typeof text !== 'string') {
+    if (action !== 'chat' && (!text || typeof text !== 'string')) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });
     }
 
     let prompt: string;
 
-    if (action === 'flashcards') {
+    if (action === 'chat') {
+      if (!chatMessage || typeof chatMessage !== 'string') {
+        return NextResponse.json({ error: 'Missing message' }, { status: 400 });
+      }
+      const pageContext = text?.trim()
+        ? `Current page content:\n${(text as string).slice(0, 6000)}\n\n`
+        : 'No document is open.\n\n';
+      prompt =
+        'You are a helpful AI study assistant embedded in a PDF study tool. ' +
+        'The student is asking about the document they are reading. Be concise and helpful.\n\n' +
+        pageContext +
+        `Student: ${chatMessage.slice(0, 1000)}\n\n` +
+        'Guidelines:\n' +
+        '- For summary requests: use bullet points starting with •\n' +
+        '- For flashcard requests: format as Q: [question] / A: [answer], one per line\n' +
+        '- For quiz requests: ask a question from the content\n' +
+        '- For explanations: be clear and simple\n' +
+        '- Keep responses focused and concise for studying';
+    } else if (action === 'flashcards') {
       prompt =
         'Generate 5 to 10 flashcard question-answer pairs from the text below. ' +
         'Return ONLY a JSON array with objects containing "question" and "answer" string fields. ' +

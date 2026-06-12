@@ -2,16 +2,12 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import {
   ImagePlus, Trash2, FileOutput, FilePlus, Mic,
-  Sparkles, Languages, Lightbulb, BookOpen, ChevronLeft, ChevronRight,
-  Table2, Quote, FunctionSquare, BookMarked,
-  Loader2, Maximize2, Copy, Check, X, Users, Eraser, RotateCcw,
+  Sparkles, Languages,
+  Loader2, Maximize2, Copy, Check, X, Users, Eraser, Send,
 } from 'lucide-react';
-import { callAI } from '@/lib/gemini';
-import { storageGet, storageSet, KEYS } from '@/lib/storage';
-import type { TextNote, KeyTerm, PDFPageImage } from '@/types';
+import { callAI, callAIChat } from '@/lib/gemini';
+import type { TextNote, PDFPageImage } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { saveFlashcards, loadFlashcards } from '@/lib/supabase/db';
-import type { Flashcard } from '@/lib/supabase/db';
 
 // ── PDF text extraction ───────────────────────────────────────────────────────
 
@@ -32,8 +28,15 @@ const BG_THEMES: Array<{ theme: 'white' | 'dark'; label: string; bg: string; dot
   { theme: 'dark',  label: 'Dark',  bg: '#1e1e2e',  dotColor: 'rgba(255,255,255,0.18)' },
 ];
 
-const LANGS = ['Arabic', 'French', 'Spanish'] as const;
+const LANGS = ['Arabic', 'English', 'French', 'Spanish'] as const;
 type Lang = typeof LANGS[number];
+
+const LANG_CODE: Record<Lang, string> = {
+  Arabic:  'AR',
+  English: 'EN',
+  French:  'FR',
+  Spanish: 'ES',
+};
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +66,13 @@ interface Props {
   onDeletePageImage?: (pageNumber: number, imageId: string) => void;
 }
 
+// ── Chat message type ─────────────────────────────────────────────────────────
+
+interface ChatMessage {
+  role: 'user' | 'ai';
+  content: string;
+}
+
 // ── Section label ─────────────────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -74,35 +84,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     }}>
       {children}
     </p>
-  );
-}
-
-// ── Quick template tile ───────────────────────────────────────────────────────
-
-function TemplateTile({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick?: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
-        padding: '10px 10px',
-        borderRadius: 4,
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        color: 'var(--text-2)',
-        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-        transition: 'border-color 0.13s, background 0.13s',
-      }}
-      onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-        borderColor: 'rgba(255,255,255,0.35)', background: 'var(--bg-hover)',
-      })}
-      onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-        borderColor: 'var(--border)', background: 'var(--bg-elevated)',
-      })}
-    >
-      <span style={{ color: 'var(--text-3)' }}>{icon}</span>
-      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-2)' }}>{label}</span>
-    </button>
   );
 }
 
@@ -217,7 +198,6 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
     setTimeout(() => setCopied(false), 2000);
   }
 
-  // Close on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -242,12 +222,11 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
           background: 'var(--bg-panel)',
           border: '1px solid var(--border)',
           borderRadius: 4,
-                    display: 'flex', flexDirection: 'column',
+          display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '15px 20px',
@@ -277,13 +256,9 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
             <X size={14} />
           </button>
         </div>
-
-        {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
           {content}
         </div>
-
-        {/* Footer */}
         <div style={{
           padding: '12px 20px',
           borderTop: '1px solid var(--border-subtle)',
@@ -313,40 +288,6 @@ function ResultModal({ title, content, copyText, onClose }: ModalData & { onClos
   );
 }
 
-// ── Shared action button ──────────────────────────────────────────────────────
-
-function ActionBtn({
-  onClick, disabled, loading, loadingLabel, label,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-  loading: boolean;
-  loadingLabel: string;
-  label: string;
-}) {
-  const active = !disabled && !loading;
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled || loading}
-      style={{
-        height: 22, padding: '0 9px',
-        borderRadius: 4, fontSize: 10.5, fontWeight: 500,
-        background: active ? '#ffffff' : 'var(--bg-active)',
-        border: 'none',
-        color: active ? '#0f172a' : 'var(--text-3)',
-        cursor: active ? 'pointer' : 'not-allowed',
-        fontFamily: 'inherit', flexShrink: 0,
-        transition: 'background 0.13s',
-      }}
-      onMouseOver={(e) => { if (active) e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
-      onMouseOut={(e)  => { if (active) e.currentTarget.style.background = '#ffffff'; }}
-    >
-      {loading ? loadingLabel : label}
-    </button>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function DocumentToolsPanel({
@@ -355,9 +296,6 @@ export default function DocumentToolsPanel({
   currentBgTheme, onChangeBgTheme,
   onVoiceNote, isRecording = false,
   documentUrl, currentPdfPage, selectedText = '',
-  activeDocumentId,
-  onInsertTextNote,
-  onInsertBlankPageWithGrid,
   onCreateRoom,
   onClearAllDrawings,
   onAddImageToPage,
@@ -367,7 +305,9 @@ export default function DocumentToolsPanel({
   onDeletePageImage,
 }: Props) {
   const { t } = useLanguage();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef     = useRef<HTMLInputElement>(null);
+  const addImageInputRef = useRef<HTMLInputElement>(null);
+  const chatScrollRef    = useRef<HTMLDivElement>(null);
 
   const translatedBgThemes: typeof BG_THEMES = [
     { ...BG_THEMES[0], label: t('room_bg_white') },
@@ -377,260 +317,14 @@ export default function DocumentToolsPanel({
   // ── Modal ──────────────────────────────────────────────────────────────────
   const [modal, setModal] = useState<ModalData | null>(null);
 
-  // ── Data Table modal ───────────────────────────────────────────────────────
-  const [dataTableOpen, setDataTableOpen] = useState(false);
-  const [tableRows, setTableRows] = useState(4);
-  const [tableCols, setTableCols] = useState(4);
-
-  // ── Citation modal ─────────────────────────────────────────────────────────
-  const [citationOpen, setCitationOpen] = useState(false);
-  const [citAuthor, setCitAuthor] = useState('');
-  const [citTitle, setCitTitle] = useState('');
-  const [citYear, setCitYear] = useState('');
-  const [citPublisher, setCitPublisher] = useState('');
-  const [citCopied, setCitCopied] = useState(false);
-
-  // ── Equation modal ─────────────────────────────────────────────────────────
-  const [equationOpen, setEquationOpen] = useState(false);
-  const [equationText, setEquationText] = useState('');
-
-  // ── Clear drawings confirmation ────────────────────────────────────────────
-  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
-
   // ── Add image state ────────────────────────────────────────────────────────
   const [addImageData, setAddImageData] = useState<string | null>(null);
-  const addImageInputRef = useRef<HTMLInputElement>(null);
 
   // ── Remove image modal ─────────────────────────────────────────────────────
   const [removeImgOpen, setRemoveImgOpen] = useState(false);
 
-  // ── Key Term modal ─────────────────────────────────────────────────────────
-  const [keyTermOpen, setKeyTermOpen] = useState(false);
-  const [ktTerm, setKtTerm] = useState('');
-  const [ktDef, setKtDef] = useState('');
-  const [keyTerms, setKeyTerms] = useState<KeyTerm[]>([]);
-
-  useEffect(() => {
-    if (!activeDocumentId) { setKeyTerms([]); return; }
-    const stored = storageGet<Record<string, KeyTerm[]>>(KEYS.KEY_TERMS);
-    setKeyTerms(stored?.[activeDocumentId] ?? []);
-  }, [activeDocumentId]);
-
-  function persistKeyTerms(terms: KeyTerm[]) {
-    if (!activeDocumentId) return;
-    const stored = storageGet<Record<string, KeyTerm[]>>(KEYS.KEY_TERMS) ?? {};
-    stored[activeDocumentId] = terms;
-    storageSet(KEYS.KEY_TERMS, stored);
-    setKeyTerms(terms);
-  }
-
-  function formatAPA(): string {
-    const parts: string[] = [];
-    if (citAuthor.trim()) parts.push(citAuthor.trim());
-    if (citYear.trim()) parts.push(`(${citYear.trim()})`);
-    if (citTitle.trim()) parts.push(citTitle.trim());
-    if (citPublisher.trim()) parts.push(citPublisher.trim());
-    return parts.length > 0 ? parts.join('. ') + '.' : '';
-  }
-
-  function handleInsertCitation() {
-    const text = formatAPA();
-    if (!text || !onInsertTextNote) return;
-    onInsertTextNote({ x: 5, y: 5, width: 90, height: 20, content: text, fontSize: 13, color: '#93c5fd' });
-    setCitationOpen(false);
-  }
-
-  function handleCopyCitation() {
-    navigator.clipboard.writeText(formatAPA()).catch(() => {});
-    setCitCopied(true);
-    setTimeout(() => setCitCopied(false), 2000);
-  }
-
-  function handleInsertEquation() {
-    if (!equationText.trim() || !onInsertTextNote) return;
-    onInsertTextNote({ x: 5, y: 5, width: 90, height: 15, content: equationText.trim(), fontSize: 16, color: '#a5f3fc' });
-    setEquationOpen(false);
-    setEquationText('');
-  }
-
-  function handleSaveKeyTerm() {
-    if (!ktTerm.trim()) return;
-    const newTerm: KeyTerm = {
-      id: `kt_${Date.now()}`,
-      documentId: activeDocumentId ?? '',
-      term: ktTerm.trim(),
-      definition: ktDef.trim(),
-      createdAt: Date.now(),
-    };
-    const updated = [...keyTerms, newTerm];
-    persistKeyTerms(updated);
-    if (onInsertTextNote) {
-      const content = ktDef.trim() ? `${ktTerm.trim()}: ${ktDef.trim()}` : ktTerm.trim();
-      onInsertTextNote({ x: 5, y: 5, width: 90, height: 20, content, fontSize: 13, color: '#fde68a' });
-    }
-    setKtTerm('');
-    setKtDef('');
-  }
-
-  function handleDeleteKeyTerm(id: string) {
-    const updated = keyTerms.filter((kt) => kt.id !== id);
-    persistKeyTerms(updated);
-  }
-
-  // ── Summary state ──────────────────────────────────────────────────────────
-  const [summaryState, setSummaryState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [summaryBullets, setSummaryBullets] = useState<string[]>([]);
-  const [summaryError, setSummaryError]   = useState('');
-
-  useEffect(() => {
-    setSummaryState('idle');
-    setSummaryBullets([]);
-    setSummaryError('');
-  }, [documentUrl, currentPdfPage]);
-
-  async function handleSummary() {
-    if (!documentUrl || !currentPdfPage || isBlankPage) return;
-    setSummaryState('loading');
-    try {
-      const text = await extractPageText(documentUrl, currentPdfPage);
-      if (!text) {
-        setSummaryState('error');
-        setSummaryError('No extractable text found on this page (may be image-based).');
-        return;
-      }
-      const raw = await callAI('summary', text);
-      const bullets = raw
-        .split('\n')
-        .map(l => l.trim())
-        .filter(Boolean)
-        .map(l => l.replace(/^[•\-\*]\s*/, '').replace(/^\d+[.)]\s*/, '').trim())
-        .filter(Boolean);
-      setSummaryBullets(bullets.length ? bullets : [raw.trim()]);
-      setSummaryState('done');
-    } catch (e) {
-      setSummaryState('error');
-      setSummaryError((e as Error).message.slice(0, 120));
-    }
-  }
-
-  function openSummaryModal() {
-    setModal({
-      title: t('dtp_ai_summary'),
-      copyText: summaryBullets.map((b, i) => `${i + 1}. ${b}`).join('\n'),
-      content: (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {summaryBullets.map((bullet, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <span style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: 'var(--accent)', flexShrink: 0, marginTop: 9,
-              }} />
-              <p style={{ fontSize: 15, color: 'var(--text-1)', lineHeight: 1.7, margin: 0 }}>
-                {bullet}
-              </p>
-            </div>
-          ))}
-        </div>
-      ),
-    });
-  }
-
-  // ── Explain state ──────────────────────────────────────────────────────────
-  const [explainState, setExplainState]       = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [explainText, setExplainText]         = useState('');
-  const [explainExamples, setExplainExamples] = useState<string[]>([]);
-  const [explainError, setExplainError]       = useState('');
-  const [explainSource, setExplainSource]     = useState('');
-
-  async function handleExplain() {
-    if (!selectedText.trim()) return;
-    setExplainState('loading');
-    setExplainText('');
-    setExplainExamples([]);
-    setExplainError('');
-    setExplainSource(selectedText.slice(0, 80) + (selectedText.length > 80 ? '…' : ''));
-    try {
-      const raw = await callAI('explain', selectedText);
-      const explanationMatch = raw.match(/EXPLANATION\s*\n([\s\S]*?)(?=\nEXAMPLES|\s*$)/i);
-      const examplesMatch    = raw.match(/EXAMPLES\s*\n([\s\S]*)/i);
-      const explanation = explanationMatch ? explanationMatch[1].trim() : raw.trim();
-      const examples = examplesMatch
-        ? examplesMatch[1]
-            .split('\n')
-            .map(l => l.replace(/^\s*[\d]+[.)]\s*/, '').replace(/^\s*[-•]\s*/, '').trim())
-            .filter(Boolean)
-        : [];
-      setExplainText(explanation);
-      setExplainExamples(examples);
-      setExplainState('done');
-    } catch (e) {
-      setExplainState('error');
-      setExplainError((e as Error).message.slice(0, 120));
-    }
-  }
-
-  function openExplainModal() {
-    const copyText = [
-      explainText && `Explanation:\n${explainText}`,
-      explainExamples.length > 0 && `\nExamples:\n${explainExamples.map((ex, i) => `${i + 1}. ${ex}`).join('\n')}`,
-    ].filter(Boolean).join('\n');
-
-    setModal({
-      title: t('dtp_explain'),
-      copyText,
-      content: (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-          {explainSource && (
-            <p style={{
-              fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic',
-              lineHeight: 1.5, margin: 0,
-              borderLeft: '2px solid var(--border)', paddingLeft: 12,
-            }}>
-              &ldquo;{explainSource}&rdquo;
-            </p>
-          )}
-          {explainText && (
-            <div>
-              <p style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-                textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 10,
-              }}>
-                {t('dtp_explanation')}
-              </p>
-              <p style={{ fontSize: 15, color: 'var(--text-1)', lineHeight: 1.75, margin: 0 }}>
-                {explainText}
-              </p>
-            </div>
-          )}
-          {explainExamples.length > 0 && (
-            <div>
-              <p style={{
-                fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-                textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 10,
-              }}>
-                {t('dtp_examples')}
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {explainExamples.map((ex, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                    <span style={{
-                      fontSize: 12, fontWeight: 700, color: 'var(--text-2)',
-                      flexShrink: 0, lineHeight: 1.75, minWidth: 18,
-                    }}>
-                      {i + 1}.
-                    </span>
-                    <p style={{ fontSize: 15, color: 'var(--text-2)', lineHeight: 1.7, margin: 0 }}>
-                      {ex}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      ),
-    });
-  }
+  // ── Clear drawings confirmation ────────────────────────────────────────────
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
 
   // ── Translate state ────────────────────────────────────────────────────────
   const [translateLang, setTranslateLang]     = useState<Lang>('French');
@@ -676,58 +370,47 @@ export default function DocumentToolsPanel({
     });
   }
 
-  // ── Flashcards state ───────────────────────────────────────────────────────
-  const [flashcardState, setFlashcardState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [flashcardError, setFlashcardError] = useState('');
-  const [flashcards, setFlashcards]         = useState<Flashcard[]>([]);
-  const [fcIndex, setFcIndex]               = useState(0);
-  const [fcFlipped, setFcFlipped]           = useState(false);
-  const [fcStudyMode, setFcStudyMode]       = useState(false);
+  // ── Chat state ─────────────────────────────────────────────────────────────
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput]       = useState('');
+  const [chatLoading, setChatLoading]   = useState(false);
 
-  // Reset flashcards when page changes
   useEffect(() => {
-    setFlashcardState('idle');
-    setFlashcards([]);
-    setFcIndex(0);
-    setFcFlipped(false);
-    setFcStudyMode(false);
+    setChatMessages([]);
+    setChatInput('');
+    setChatLoading(false);
   }, [documentUrl, currentPdfPage]);
 
-  // Load saved flashcards when doc/page changes
   useEffect(() => {
-    if (!activeDocumentId || !currentPdfPage) return;
-    loadFlashcards(activeDocumentId, currentPdfPage).then((cards) => {
-      if (cards.length > 0) { setFlashcards(cards); setFlashcardState('done'); setFcIndex(0); setFcFlipped(false); }
-    });
-  }, [activeDocumentId, currentPdfPage]);
-
-  const handleGenerateFlashcards = useCallback(async () => {
-    if (!documentUrl || !currentPdfPage || !activeDocumentId) return;
-    setFlashcardState('loading');
-    setFlashcardError('');
-    try {
-      const text = await extractPageText(documentUrl, currentPdfPage);
-      if (!text) { setFlashcardState('error'); setFlashcardError('No extractable text on this page.'); return; }
-      const raw = await callAI('flashcards', text);
-      let parsed: { question: string; answer: string }[] = [];
-      try { parsed = JSON.parse(raw); } catch { parsed = []; }
-      if (!Array.isArray(parsed) || !parsed.length) { setFlashcardState('error'); setFlashcardError('Could not parse flashcards. Try again.'); return; }
-      const clean = parsed.filter((c) => c.question && c.answer).slice(0, 10);
-      await saveFlashcards(activeDocumentId, currentPdfPage, clean);
-      const saved = await loadFlashcards(activeDocumentId, currentPdfPage);
-      setFlashcards(saved);
-      setFcIndex(0);
-      setFcFlipped(false);
-      setFlashcardState('done');
-    } catch (e) {
-      setFlashcardState('error');
-      setFlashcardError((e as Error).message.slice(0, 120));
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
-  }, [documentUrl, currentPdfPage, activeDocumentId]);
+  }, [chatMessages, chatLoading]);
+
+  const handleChatSend = useCallback(async () => {
+    const msg = chatInput.trim();
+    if (!msg || chatLoading) return;
+    setChatInput('');
+    setChatMessages((prev) => [...prev, { role: 'user', content: msg }]);
+    setChatLoading(true);
+    try {
+      let pageText = '';
+      if (documentUrl && currentPdfPage && !isBlankPage) {
+        try { pageText = await extractPageText(documentUrl, currentPdfPage); } catch { /* no text layer */ }
+      }
+      const response = await callAIChat(pageText, msg);
+      setChatMessages((prev) => [...prev, { role: 'ai', content: response.trim() }]);
+    } catch (e) {
+      setChatMessages((prev) => [...prev, {
+        role: 'ai',
+        content: `Sorry, I ran into an error: ${(e as Error).message.slice(0, 100)}`,
+      }]);
+    } finally {
+      setChatLoading(false);
+    }
+  }, [chatInput, chatLoading, documentUrl, currentPdfPage, isBlankPage]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const canSummarize = !!documentUrl && !!currentPdfPage && !isBlankPage;
-  const canExplain   = !!selectedText.trim() && explainState !== 'loading';
   const canTranslate = !!selectedText.trim() && translateState !== 'loading';
 
   return (
@@ -766,311 +449,149 @@ export default function DocumentToolsPanel({
             display: 'flex', flexDirection: 'column', gap: 14,
           }}>
 
-            {/* ══ AI ASSISTANT ══ */}
+            {/* ══ AI CHAT ══ */}
             <div>
-              <SectionLabel>{t('dtp_ai')}</SectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <SectionLabel>AI Assistant</SectionLabel>
+              <div style={{
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 4,
+                display: 'flex', flexDirection: 'column',
+                overflow: 'hidden',
+              }}>
 
-                {/* ── AI Summary card ── */}
-                <div style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4, padding: '10px 11px',
-                }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center',
-                    justifyContent: 'space-between', marginBottom: 6,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Sparkles size={13} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
-                        {t('dtp_ai_summary')}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {summaryState === 'done' && (
-                        <ExpandBtn onClick={openSummaryModal} />
-                      )}
-                      <ActionBtn
-                        onClick={handleSummary}
-                        disabled={!canSummarize}
-                        loading={summaryState === 'loading'}
-                        loadingLabel="…"
-                        label={summaryState === 'done' ? t('dtp_regenerate') : t('dtp_generate')}
-                      />
-                    </div>
-                  </div>
-
-                  {summaryState === 'loading' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
-                      <Loader2 size={12} className="spinner" style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_analyzing')}</span>
-                    </div>
-                  )}
-
-                  {summaryState === 'done' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      {summaryBullets.map((bullet, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                          <span style={{
-                            width: 4, height: 4, borderRadius: '50%',
-                            background: 'var(--accent)', flexShrink: 0, marginTop: 6,
-                          }} />
-                          <p style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.55, margin: 0 }}>
-                            {bullet}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {summaryState === 'error' && (
-                    <p style={{ fontSize: 11, color: 'var(--red)', lineHeight: 1.4, margin: 0 }}>
-                      {summaryError}
-                    </p>
-                  )}
-
-                  {summaryState === 'idle' && (
-                    <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
-                      {!hasDocument ? t('dtp_open_pdf')
-                        : isBlankPage ? t('dtp_not_blank')
-                        : t('dtp_summary_hint')}
-                    </p>
-                  )}
-                </div>
-
-                {/* ── Explain Concept card ── */}
-                <div style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4, padding: '10px 11px',
-                }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center',
-                    justifyContent: 'space-between', marginBottom: 6,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Lightbulb size={13} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>
-                        {t('dtp_explain')}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {explainState === 'done' && (
-                        <ExpandBtn onClick={openExplainModal} />
-                      )}
-                      <ActionBtn
-                        onClick={handleExplain}
-                        disabled={!canExplain}
-                        loading={explainState === 'loading'}
-                        loadingLabel="…"
-                        label={explainState === 'done' ? t('dtp_re_explain') : t('dtp_explain_btn')}
-                      />
-                    </div>
-                  </div>
-
-                  {explainState === 'idle' && (
-                    <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
-                      {selectedText.trim()
-                        ? `"${selectedText.slice(0, 60)}${selectedText.length > 60 ? '…' : ''}"`
-                        : t('dtp_select_text')}
-                    </p>
-                  )}
-
-                  {explainState === 'loading' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
-                      <Loader2 size={12} className="spinner" style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{t('dtp_generating')}</span>
-                    </div>
-                  )}
-
-                  {explainState === 'done' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                      {explainSource && (
-                        <p style={{ fontSize: 10, color: 'var(--text-3)', fontStyle: 'italic', lineHeight: 1.3, margin: 0 }}>
-                          &ldquo;{explainSource}&rdquo;
+                {/* Messages area */}
+                <div
+                  ref={chatScrollRef}
+                  style={{
+                    height: 240,
+                    overflowY: 'auto',
+                    padding: '10px 10px 6px',
+                    display: 'flex', flexDirection: 'column', gap: 8,
+                  }}
+                >
+                  {chatMessages.length === 0 && (
+                    <div style={{
+                      flex: 1, display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      padding: '8px 4px', gap: 10,
+                    }}>
+                      <Sparkles size={16} style={{ color: 'var(--text-3)', opacity: 0.6 }} />
+                      <div style={{ width: '100%' }}>
+                        <p style={{
+                          fontSize: 11, color: 'var(--text-2)', fontWeight: 500,
+                          marginBottom: 8, lineHeight: 1.4, textAlign: 'center',
+                        }}>
+                          Ask me anything about this page!
                         </p>
-                      )}
-                      {explainText && (
-                        <div>
-                          <p style={{
-                            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-                            textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 3,
-                          }}>
-                            {t('dtp_explanation')}
-                          </p>
-                          <p style={{ fontSize: 11.5, color: 'var(--text-1)', lineHeight: 1.6, margin: 0 }}>
-                            {explainText}
-                          </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {['Summarize this page', 'Explain this concept', 'Create flashcards', 'Quiz me on this'].map((hint) => (
+                            <button
+                              key={hint}
+                              onClick={() => setChatInput(hint)}
+                              style={{
+                                textAlign: 'left',
+                                background: 'var(--bg-active)', border: '1px solid var(--border)',
+                                borderRadius: 4, padding: '4px 8px',
+                                fontSize: 10.5, color: 'var(--text-3)',
+                                cursor: 'pointer', fontFamily: 'inherit',
+                                transition: 'border-color 0.12s, color 0.12s',
+                              }}
+                              onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border-strong)', color: 'var(--text-2)' })}
+                              onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', color: 'var(--text-3)' })}
+                            >
+                              • {hint}
+                            </button>
+                          ))}
                         </div>
-                      )}
-                      {explainExamples.length > 0 && (
-                        <div>
-                          <p style={{
-                            fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
-                            textTransform: 'uppercase', color: 'var(--text-2)', marginBottom: 3,
-                          }}>
-                            {t('dtp_examples')}
-                          </p>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            {explainExamples.map((ex, i) => (
-                              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', flexShrink: 0, lineHeight: 1.7 }}>
-                                  {i + 1}.
-                                </span>
-                                <p style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.55, margin: 0 }}>
-                                  {ex}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {explainState === 'error' && (
-                    <p style={{ fontSize: 11, color: 'var(--red)', lineHeight: 1.4, margin: 0 }}>
-                      {explainError}
-                    </p>
-                  )}
-                </div>
-
-              </div>
-            </div>
-
-            {/* ── Divider ── */}
-            <div style={{ height: 1, background: 'var(--border-subtle)' }} />
-
-            {/* ══ FLASHCARDS ══ */}
-            <div>
-              <SectionLabel>Flashcards</SectionLabel>
-              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, padding: '10px 11px' }}>
-                {/* Header row */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <BookOpen size={13} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-1)' }}>AI Flashcards</span>
-                  </div>
-                  <ActionBtn
-                    onClick={handleGenerateFlashcards}
-                    disabled={!canSummarize}
-                    loading={flashcardState === 'loading'}
-                    loadingLabel="…"
-                    label={flashcardState === 'done' ? 'Regenerate' : 'Generate'}
-                  />
-                </div>
-
-                {flashcardState === 'idle' && (
-                  <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4, margin: 0 }}>
-                    {!hasDocument ? 'Open a PDF to generate flashcards.' : isBlankPage ? 'Not available on blank pages.' : 'Generate Q&A cards from this page.'}
-                  </p>
-                )}
-
-                {flashcardState === 'loading' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '2px 0 4px' }}>
-                    <Loader2 size={12} className="spinner" style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Generating flashcards…</span>
-                  </div>
-                )}
-
-                {flashcardState === 'error' && (
-                  <p style={{ fontSize: 11, color: 'var(--red)', lineHeight: 1.4, margin: 0 }}>{flashcardError}</p>
-                )}
-
-                {flashcardState === 'done' && flashcards.length > 0 && !fcStudyMode && (
-                  <div>
-                    {/* Flip card */}
-                    <div
-                      onClick={() => setFcFlipped((f) => !f)}
-                      style={{
-                        cursor: 'pointer', borderRadius: 4,
-                        minHeight: 80, padding: '10px 12px',
-                        background: fcFlipped ? 'rgba(89,101,217,0.12)' : 'var(--bg-panel)',
-                        border: `1px solid ${fcFlipped ? 'rgba(89,101,217,0.35)' : 'var(--border)'}`,
-                        marginBottom: 8,
-                        transition: 'background 0.2s, border-color 0.2s',
-                        display: 'flex', flexDirection: 'column', gap: 4,
-                      }}
-                    >
-                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: fcFlipped ? 'var(--accent)' : 'var(--text-3)' }}>
-                        {fcFlipped ? 'Answer' : 'Question'}
-                      </span>
-                      <p style={{ fontSize: 11.5, color: 'var(--text-1)', lineHeight: 1.5, margin: 0 }}>
-                        {fcFlipped ? flashcards[fcIndex].answer : flashcards[fcIndex].question}
-                      </p>
-                      <span style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2 }}>
-                        {fcFlipped ? 'Click to see question' : 'Click to reveal answer'}
-                      </span>
-                    </div>
-
-                    {/* Navigation */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <button
-                        onClick={() => { setFcIndex((i) => Math.max(0, i - 1)); setFcFlipped(false); }}
-                        disabled={fcIndex === 0}
-                        style={{ background: 'none', border: 'none', cursor: fcIndex === 0 ? 'not-allowed' : 'pointer', color: fcIndex === 0 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === 0 ? 0.4 : 1, display: 'flex' }}
-                      ><ChevronLeft size={14} /></button>
-                      <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{fcIndex + 1} / {flashcards.length}</span>
-                      <button
-                        onClick={() => { setFcIndex((i) => Math.min(flashcards.length - 1, i + 1)); setFcFlipped(false); }}
-                        disabled={fcIndex === flashcards.length - 1}
-                        style={{ background: 'none', border: 'none', cursor: fcIndex === flashcards.length - 1 ? 'not-allowed' : 'pointer', color: fcIndex === flashcards.length - 1 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === flashcards.length - 1 ? 0.4 : 1, display: 'flex' }}
-                      ><ChevronRight size={14} /></button>
-                    </div>
-
-                    {/* Study mode button */}
-                    <button
-                      onClick={() => { setFcStudyMode(true); setFcIndex(0); setFcFlipped(false); }}
-                      style={{
-                        marginTop: 8, width: '100%', height: 26,
-                        borderRadius: 4, border: '1px solid var(--border)',
-                        background: 'transparent', color: 'var(--text-2)',
-                        cursor: 'pointer', fontSize: 11, fontWeight: 500, fontFamily: 'inherit',
-                        transition: 'background 0.12s, color 0.12s',
-                      }}
-                      onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-                      onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
-                    >
-                      Study Mode
-                    </button>
-                  </div>
-                )}
-
-                {/* Study mode overlay (full-screen card review) */}
-                {fcStudyMode && flashcards.length > 0 && (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Study Mode</span>
-                      <button onClick={() => setFcStudyMode(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}><X size={12} /></button>
-                    </div>
-                    <div
-                      onClick={() => setFcFlipped((f) => !f)}
-                      style={{
-                        cursor: 'pointer', borderRadius: 6, minHeight: 120, padding: '14px',
-                        background: fcFlipped ? 'rgba(89,101,217,0.14)' : 'var(--bg-panel)',
-                        border: `1.5px solid ${fcFlipped ? 'rgba(89,101,217,0.4)' : 'var(--border)'}`,
-                        marginBottom: 8, transition: 'background 0.25s, border-color 0.25s',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, textAlign: 'center',
-                      }}
-                    >
-                      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: fcFlipped ? 'var(--accent)' : 'var(--text-3)' }}>
-                        {fcFlipped ? 'Answer' : 'Question'}
-                      </span>
-                      <p style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, margin: 0 }}>
-                        {fcFlipped ? flashcards[fcIndex].answer : flashcards[fcIndex].question}
-                      </p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <button onClick={() => { setFcIndex((i) => Math.max(0, i - 1)); setFcFlipped(false); }} disabled={fcIndex === 0} style={{ background: 'none', border: 'none', cursor: fcIndex === 0 ? 'not-allowed' : 'pointer', color: fcIndex === 0 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === 0 ? 0.4 : 1, display: 'flex' }}><ChevronLeft size={14} /></button>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{fcIndex + 1} / {flashcards.length}</span>
-                        <button onClick={() => { setFcIndex(0); setFcFlipped(false); }} title="Restart" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}><RotateCcw size={11} /></button>
                       </div>
-                      <button onClick={() => { setFcIndex((i) => Math.min(flashcards.length - 1, i + 1)); setFcFlipped(false); }} disabled={fcIndex === flashcards.length - 1} style={{ background: 'none', border: 'none', cursor: fcIndex === flashcards.length - 1 ? 'not-allowed' : 'pointer', color: fcIndex === flashcards.length - 1 ? 'var(--text-3)' : 'var(--text-2)', opacity: fcIndex === flashcards.length - 1 ? 0.4 : 1, display: 'flex' }}><ChevronRight size={14} /></button>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {chatMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                        maxWidth: '92%',
+                      }}
+                    >
+                      <div style={{
+                        background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-panel)',
+                        border: `1px solid ${msg.role === 'user' ? 'transparent' : 'var(--border)'}`,
+                        borderRadius: msg.role === 'user' ? '10px 10px 2px 10px' : '10px 10px 10px 2px',
+                        padding: '6px 10px',
+                      }}>
+                        <p style={{
+                          fontSize: 11.5, lineHeight: 1.55, margin: 0,
+                          color: msg.role === 'user' ? '#fff' : 'var(--text-1)',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                        }}>
+                          {msg.content}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
+                  {chatLoading && (
+                    <div style={{
+                      alignSelf: 'flex-start', display: 'flex',
+                      alignItems: 'center', gap: 6, padding: '4px 0',
+                    }}>
+                      <Loader2 size={11} className="spinner" style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Thinking…</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Input area */}
+                <div style={{
+                  borderTop: '1px solid var(--border)',
+                  padding: '7px 8px',
+                  position: 'relative',
+                }}>
+                  <textarea
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleChatSend();
+                      }
+                    }}
+                    placeholder={hasDocument
+                      ? 'Ask about this page… (Enter to send)'
+                      : 'Open a PDF to start chatting'}
+                    disabled={!hasDocument}
+                    rows={2}
+                    style={{
+                      width: '100%', resize: 'none',
+                      background: 'transparent',
+                      border: 'none', outline: 'none',
+                      fontSize: 11.5, color: 'var(--text-1)',
+                      fontFamily: 'inherit', lineHeight: 1.5,
+                      paddingRight: 30, boxSizing: 'border-box',
+                      opacity: hasDocument ? 1 : 0.5,
+                    }}
+                  />
+                  <button
+                    onClick={handleChatSend}
+                    disabled={!chatInput.trim() || chatLoading || !hasDocument}
+                    style={{
+                      position: 'absolute', right: 8, bottom: 9,
+                      width: 22, height: 22, borderRadius: 4,
+                      background: (chatInput.trim() && !chatLoading && hasDocument)
+                        ? 'var(--accent)' : 'var(--bg-active)',
+                      border: 'none',
+                      color: (chatInput.trim() && !chatLoading && hasDocument) ? '#fff' : 'var(--text-3)',
+                      cursor: (chatInput.trim() && !chatLoading && hasDocument) ? 'pointer' : 'not-allowed',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'background 0.12s',
+                    }}
+                  >
+                    <Send size={11} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1094,7 +615,7 @@ export default function DocumentToolsPanel({
                   </span>
                 </div>
 
-                {/* Language pills */}
+                {/* Language pills: AR EN FR ES */}
                 <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
                   {LANGS.map((lang) => (
                     <button
@@ -1110,7 +631,7 @@ export default function DocumentToolsPanel({
                         transition: 'background 0.12s, border-color 0.12s, color 0.12s',
                       }}
                     >
-                      {lang === 'Arabic' ? 'AR' : lang === 'French' ? 'FR' : 'ES'}
+                      {LANG_CODE[lang]}
                     </button>
                   ))}
                 </div>
@@ -1196,20 +717,6 @@ export default function DocumentToolsPanel({
                     {translateError}
                   </p>
                 )}
-              </div>
-            </div>
-
-            {/* ── Divider ── */}
-            <div style={{ height: 1, background: 'var(--border-subtle)' }} />
-
-            {/* ── Quick Templates ── */}
-            <div>
-              <SectionLabel>{t('dtp_templates')}</SectionLabel>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                <TemplateTile icon={<Table2 size={15} />}         label={t('dtp_table')}    onClick={() => setDataTableOpen(true)} />
-                <TemplateTile icon={<Quote size={15} />}          label={t('dtp_citation')} onClick={() => setCitationOpen(true)} />
-                <TemplateTile icon={<FunctionSquare size={15} />} label={t('dtp_equation')} onClick={() => setEquationOpen(true)} />
-                <TemplateTile icon={<BookMarked size={15} />}     label={t('dtp_key_term')} onClick={() => setKeyTermOpen(true)} />
               </div>
             </div>
 
@@ -1531,185 +1038,6 @@ export default function DocumentToolsPanel({
         />
       )}
 
-      {/* ── Data Table modal ── */}
-      {dataTableOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={() => setDataTableOpen(false)}
-        >
-          <div
-            className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 420, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  overflow: 'hidden' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Table2 size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_table')}</span>
-              </div>
-              <button onClick={() => setDataTableOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
-            </div>
-
-            <div style={{ padding: '20px 20px 8px' }}>
-              <div style={{ marginBottom: 16 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_rows')}</p>
-                <div style={{ display: 'flex', gap: 5 }}>
-                  {[2,3,4,5,6,7,8].map((n) => (
-                    <button key={n} onClick={() => setTableRows(n)} style={{ width: 34, height: 30, borderRadius: 4, border: `1px solid ${tableRows === n ? 'var(--accent)' : 'var(--border)'}`, background: tableRows === n ? 'var(--accent-muted)' : 'transparent', color: tableRows === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_cols')}</p>
-                <div style={{ display: 'flex', gap: 5 }}>
-                  {[2,3,4,5,6,7,8].map((n) => (
-                    <button key={n} onClick={() => setTableCols(n)} style={{ width: 34, height: 30, borderRadius: 4, border: `1px solid ${tableCols === n ? 'var(--accent)' : 'var(--border)'}`, background: tableCols === n ? 'var(--accent-muted)' : 'transparent', color: tableCols === n ? 'var(--accent-hover)' : 'var(--text-2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.1s' }}>{n}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t('dtp_preview')}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${tableCols}, 1fr)`, border: '1px solid var(--border-strong)', borderRadius: 4, overflow: 'hidden', height: Math.min(tableRows * 24, 168) }}>
-                  {Array.from({ length: tableRows * tableCols }).map((_, i) => (
-                    <div key={i} style={{ borderRight: (i % tableCols < tableCols - 1) ? '1px solid var(--border)' : 'none', borderBottom: Math.floor(i / tableCols) < tableRows - 1 ? '1px solid var(--border)' : 'none', background: Math.floor(i / tableCols) === 0 ? 'var(--bg-active)' : 'transparent' }} />
-                  ))}
-                </div>
-                <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 6 }}>{tableRows} rows × {tableCols} columns</p>
-              </div>
-            </div>
-
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => { onInsertBlankPageWithGrid?.(tableRows, tableCols); setDataTableOpen(false); }}
-                disabled={!onInsertBlankPageWithGrid}
-                style={{ height: 32, padding: '0 18px', borderRadius: 4, background: onInsertBlankPageWithGrid ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: onInsertBlankPageWithGrid ? '#fff' : 'var(--text-3)', cursor: onInsertBlankPageWithGrid ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
-              >
-                Insert Table
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Citation modal ── */}
-      {citationOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={() => setCitationOpen(false)}
-        >
-          <div
-            className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 480, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  overflow: 'hidden' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Quote size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_citation')}</span>
-              </div>
-              <button onClick={() => setCitationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
-            </div>
-
-            <div style={{ padding: '20px' }}>
-              {([
-                { label: 'Author', value: citAuthor, setter: setCitAuthor, placeholder: 'e.g., Smith, J. A.' },
-                { label: 'Title', value: citTitle, setter: setCitTitle, placeholder: 'Title of the work' },
-                { label: 'Year', value: citYear, setter: setCitYear, placeholder: 'e.g., 2024' },
-                { label: 'Publisher / URL', value: citPublisher, setter: setCitPublisher, placeholder: 'Publisher or URL' },
-              ] as { label: string; value: string; setter: (v: string) => void; placeholder: string }[]).map(({ label, value, setter, placeholder }) => (
-                <div key={label} style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</label>
-                  <input type="text" value={value} onChange={(e) => setter(e.target.value)} placeholder={placeholder} className="app-input" style={{ width: '100%', height: 32, fontSize: 12.5, padding: '0 10px', borderRadius: 4, boxSizing: 'border-box' }} />
-                </div>
-              ))}
-
-              {formatAPA() && (
-                <div style={{ marginTop: 16 }}>
-                  <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Formatted (APA)</p>
-                  <div style={{ background: 'var(--bg-active)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '10px 12px' }}>
-                    <p style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.6, margin: 0 }}>{formatAPA()}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                onClick={handleCopyCitation}
-                disabled={!formatAPA()}
-                style={{ height: 32, padding: '0 14px', borderRadius: 4, background: citCopied ? 'var(--green)' : 'var(--bg-elevated)', border: `1px solid ${citCopied ? 'transparent' : 'var(--border)'}`, color: citCopied ? '#fff' : 'var(--text-2)', cursor: formatAPA() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5, opacity: formatAPA() ? 1 : 0.5 }}
-              >
-                {citCopied ? <Check size={12} /> : <Copy size={12} />}
-                {citCopied ? t('dtp_copied') : t('dtp_copy')}
-              </button>
-              <button
-                onClick={handleInsertCitation}
-                disabled={!formatAPA() || !onInsertTextNote}
-                style={{ height: 32, padding: '0 14px', borderRadius: 4, background: (formatAPA() && onInsertTextNote) ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: (formatAPA() && onInsertTextNote) ? '#fff' : 'var(--text-3)', cursor: (formatAPA() && onInsertTextNote) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12, fontWeight: 500 }}
-              >
-                Insert as Note
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Equation modal ── */}
-      {equationOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={() => setEquationOpen(false)}
-        >
-          <div
-            className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 420, background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  overflow: 'hidden' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FunctionSquare size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{t('dtp_equation')}</span>
-              </div>
-              <button onClick={() => setEquationOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
-            </div>
-
-            <div style={{ padding: '20px' }}>
-              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Equation</label>
-              <input
-                type="text"
-                value={equationText}
-                onChange={(e) => setEquationText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && equationText.trim()) handleInsertEquation(); }}
-                placeholder="e.g., E = mc², ∫₀^∞ e^-x dx = 1"
-                className="app-input"
-                style={{ width: '100%', height: 40, fontSize: 15, padding: '0 12px', borderRadius: 4, fontFamily: 'monospace', boxSizing: 'border-box' }}
-                autoFocus
-              />
-              <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 8, lineHeight: 1.5 }}>
-                Use Unicode math symbols: ², ³, √, ∫, ∑, π, ±, ≈, ≠, ∞, α, β, θ…
-              </p>
-              {equationText.trim() && (
-                <div style={{ marginTop: 14, background: 'var(--bg-active)', border: '1px solid var(--border-subtle)', borderRadius: 4, padding: '14px', textAlign: 'center' }}>
-                  <p style={{ fontSize: 18, color: 'var(--text-1)', margin: 0, fontFamily: 'monospace', letterSpacing: '0.03em' }}>{equationText}</p>
-                </div>
-              )}
-            </div>
-
-            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                onClick={handleInsertEquation}
-                disabled={!equationText.trim() || !onInsertTextNote}
-                style={{ height: 32, padding: '0 18px', borderRadius: 4, background: (equationText.trim() && onInsertTextNote) ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: (equationText.trim() && onInsertTextNote) ? '#fff' : 'var(--text-3)', cursor: (equationText.trim() && onInsertTextNote) ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
-              >
-                Insert as Note
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Add Image modal ── */}
       {addImageData && (
         <div
@@ -1727,12 +1055,10 @@ export default function DocumentToolsPanel({
               width: '100%', maxWidth: 400,
               background: 'var(--bg-panel)',
               border: '1px solid var(--border)',
-              borderRadius: 4,
-                            overflow: 'hidden',
+              borderRadius: 4, overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '15px 20px',
@@ -1740,9 +1066,7 @@ export default function DocumentToolsPanel({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <ImagePlus size={15} style={{ color: 'var(--text-2)', flexShrink: 0 }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
-                  Add Image
-                </span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Add Image</span>
               </div>
               <button
                 onClick={() => setAddImageData(null)}
@@ -1756,7 +1080,6 @@ export default function DocumentToolsPanel({
               </button>
             </div>
 
-            {/* Preview */}
             <div style={{
               padding: '16px 20px 12px',
               display: 'flex', justifyContent: 'center',
@@ -1767,15 +1090,10 @@ export default function DocumentToolsPanel({
               <img
                 src={addImageData}
                 alt="Selected"
-                style={{
-                  maxWidth: '100%', maxHeight: 160,
-                  borderRadius: 4,
-                                    objectFit: 'contain',
-                }}
+                style={{ maxWidth: '100%', maxHeight: 160, borderRadius: 4, objectFit: 'contain' }}
               />
             </div>
 
-            {/* Options */}
             <div style={{ padding: '16px 20px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 4px', lineHeight: 1.5 }}>
                 Where would you like to add this image?
@@ -1793,27 +1111,15 @@ export default function DocumentToolsPanel({
                     cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'border-color 0.13s, background 0.13s',
                   }}
-                  onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                    borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)',
-                  })}
-                  onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                    borderColor: 'var(--border)', background: 'var(--bg-elevated)',
-                  })}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)' })}
+                  onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', background: 'var(--bg-elevated)' })}
                 >
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 4,
-                    background: 'var(--accent-muted)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 4, background: 'var(--accent-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <ImagePlus size={15} style={{ color: 'var(--accent)' }} />
                   </div>
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 2px' }}>
-                      Add to current page
-                    </p>
-                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4 }}>
-                      Overlay on the current PDF page as an annotation
-                    </p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 2px' }}>Add to current page</p>
+                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4 }}>Overlay on the current PDF page as an annotation</p>
                   </div>
                 </button>
               )}
@@ -1830,27 +1136,15 @@ export default function DocumentToolsPanel({
                     cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'border-color 0.13s, background 0.13s',
                   }}
-                  onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                    borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)',
-                  })}
-                  onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                    borderColor: 'var(--border)', background: 'var(--bg-elevated)',
-                  })}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)' })}
+                  onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', background: 'var(--bg-elevated)' })}
                 >
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 4,
-                    background: 'var(--bg-active)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 4, background: 'var(--bg-active)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <FilePlus size={15} style={{ color: 'var(--text-2)' }} />
                   </div>
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 2px' }}>
-                      Add as new page
-                    </p>
-                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4 }}>
-                      Create a new blank page with this image on it
-                    </p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 2px' }}>Add as new page</p>
+                    <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4 }}>Create a new blank page with this image on it</p>
                   </div>
                 </button>
               )}
@@ -1876,12 +1170,10 @@ export default function DocumentToolsPanel({
               width: '100%', maxWidth: 400,
               background: 'var(--bg-panel)',
               border: '1px solid var(--border)',
-              borderRadius: 4,
-                            overflow: 'hidden',
+              borderRadius: 4, overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '15px 20px',
@@ -1889,23 +1181,16 @@ export default function DocumentToolsPanel({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Eraser size={15} style={{ color: 'var(--red)', flexShrink: 0 }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
-                  Clear All Drawings
-                </span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Clear All Drawings</span>
               </div>
               <button
                 onClick={() => setConfirmClearOpen(false)}
-                style={{
-                  width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 4, border: '1px solid transparent',
-                  background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
-                }}
+                style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}
               >
                 <X size={14} />
               </button>
             </div>
 
-            {/* Body */}
             <div style={{ padding: '20px' }}>
               <p style={{ fontSize: 13.5, color: 'var(--text-1)', lineHeight: 1.6, margin: '0 0 8px' }}>
                 Are you sure? This will permanently remove all drawings from this document.
@@ -1915,37 +1200,16 @@ export default function DocumentToolsPanel({
               </p>
             </div>
 
-            {/* Footer */}
-            <div style={{
-              padding: '12px 20px',
-              borderTop: '1px solid var(--border-subtle)',
-              display: 'flex', gap: 8, justifyContent: 'flex-end',
-            }}>
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setConfirmClearOpen(false)}
-                style={{
-                  height: 32, padding: '0 16px', borderRadius: 4,
-                  background: 'transparent',
-                  border: '1px solid var(--border)',
-                  color: 'var(--text-2)',
-                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500,
-                }}
+                style={{ height: 32, padding: '0 16px', borderRadius: 4, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
               >
                 Cancel
               </button>
               <button
-                onClick={() => {
-                  onClearAllDrawings?.();
-                  setConfirmClearOpen(false);
-                }}
-                style={{
-                  height: 32, padding: '0 16px', borderRadius: 4,
-                  background: 'var(--red)',
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500,
-                  display: 'flex', alignItems: 'center', gap: 6,
-                }}
+                onClick={() => { onClearAllDrawings?.(); setConfirmClearOpen(false); }}
+                style={{ height: 32, padding: '0 16px', borderRadius: 4, background: 'var(--red)', border: 'none', color: '#fff', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
               >
                 <Eraser size={13} />
                 Clear All Drawings
@@ -1963,10 +1227,9 @@ export default function DocumentToolsPanel({
         >
           <div
             className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            style={{ width: '100%', maxWidth: 480, maxHeight: '80vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <ImagePlus size={15} style={{ color: 'var(--accent)' }} />
@@ -1977,7 +1240,6 @@ export default function DocumentToolsPanel({
               </button>
             </div>
 
-            {/* Image list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {docPageImages && Object.entries(docPageImages)
                 .flatMap(([pageStr, imgs]) => imgs.map((img) => ({ ...img, pageNumber: Number(pageStr) })))
@@ -1989,9 +1251,7 @@ export default function DocumentToolsPanel({
               ) : (
                 docPageImages && Object.entries(docPageImages)
                   .sort(([a], [b]) => Number(a) - Number(b))
-                  .flatMap(([pageStr, imgs]) =>
-                    imgs.map((img) => ({ img, pageNumber: Number(pageStr) }))
-                  )
+                  .flatMap(([pageStr, imgs]) => imgs.map((img) => ({ img, pageNumber: Number(pageStr) })))
                   .map(({ img, pageNumber }) => {
                     const isCurrentPage = pageNumber === currentPdfPageForImages;
                     return (
@@ -2004,37 +1264,20 @@ export default function DocumentToolsPanel({
                           border: `1px solid ${isCurrentPage ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
                         }}
                       >
-                        {/* Thumbnail */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={img.src}
-                          alt=""
-                          style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }}
-                        />
-                        {/* Info */}
+                        <img src={img.src} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, flexShrink: 0, border: '1px solid var(--border)' }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>
                             Page {pageNumber}
-                            {isCurrentPage && (
-                              <span style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--text-2)', fontWeight: 500 }}>
-                                Current
-                              </span>
-                            )}
+                            {isCurrentPage && <span style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--text-2)', fontWeight: 500 }}>Current</span>}
                           </p>
                           <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0' }}>
                             {Math.round(img.width * 100)}% × {Math.round(img.height * 100)}%
                           </p>
                         </div>
-                        {/* Delete */}
                         <button
                           onClick={() => { onDeletePageImage?.(pageNumber, img.id); }}
-                          style={{
-                            width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            borderRadius: 4, border: '1px solid transparent',
-                            background: 'transparent', color: '#ef4444',
-                            cursor: 'pointer', flexShrink: 0,
-                            transition: 'background 0.12s',
-                          }}
+                          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: '#ef4444', cursor: 'pointer', flexShrink: 0, transition: 'background 0.12s' }}
                           onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)'; }}
                           onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
                           title="Delete image"
@@ -2044,78 +1287,6 @@ export default function DocumentToolsPanel({
                       </div>
                     );
                   })
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Key Term modal ── */}
-      {keyTermOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={() => setKeyTermOpen(false)}
-        >
-          <div
-            className="animate-scale-in"
-            style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4,  display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 20px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <BookMarked size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>Key Terms</span>
-                {keyTerms.length > 0 && (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 7px' }}>{keyTerms.length}</span>
-                )}
-              </div>
-              <button onClick={() => setKeyTermOpen(false)} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer' }}><X size={14} /></button>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-              <div style={{ marginBottom: keyTerms.length > 0 ? 24 : 0 }}>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Term</label>
-                  <input type="text" value={ktTerm} onChange={(e) => setKtTerm(e.target.value)} placeholder="e.g., Mitosis" className="app-input" style={{ width: '100%', height: 32, fontSize: 13, padding: '0 10px', borderRadius: 4, boxSizing: 'border-box' }} />
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Definition</label>
-                  <textarea value={ktDef} onChange={(e) => setKtDef(e.target.value)} placeholder="Describe the term…" className="app-input" rows={3} style={{ width: '100%', fontSize: 12.5, padding: '8px 10px', borderRadius: 4, resize: 'vertical', minHeight: 72, fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }} />
-                </div>
-                <button
-                  onClick={handleSaveKeyTerm}
-                  disabled={!ktTerm.trim()}
-                  style={{ width: '100%', height: 32, borderRadius: 4, background: ktTerm.trim() ? 'var(--accent)' : 'var(--bg-active)', border: 'none', color: ktTerm.trim() ? '#fff' : 'var(--text-3)', cursor: ktTerm.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 500 }}
-                >
-                  Save & Insert as Note
-                </button>
-              </div>
-
-              {keyTerms.length > 0 && (
-                <div>
-                  <p style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Saved Terms</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {keyTerms.map((kt) => (
-                      <div key={kt.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-1)', margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{kt.term}</p>
-                          {kt.definition && (
-                            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{kt.definition}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleDeleteKeyTerm(kt.id)}
-                          title="Delete"
-                          style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4, border: '1px solid transparent', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0, transition: 'color 0.12s, background 0.12s' }}
-                          onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'rgba(229,72,77,.2)' })}
-                          onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)', borderColor: 'transparent' })}
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
               )}
             </div>
           </div>
