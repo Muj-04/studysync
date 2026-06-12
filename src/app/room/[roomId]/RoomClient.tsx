@@ -256,10 +256,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const currentPageRef  = useRef<number>(1);
   const currentVPRef    = useRef<VirtualPage | null>(null);
   const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pdfContainerRef          = useRef<HTMLDivElement>(null);
-  const wheelCooldownRef         = useRef(false);
-  const virtualSequenceLengthRef = useRef(0);
-  const touchStartYRef   = useRef<number | null>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
   const addIncomingNoteRef    = useRef<((p: RoomVoiceNotePayload) => void) | null>(null);
@@ -283,8 +280,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     }));
     return buildVirtualSequence(activeDocument.pageCount, blankPages);
   }, [docId, activeDocument, roomBlankPages]);
-
-  virtualSequenceLengthRef.current = virtualSequence.length;
 
   const currentVP = virtualSequence[virtualIndex] ?? null;
   useEffect(() => { currentVPRef.current = currentVP; }, [currentVP]);
@@ -638,70 +633,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const nextPage = useCallback(() => {
     setVirtualIndex((i) => Math.min(virtualSequence.length - 1, i + 1));
   }, [virtualSequence.length]);
-
-  // Wheel / touch-swipe → page navigation
-  // Registered on `document` (not pdfContainerRef) so there is no dependency on
-  // when pdfContainerRef mounts or on event bubbling through scrollable children.
-  // We check pdfContainerRef.current.contains(target) at call-time to scope the
-  // handler to the PDF area only. Empty deps: register once, read state via refs.
-  useEffect(() => {
-    function navigatePage(direction: 'prev' | 'next') {
-      if (wheelCooldownRef.current) return;
-      wheelCooldownRef.current = true;
-      const len = virtualSequenceLengthRef.current;
-      if (direction === 'prev') setVirtualIndex((i) => Math.max(0, i - 1));
-      else setVirtualIndex((i) => Math.min(Math.max(0, len - 1), i + 1));
-      setTimeout(() => { wheelCooldownRef.current = false; }, 500);
-    }
-
-    function onWheel(e: WheelEvent) {
-      if (e.ctrlKey || e.metaKey) return; // ctrl+scroll = zoom, handled by PDFViewer
-      const container = pdfContainerRef.current;
-      if (!container || !container.contains(e.target as Node)) return;
-
-      // Only navigate pages when the nearest scrollable ancestor is already at its boundary.
-      // Otherwise let native scroll handle it (e.g. zoomed-in PDF page).
-      let el = e.target as HTMLElement | null;
-      while (el && el !== container) {
-        const { overflowY } = getComputedStyle(el);
-        if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
-          if (e.deltaY < 0 && el.scrollTop > 0) return;
-          if (e.deltaY > 0 && el.scrollTop + el.clientHeight < el.scrollHeight - 1) return;
-          break;
-        }
-        el = el.parentElement;
-      }
-
-      e.preventDefault();
-      navigatePage(e.deltaY < 0 ? 'prev' : 'next');
-    }
-
-    function onTouchStart(e: TouchEvent) {
-      const container = pdfContainerRef.current;
-      if (!container || !container.contains(e.target as Node)) return;
-      touchStartYRef.current = e.touches[0]?.clientY ?? null;
-    }
-
-    function onTouchEnd(e: TouchEvent) {
-      if (touchStartYRef.current === null) return;
-      const deltaY = touchStartYRef.current - (e.changedTouches[0]?.clientY ?? touchStartYRef.current);
-      touchStartYRef.current = null;
-      if (Math.abs(deltaY) < 50) return;
-      const len = virtualSequenceLengthRef.current;
-      if (deltaY > 0) setVirtualIndex((i) => Math.min(Math.max(0, len - 1), i + 1));
-      else setVirtualIndex((i) => Math.max(0, i - 1));
-    }
-
-    document.addEventListener('wheel', onWheel, { passive: false });
-    document.addEventListener('touchstart', onTouchStart, { passive: true });
-    document.addEventListener('touchend', onTouchEnd, { passive: true });
-    return () => {
-      document.removeEventListener('wheel', onWheel);
-      document.removeEventListener('touchstart', onTouchStart);
-      document.removeEventListener('touchend', onTouchEnd);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleZoomOut = useCallback(() => setZoom((z) => clampZoom(z - 0.1)), []);
   const handleZoomIn  = useCallback(() => setZoom((z) => clampZoom(z + 0.1)), []);
