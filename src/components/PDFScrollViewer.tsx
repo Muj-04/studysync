@@ -318,8 +318,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
     }
     isDrawing.current = false;
     lastPos.current = null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cssDims?.w, cssDims?.h, vp.type, nearViewport]);
+  }, [cssDims?.w, cssDims?.h, vp.type, nearViewport, savedDrawing]);
 
   const getPos = (e: { clientX: number; clientY: number }) => {
     const dims = canvasDimsRef.current;

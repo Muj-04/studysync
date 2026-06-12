@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Link2, Check, ChevronLeft, ChevronRight,
-  Undo2, MousePointer, Pencil, Eraser, Minus, Plus,
+  MousePointer, Pencil, Eraser, Minus, Plus,
   ChevronDown, FilePlus, UserPlus, UserCheck, X as XIcon,
   Mic, MicOff,
 } from 'lucide-react';
@@ -11,7 +11,7 @@ import { useVoiceChat } from '@/hooks/useVoiceChat';
 import { createClient } from '@/lib/supabase/client';
 import {
   fetchRoom, joinRoom, leaveRoom, closeRoom,
-  saveRoomDrawing, fetchRoomDrawing,
+  saveRoomDrawing, fetchAllRoomDrawings,
   fetchRoomVoiceNotes, fetchSingleRoomVoiceNote,
   saveRoomBlankPage, fetchRoomBlankPages,
   getProfile, getFriends, inviteToRoom,
@@ -25,10 +25,7 @@ import { useRoomVoiceNotes } from '@/hooks/useRoomVoiceNotes';
 import { clampZoom } from '@/components/PDFViewer';
 import NotificationBell from '@/components/NotificationBell';
 import { useLanguage } from '@/contexts/LanguageContext';
-import PDFWithDrawing from '@/components/PDFWithDrawing';
-import type { DrawingCanvasHandle } from '@/components/PDFWithDrawing';
-import BlankPageCanvas from '@/components/BlankPageCanvas';
-import type { DrawingCanvasHandle as BlankCanvasHandle } from '@/components/BlankPageCanvas';
+import PDFScrollViewer from '@/components/PDFScrollViewer';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import { PRESET_COLORS } from '@/lib/drawing';
 import DragScrubber from '@/components/DragScrubber';
@@ -238,7 +235,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // ── Blank pages state ─────────────────────────────────────────────────────
   const [docId, setDocId]                 = useState<string | null>(null);
   const [roomBlankPages, setRoomBlankPages] = useState<RoomBlankPagePayload[]>([]);
-  const [blankCanvasData, setBlankCanvasData] = useState<Record<string, string>>({});
   const [virtualIndex, setVirtualIndex]   = useState(0);
   const [blankMenuOpen, setBlankMenuOpen] = useState(false);
   const pendingBlankIdRef = useRef<string | null>(null);
@@ -250,8 +246,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [invitedIds, setInvitedIds]     = useState<Set<string>>(new Set());
 
   const hasJoinedRef    = useRef(false);
-  const drawingRef      = useRef<DrawingCanvasHandle | null>(null);
-  const blankDrawingRef = useRef<BlankCanvasHandle | null>(null);
   const docIdRef        = useRef<string | null>(null);
   const currentPageRef  = useRef<number>(1);
   const currentVPRef    = useRef<VirtualPage | null>(null);
@@ -306,10 +300,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   // ── Incoming handlers ─────────────────────────────────────────────────────
   const handleIncomingDrawing = useCallback((pageNumber: number, data: string) => {
-    if (currentPageRef.current === pageNumber) {
-      drawingRef.current?.loadData?.(data);
-    }
-  }, []);
+    if (docIdRef.current) saveDrawing(docIdRef.current, pageNumber, data);
+  }, [saveDrawing]);
 
   const handleReconnect = useCallback(() => {
     const did = docIdRef.current;
@@ -348,12 +340,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     });
   }, []);
 
-  const handleIncomingBlankDrawing = useCallback((pageId: string, data: string) => {
-    setBlankCanvasData((prev) => ({ ...prev, [pageId]: data }));
-    if (currentVPRef.current?.type === 'blank' && currentVPRef.current.blankPage.id === pageId) {
-      blankDrawingRef.current?.loadData?.(data);
-    }
-  }, []);
+  const handleIncomingBlankDrawing = useCallback((_pageId: string, _data: string) => {}, []);
 
   const myPresence = useMemo(
     () => ({ userId, name: userName, avatarUrl: userAvatarUrl, isVip: userIsVip }),
@@ -483,9 +470,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       );
       storageSet(KEYS.DRAWINGS, filteredDrawings);
 
-      const [remoteVoiceNotes, remoteBlankPages] = await Promise.all([
+      const [remoteVoiceNotes, remoteBlankPages, remoteDrawings] = await Promise.all([
         fetchRoomVoiceNotes(roomId),
         fetchRoomBlankPages(roomId),
+        fetchAllRoomDrawings(roomId),
       ]);
 
       if (remoteVoiceNotes.length > 0 && !cancelled) {
@@ -494,6 +482,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
       if (remoteBlankPages.length > 0 && !cancelled) {
         setRoomBlankPages(remoteBlankPages);
+      }
+
+      if (remoteDrawings.length > 0 && !cancelled) {
+        remoteDrawings.forEach(({ pageNumber, data }) => {
+          saveDrawing(newDocId, pageNumber, data);
+        });
       }
 
       const joinResult = await joinRoom(roomId);
@@ -532,8 +526,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : (activeDocument?.currentPage ?? 1);
   const totalPages     = virtualSequence.length || (activeDocument?.pageCount ?? 1);
   const isBlankPage    = currentVP?.type === 'blank';
-  const currentDrawing = activeDocument && currentVP?.type === 'pdf'
-    ? getDrawing(activeDocument.id, currentVP.pdfPage) : undefined;
 
   useEffect(() => { currentPageRef.current = currentPdfPage; }, [currentPdfPage]);
 
@@ -582,24 +574,15 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     return () => window.removeEventListener('pagehide', handleUnload);
   }, [roomId]);
 
-  useEffect(() => {
-    if (status !== 'ready' || isBlankPage) return;
-    fetchRoomDrawing(roomId, currentPdfPage).then((data) => {
-      if (data) drawingRef.current?.loadData?.(data);
-    });
-  }, [currentPdfPage, status, roomId, isBlankPage]);
-
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleSave = useCallback((data: string) => {
-    if (!activeDocument || isBlankPage) return;
-    const page = activeDocument.currentPage;
-    saveDrawing(activeDocument.id, page, data);
+  const handleSavePageDrawing = useCallback((docId: string, page: number, data: string) => {
+    saveDrawing(docId, page, data);
     broadcastDrawing(page, data);
     if (saveRoomTimerRef.current) clearTimeout(saveRoomTimerRef.current);
     saveRoomTimerRef.current = setTimeout(() => {
       saveRoomDrawing(roomId, page, data);
     }, 500);
-  }, [activeDocument, isBlankPage, saveDrawing, broadcastDrawing, roomId]);
+  }, [saveDrawing, broadcastDrawing, roomId]);
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(window.location.href);
@@ -1020,16 +1003,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
         <Divider />
 
-        {/* ── Undo ── */}
-        <IconBtn
-          onClick={() => isBlankPage ? blankDrawingRef.current?.undo?.() : drawingRef.current?.undo?.()}
-          title={t('room_undo')}
-        >
-          <Undo2 size={13} />
-        </IconBtn>
-
-        <Divider />
-
         {/* ── Add Blank Page ── */}
         <div style={{ position: 'relative' }} data-blank-menu>
           <button
@@ -1154,42 +1127,26 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       </div>
 
       {/* ── PDF / blank page viewer ── */}
-      <div ref={pdfContainerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0 }}>
-        {activeDocument && !isBlankPage && (
-          <PDFWithDrawing
-            key={activeDocument.id}
-            ref={drawingRef}
+      <div ref={pdfContainerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {activeDocument && virtualSequence.length > 0 && (
+          <PDFScrollViewer
             document={activeDocument}
+            virtualPages={virtualSequence}
+            currentVirtualIndex={virtualIndex}
+            onPageChange={setVirtualIndex}
+            zoom={zoom}
+            getNotesForPage={(_docId, pageId) => voiceGetNotesForPage(typeof pageId === 'number' ? pageId : 0)}
+            isRecording={voiceIsRecording}
+            recordingContext={voiceRecordingContext && activeDocument ? { documentId: activeDocument.id, pageNumber: voiceRecordingContext.pageNumber } : null}
+            onRecordStart={(_docId, pageId) => voiceStartRecording(typeof pageId === 'number' ? pageId : 0)}
+            onRecordStop={voiceStopRecording}
             tool={tool}
             penType={penType}
             color={color}
             strokeSize={strokeSize}
-            savedData={currentDrawing}
-            onSave={handleSave}
-            zoom={zoom}
-            onZoomChange={setZoom}
-            interactive={true}
-          />
-        )}
-        {isBlankPage && currentVP?.type === 'blank' && (
-          <BlankPageCanvas
-            key={currentVP.blankPage.id}
-            ref={blankDrawingRef}
-            blankPage={{
-              ...currentVP.blankPage,
-              canvasData: blankCanvasData[currentVP.blankPage.id],
-            }}
-            onSaveData={(id, data) => {
-              setBlankCanvasData((prev) => ({ ...prev, [id]: data }));
-              broadcastBlankDrawing(id, data);
-            }}
-            onSaveImages={() => {}}
-            tool={tool}
-            penType={penType}
-            color={color}
-            strokeSize={strokeSize}
-            zoom={zoom}
-            onZoomChange={setZoom}
+            annotationActive={tool !== 'cursor'}
+            getDrawing={getDrawing}
+            saveDrawing={handleSavePageDrawing}
           />
         )}
       </div>
