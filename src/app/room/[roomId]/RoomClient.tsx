@@ -5,7 +5,7 @@ import {
   Link2, Check, ChevronLeft, ChevronRight,
   MousePointer, Pencil, Eraser, Minus, Plus,
   ChevronDown, FilePlus, UserPlus, UserCheck, X as XIcon,
-  Mic, MicOff,
+  Mic, MicOff, Upload,
 } from 'lucide-react';
 import { useVoiceChat } from '@/hooks/useVoiceChat';
 import { createClient } from '@/lib/supabase/client';
@@ -237,7 +237,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [roomBlankPages, setRoomBlankPages] = useState<RoomBlankPagePayload[]>([]);
   const [virtualIndex, setVirtualIndex]   = useState(0);
   const [blankMenuOpen, setBlankMenuOpen] = useState(false);
+  const [docChangePrompt, setDocChangePrompt] = useState<{ uploaderName: string; fileName: string } | null>(null);
   const pendingBlankIdRef = useRef<string | null>(null);
+  const changePdfInputRef = useRef<HTMLInputElement>(null);
 
   // ── Invite friends state ──────────────────────────────────────────────────
   const [inviteOpen, setInviteOpen]     = useState(false);
@@ -257,7 +259,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const removeIncomingNoteRef = useRef<((id: string) => void) | null>(null);
   const seedNotesRef          = useRef<((remote: Parameters<ReturnType<typeof useRoomVoiceNotes>['seedNotes']>[0]) => void) | null>(null);
 
-  const { activeDocument, addDocument, goToPage } = usePDF();
+  const { activeDocument, addDocument, removeDocument, goToPage } = usePDF();
   const { getDrawing, saveDrawing }  = usePDFDrawings();
 
   const broadcastRef = useRef<(page: number, data: string) => void>(() => {});
@@ -342,6 +344,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   const handleIncomingBlankDrawing = useCallback((_pageId: string, _data: string) => {}, []);
 
+  const handleIncomingDocChange = useCallback((uploaderName: string, fileName: string) => {
+    setDocChangePrompt({ uploaderName, fileName });
+  }, []);
+
   const myPresence = useMemo(
     () => ({ userId, name: userName, avatarUrl: userAvatarUrl, isVip: userIsVip }),
     [userId, userName, userAvatarUrl, userIsVip],
@@ -357,12 +363,14 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     broadcastDrawing, broadcastBlankDrawing,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
     broadcastBlankPageAdded, broadcastRoomClosed,
+    broadcastDocChanged,
     memberCount, members,
   } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
     handleIncomingVoiceNoteAdded, handleIncomingVoiceNoteDelete,
     handleIncomingBlankPage, myPresence,
     handleIncomingBlankDrawing, handleRoomClosed,
+    handleIncomingDocChange,
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
@@ -583,6 +591,24 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       saveRoomDrawing(roomId, page, data);
     }, 500);
   }, [saveDrawing, broadcastDrawing, roomId]);
+
+  const handlePdfFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    const isResponding = docChangePrompt !== null;
+    const oldDocId = docIdRef.current;
+    if (oldDocId) removeDocument(oldDocId);
+    const { id: newDocId } = await addDocument(file);
+    docIdRef.current = newDocId;
+    setDocId(newDocId);
+    setVirtualIndex(0);
+    setRoomBlankPages([]);
+    const remoteDrawings = await fetchAllRoomDrawings(roomId);
+    remoteDrawings.forEach(({ pageNumber, data }) => saveDrawing(newDocId, pageNumber, data));
+    if (!isResponding) broadcastDocChanged(userName, file.name);
+    setDocChangePrompt(null);
+  }, [docChangePrompt, removeDocument, addDocument, saveDrawing, roomId, broadcastDocChanged, userName]);
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(window.location.href);
@@ -1124,7 +1150,79 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             </button>
           )}
         </div>
+
+        <Divider />
+
+        {/* ── Change PDF ── */}
+        <button
+          onClick={() => changePdfInputRef.current?.click()}
+          title="Upload a different PDF"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            height: 30, padding: '0 9px',
+            borderRadius: 4, fontSize: 12, fontWeight: 500,
+            background: 'var(--bg-elevated)', color: 'var(--text-2)',
+            border: '1px solid var(--border)', cursor: 'pointer',
+            fontFamily: 'inherit', flexShrink: 0,
+            transition: 'background 0.12s, color 0.12s',
+          }}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+          onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
+        >
+          <Upload size={13} />
+          <span>Change PDF</span>
+        </button>
+        <input
+          ref={changePdfInputRef}
+          type="file"
+          accept=".pdf"
+          style={{ display: 'none' }}
+          onChange={handlePdfFileChange}
+        />
       </div>
+
+      {/* ── Doc change notification banner ── */}
+      {docChangePrompt && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '10px 16px', flexShrink: 0,
+          background: 'rgba(59,130,246,0.1)',
+          borderBottom: '1px solid rgba(59,130,246,0.3)',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+              {docChangePrompt.uploaderName} uploaded a new document:
+            </span>
+            <span style={{ fontSize: 13, color: 'var(--accent)', marginLeft: 6, fontWeight: 500 }}>
+              {docChangePrompt.fileName}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 8 }}>
+              — Upload the same file to view it in the room.
+            </span>
+          </div>
+          <button
+            onClick={() => changePdfInputRef.current?.click()}
+            style={{
+              padding: '5px 14px', borderRadius: 4, fontSize: 12, fontWeight: 600,
+              background: 'rgba(59,130,246,0.88)', color: '#fff',
+              border: 'none', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+            }}
+          >
+            Upload File
+          </button>
+          <button
+            onClick={() => setDocChangePrompt(null)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 26, borderRadius: 4,
+              background: 'none', border: 'none', color: 'var(--text-3)',
+              cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <XIcon size={14} />
+          </button>
+        </div>
+      )}
 
       {/* ── PDF / blank page viewer ── */}
       <div ref={pdfContainerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative', minHeight: 0, display: 'flex', flexDirection: 'column' }}>

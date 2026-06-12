@@ -38,6 +38,7 @@ export function useStudyRoom(
   myPresence?: { userId?: string; name?: string; avatarUrl?: string; isVip?: boolean },
   onIncomingBlankDrawing?: (pageId: string, data: string) => void,
   onRoomClosed?: () => void,
+  onIncomingDocChange?: (uploaderName: string, fileName: string) => void,
 ) {
   const [memberCount, setMemberCount] = useState(1);
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -49,6 +50,7 @@ export function useStudyRoom(
   const onBlankPageRef       = useRef(onIncomingBlankPage);
   const onBlankDrawingRef    = useRef(onIncomingBlankDrawing);
   const onRoomClosedRef      = useRef(onRoomClosed);
+  const onDocChangeRef       = useRef(onIncomingDocChange);
   const myPresenceRef        = useRef(myPresence);
   const retryRef             = useRef(0);
   const timerRef             = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,6 +65,7 @@ export function useStudyRoom(
   useEffect(() => { onBlankPageRef.current = onIncomingBlankPage; });
   useEffect(() => { onBlankDrawingRef.current = onIncomingBlankDrawing; });
   useEffect(() => { onRoomClosedRef.current = onRoomClosed; });
+  useEffect(() => { onDocChangeRef.current = onIncomingDocChange; });
   useEffect(() => { myPresenceRef.current = myPresence; });
 
   // Re-track presence when name or avatar becomes available (loads async after connect)
@@ -137,6 +140,10 @@ export function useStudyRoom(
         .on('broadcast', { event: 'room_closed' }, () => {
           if (generation !== generationRef.current) return;
           onRoomClosedRef.current?.();
+        })
+        .on('broadcast', { event: 'doc_changed' }, ({ payload }: { payload: { uploaderName: string; fileName: string } }) => {
+          if (generation !== generationRef.current) return;
+          onDocChangeRef.current?.(payload.uploaderName, payload.fileName);
         })
         .on('presence', { event: 'sync' }, () => {
           if (generation !== generationRef.current) return;
@@ -244,10 +251,18 @@ export function useStudyRoom(
       .catch(() => {});
   }, []);
 
+  const broadcastDocChanged = useCallback((uploaderName: string, fileName: string) => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({ type: 'broadcast', event: 'doc_changed', payload: { uploaderName, fileName } })
+      .catch((err) => console.error('[StudyRoom] broadcast doc_changed error:', err));
+  }, []);
+
   return {
     broadcastDrawing, broadcastBlankDrawing,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
     broadcastBlankPageAdded, broadcastRoomClosed,
+    broadcastDocChanged,
     memberCount, members,
   };
 }
