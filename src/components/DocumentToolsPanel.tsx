@@ -374,6 +374,9 @@ export default function DocumentToolsPanel({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput]       = useState('');
   const [chatLoading, setChatLoading]   = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(false);
+  const expandedScrollRef = useRef<HTMLDivElement>(null);
+  const expandedInputRef  = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setChatMessages([]);
@@ -386,6 +389,23 @@ export default function DocumentToolsPanel({
       chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
     }
   }, [chatMessages, chatLoading]);
+
+  useEffect(() => {
+    if (expandedScrollRef.current) {
+      expandedScrollRef.current.scrollTop = expandedScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages, chatLoading, chatExpanded]);
+
+  useEffect(() => {
+    if (!chatExpanded) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setChatExpanded(false); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [chatExpanded]);
+
+  useEffect(() => {
+    if (chatExpanded) setTimeout(() => expandedInputRef.current?.focus(), 60);
+  }, [chatExpanded]);
 
   const handleChatSend = useCallback(async () => {
     const msg = chatInput.trim();
@@ -451,7 +471,33 @@ export default function DocumentToolsPanel({
 
             {/* ══ AI CHAT ══ */}
             <div>
-              <SectionLabel>AI Assistant</SectionLabel>
+              {/* Section label row with expand button */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <p style={{
+                  fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
+                  textTransform: 'uppercase', color: 'var(--text-3)',
+                  margin: 0, paddingLeft: 2,
+                }}>
+                  AI Assistant
+                </p>
+                <button
+                  onClick={() => setChatExpanded(true)}
+                  title="Expand chat"
+                  style={{
+                    width: 22, height: 22,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 4, border: '1px solid transparent',
+                    background: 'transparent', color: 'var(--text-3)',
+                    cursor: 'pointer',
+                    transition: 'color 0.12s, background 0.12s, border-color 0.12s',
+                  }}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-1)', background: 'var(--bg-hover)', borderColor: 'var(--border)' })}
+                  onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)', background: 'transparent', borderColor: 'transparent' })}
+                >
+                  <Maximize2 size={11} />
+                </button>
+              </div>
+
               <div style={{
                 background: 'var(--bg-elevated)',
                 border: '1px solid var(--border)',
@@ -460,11 +506,11 @@ export default function DocumentToolsPanel({
                 overflow: 'hidden',
               }}>
 
-                {/* Messages area */}
+                {/* Messages area — sidebar shows last 3 messages only */}
                 <div
                   ref={chatScrollRef}
                   style={{
-                    height: 240,
+                    height: 200,
                     overflowY: 'auto',
                     padding: '10px 10px 6px',
                     display: 'flex', flexDirection: 'column', gap: 8,
@@ -508,7 +554,26 @@ export default function DocumentToolsPanel({
                     </div>
                   )}
 
-                  {chatMessages.map((msg, i) => (
+                  {/* Show "X earlier messages" pill if history is long */}
+                  {chatMessages.length > 3 && (
+                    <button
+                      onClick={() => setChatExpanded(true)}
+                      style={{
+                        alignSelf: 'center',
+                        background: 'var(--bg-active)', border: '1px solid var(--border)',
+                        borderRadius: 9999, padding: '3px 10px',
+                        fontSize: 10, color: 'var(--text-3)',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                        transition: 'border-color 0.12s, color 0.12s',
+                      }}
+                      onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border-strong)', color: 'var(--text-2)' })}
+                      onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', color: 'var(--text-3)' })}
+                    >
+                      {chatMessages.length - 3} earlier messages ↑
+                    </button>
+                  )}
+
+                  {chatMessages.slice(-3).map((msg, i) => (
                     <div
                       key={i}
                       style={{
@@ -1027,6 +1092,266 @@ export default function DocumentToolsPanel({
           />
         </div>
       </aside>
+
+      {/* ── Expanded Chat modal ── */}
+      {chatExpanded && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 800,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(5px)',
+            WebkitBackdropFilter: 'blur(5px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 40,
+          }}
+          onClick={() => setChatExpanded(false)}
+        >
+          <div
+            className="animate-scale-in"
+            style={{
+              width: '80%', maxWidth: 760,
+              height: '80vh',
+              background: 'var(--bg-panel)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              boxShadow: '0 24px 72px rgba(0,0,0,0.55)',
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 20px',
+              borderBottom: '1px solid var(--border-subtle)',
+              flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: 6,
+                  background: 'var(--accent-muted)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Sparkles size={14} style={{ color: 'var(--accent)' }} />
+                </div>
+                <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>
+                  AI Assistant
+                </span>
+                {chatMessages.length > 0 && (
+                  <span style={{
+                    fontSize: 10.5, color: 'var(--text-3)',
+                    background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                    borderRadius: 9999, padding: '1px 8px',
+                  }}>
+                    {chatMessages.length} message{chatMessages.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setChatExpanded(false)}
+                style={{
+                  width: 28, height: 28,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 6, border: '1px solid transparent',
+                  background: 'transparent', color: 'var(--text-3)',
+                  cursor: 'pointer',
+                  transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                }}
+                onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)' })}
+                onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)', borderColor: 'transparent' })}
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            {/* Hint banner */}
+            <div style={{
+              padding: '7px 20px',
+              background: 'rgba(89,101,217,0.07)',
+              borderBottom: '1px solid var(--border-subtle)',
+              flexShrink: 0,
+              display: 'flex', alignItems: 'center', gap: 7,
+            }}>
+              <Sparkles size={11} style={{ color: 'var(--accent)', flexShrink: 0, opacity: 0.7 }} />
+              <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.4 }}>
+                You can ask me anything — about this page or any other topic
+              </p>
+            </div>
+
+            {/* Messages */}
+            <div
+              ref={expandedScrollRef}
+              style={{
+                flex: 1, overflowY: 'auto',
+                padding: '16px 20px',
+                display: 'flex', flexDirection: 'column', gap: 12,
+              }}
+            >
+              {chatMessages.length === 0 && (
+                <div style={{
+                  flex: 1, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  gap: 16, padding: '40px 20px',
+                }}>
+                  <div style={{
+                    width: 48, height: 48, borderRadius: 12,
+                    background: 'var(--accent-muted)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Sparkles size={22} style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', marginBottom: 8 }}>
+                      Ask me anything!
+                    </p>
+                    <p style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.6, maxWidth: 400 }}>
+                      I can summarize pages, explain concepts, create flashcards, quiz you, or answer any question — about this document or anything else.
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 480 }}>
+                    {[
+                      'Summarize this page',
+                      'Create flashcards',
+                      'Quiz me on this content',
+                      'Explain the main concept',
+                      'What are the key takeaways?',
+                      'Give me a study plan',
+                    ].map((hint) => (
+                      <button
+                        key={hint}
+                        onClick={() => { setChatInput(hint); expandedInputRef.current?.focus(); }}
+                        style={{
+                          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                          borderRadius: 9999, padding: '5px 12px',
+                          fontSize: 11.5, color: 'var(--text-2)',
+                          cursor: 'pointer', fontFamily: 'inherit',
+                          transition: 'border-color 0.12s, background 0.12s',
+                        }}
+                        onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--accent)', background: 'var(--accent-muted)' })}
+                        onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', background: 'var(--bg-elevated)' })}
+                      >
+                        {hint}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {chatMessages.map((msg, i) => (
+                <div
+                  key={i}
+                  style={{
+                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                    maxWidth: '78%',
+                  }}
+                >
+                  {msg.role === 'ai' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <div style={{
+                        width: 16, height: 16, borderRadius: 4,
+                        background: 'var(--accent-muted)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Sparkles size={9} style={{ color: 'var(--accent)' }} />
+                      </div>
+                      <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-3)' }}>AI</span>
+                    </div>
+                  )}
+                  <div style={{
+                    background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-elevated)',
+                    border: `1px solid ${msg.role === 'user' ? 'transparent' : 'var(--border)'}`,
+                    borderRadius: msg.role === 'user' ? '12px 12px 3px 12px' : '3px 12px 12px 12px',
+                    padding: '9px 14px',
+                  }}>
+                    <p style={{
+                      fontSize: 13, lineHeight: 1.65, margin: 0,
+                      color: msg.role === 'user' ? '#fff' : 'var(--text-1)',
+                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                    }}>
+                      {msg.content}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              {chatLoading && (
+                <div style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: 4,
+                    background: 'var(--accent-muted)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Sparkles size={9} style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Loader2 size={13} className="spinner" style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Thinking…</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input area */}
+            <div style={{
+              borderTop: '1px solid var(--border-subtle)',
+              padding: '12px 16px',
+              flexShrink: 0,
+              position: 'relative',
+              background: 'var(--bg-elevated)',
+            }}>
+              <textarea
+                ref={expandedInputRef}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleChatSend();
+                  }
+                }}
+                placeholder="Ask anything about this page, or any other topic… (Enter to send, Shift+Enter for new line)"
+                rows={3}
+                style={{
+                  width: '100%', resize: 'none',
+                  background: 'var(--bg-panel)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8, outline: 'none',
+                  fontSize: 13, color: 'var(--text-1)',
+                  fontFamily: 'inherit', lineHeight: 1.55,
+                  padding: '10px 48px 10px 14px',
+                  boxSizing: 'border-box',
+                  transition: 'border-color 0.12s',
+                }}
+                onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(89,101,217,0.5)'; }}
+                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              />
+              <button
+                onClick={handleChatSend}
+                disabled={!chatInput.trim() || chatLoading}
+                style={{
+                  position: 'absolute', right: 26, bottom: 22,
+                  width: 32, height: 32, borderRadius: 8,
+                  background: (chatInput.trim() && !chatLoading) ? 'var(--accent)' : 'var(--bg-active)',
+                  border: 'none',
+                  color: (chatInput.trim() && !chatLoading) ? '#fff' : 'var(--text-3)',
+                  cursor: (chatInput.trim() && !chatLoading) ? 'pointer' : 'not-allowed',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'background 0.12s',
+                  flexShrink: 0,
+                }}
+                onMouseOver={(e) => { if (chatInput.trim() && !chatLoading) e.currentTarget.style.background = 'var(--accent-hover)'; }}
+                onMouseOut={(e) => { if (chatInput.trim() && !chatLoading) e.currentTarget.style.background = 'var(--accent)'; }}
+              >
+                <Send size={14} />
+              </button>
+              <p style={{ fontSize: 10.5, color: 'var(--text-3)', margin: '6px 0 0', textAlign: 'right' }}>
+                Enter to send · Shift+Enter for new line · Esc to close
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Result modal ── */}
       {modal && (
