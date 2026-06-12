@@ -652,19 +652,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
     function onWheel(e: WheelEvent) {
       if (e.ctrlKey || e.metaKey) return; // let PDFViewer handle zoom
-      // Find the inner scroll container to check if content is scrollable
-      const inner = el.querySelector<HTMLElement>('[style*="overflow: auto"], [style*="overflow:auto"]')
-        ?? el.querySelector<HTMLElement>('div');
-      if (inner) {
-        const atTop    = inner.scrollTop <= 2;
-        const atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 2;
-        const scrollable = inner.scrollHeight > inner.clientHeight + 4;
-        if (scrollable) {
-          // Only navigate when at the edge of the inner content
-          if (e.deltaY < 0 && !atTop) return;
-          if (e.deltaY > 0 && !atBottom) return;
-        }
-      }
       e.preventDefault();
       navigate(e.deltaY < 0 ? 'prev' : 'next');
     }
