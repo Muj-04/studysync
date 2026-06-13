@@ -141,6 +141,7 @@ export default function FloatingAnnotationToolbar({
     startX: number; startY: number;
     originX: number; originY: number;
     hasMoved: boolean;
+    bounds: { minX: number; minY: number; maxX: number; maxY: number };
   } | null>(null);
 
   // Helper: allowed drag bounds — uses actual DOM rects so sidebar/panel widths
@@ -278,7 +279,9 @@ export default function FloatingAnnotationToolbar({
       startX: e.clientX, startY: e.clientY,
       originX, originY,
       hasMoved: false,
+      bounds: getBounds(), // cache once — avoids getBoundingClientRect on every move
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
@@ -291,7 +294,7 @@ export default function FloatingAnnotationToolbar({
       setIsDragging(true);
     }
     if (d.hasMoved) {
-      const { minX, minY, maxX, maxY } = getBounds();
+      const { minX, minY, maxX, maxY } = d.bounds;
       const newX = Math.min(Math.max(d.originX + dx, minX), maxX);
       const newY = Math.min(Math.max(d.originY + dy, minY), maxY);
       posRef.current = { x: newX, y: newY };
@@ -699,6 +702,7 @@ export default function FloatingAnnotationToolbar({
           background: isOpen ? '#1e3a5f' : '#222222',
           color: isOpen ? '#60a5fa' : '#ffffff',
           cursor: isDragging ? 'grabbing' : 'grab',
+          touchAction: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           // Pulse only when closed and not being dragged
           animation: !isOpen && !isDragging ? 'fab-pulse 2.6s ease-in-out infinite' : 'none',
