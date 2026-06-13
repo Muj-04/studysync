@@ -2649,6 +2649,7 @@ export default function WorkspacePage() {
               docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
               currentPdfPageForImages={currentPdfPage}
               onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
+              onClose={() => setRightPanelOpen(false)}
             />
           </div>
 
