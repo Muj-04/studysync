@@ -1,6 +1,8 @@
 package com.studysync.app;
 
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
@@ -22,6 +24,11 @@ public class MainActivity extends BridgeActivity {
         settings.setSupportMultipleWindows(false);
         settings.setSavePassword(false);
         settings.setSaveFormData(false);
+
+        // Disable Android Autofill Framework (Google Password Manager)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        }
 
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
