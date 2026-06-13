@@ -64,6 +64,7 @@ interface Props {
   docPageImages?: Record<number, PDFPageImage[]>;
   currentPdfPageForImages?: number | null;
   onDeletePageImage?: (pageNumber: number, imageId: string) => void;
+  onClose?: () => void;
 }
 
 // ── Chat message type ─────────────────────────────────────────────────────────
@@ -303,6 +304,7 @@ export default function DocumentToolsPanel({
   docPageImages,
   currentPdfPageForImages,
   onDeletePageImage,
+  onClose,
 }: Props) {
   const { t } = useLanguage();
   const fileInputRef     = useRef<HTMLInputElement>(null);
@@ -452,6 +454,7 @@ export default function DocumentToolsPanel({
             padding: '10px 14px 8px',
             borderBottom: '1px solid var(--border-subtle)',
             flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <span style={{
               fontSize: 9.5, fontWeight: 700,
@@ -460,6 +463,32 @@ export default function DocumentToolsPanel({
             }}>
               {t('dtp_page_tools')}
             </span>
+            {onClose && (
+              <button
+                onClick={onClose}
+                aria-label="Close panel"
+                style={{
+                  width: 24, height: 24,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 4, border: '1px solid transparent',
+                  background: 'transparent', color: 'var(--text-3)',
+                  cursor: 'pointer', flexShrink: 0,
+                  transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                }}
+                onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                  background: 'var(--bg-hover, rgba(255,255,255,0.08))',
+                  color: 'var(--text-1)',
+                  borderColor: 'var(--border)',
+                })}
+                onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                  background: 'transparent',
+                  color: 'var(--text-3)',
+                  borderColor: 'transparent',
+                })}
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
 
           {/* Scrollable content */}
