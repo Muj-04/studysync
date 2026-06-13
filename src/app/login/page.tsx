@@ -42,7 +42,7 @@ export default function LoginPage() {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) window.location.replace('/dashboard');
-    });
+    }).catch(() => { /* ignore auth check errors on page load */ });
   }, []);
 
   const proceedToApp = async (sessionId: string) => {
@@ -51,28 +51,54 @@ export default function LoginPage() {
   };
 
   const handleLogin = async () => {
+    if (loading) return;
     if (!email || !password) { setError('Please fill in all fields.'); return; }
     setError('');
     setLoading(true);
 
-    const supabase = createClient();
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password });
+    const cleanEmail = email.trim().replace(/[^\x20-\x7e]/g, '');
 
-    if (err) { setLoading(false); setError(err.message); return; }
+    console.log('[LOGIN] start', cleanEmail.length, 'ch');
 
-    // Auth succeeded — check for session conflict before redirecting
-    const sessionId = getOrCreateSessionId();
-    const status = await checkActiveSession(sessionId);
+    try {
+      const supabase = createClient();
+      const { error: err, data } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password,
+      });
 
-    setLoading(false);
+      if (err) {
+        console.log('[LOGIN] error', err.message);
+        setError(err.message);
+        return;
+      }
 
-    if (status === 'conflict') {
-      setShowConflict(true);
-      return;
+      console.log('[LOGIN] ok', data.user?.id?.slice(0, 8));
+
+      try {
+        const sessionId = getOrCreateSessionId();
+        const status = await checkActiveSession(sessionId);
+
+        if (status === 'conflict') {
+          setShowConflict(true);
+          return;
+        }
+
+        await registerSession(sessionId, 'StudySync Mobile');
+      } catch {
+        // Session check failed — proceed anyway
+      }
+
+      try {
+        window.location.href = '/dashboard';
+      } catch {
+        window.location.replace('/dashboard');
+      }
+    } catch {
+      setError('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    // 'ok' or 'free_user' — register and proceed
-    await proceedToApp(sessionId);
   };
 
   const handleKickOther = async () => {
@@ -190,65 +216,76 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Email */}
-        <div style={{ position: 'relative', marginBottom: '1rem' }}>
-          <input
-            type="email"
-            placeholder="Email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            style={glassInput}
-          />
-          <i className="bx bx-envelope" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
-        </div>
+        <form autoComplete="off" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+          {/* Email */}
+          <div style={{ position: 'relative', marginBottom: '1rem' }}>
+            <input
+              type="email"
+              inputMode="email"
+              placeholder="Email"
+              name="login_email_off"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              data-form-type="other"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={glassInput}
+            />
+            <i className="bx bx-envelope" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
+          </div>
 
-        {/* Password */}
-        <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-          <input
-            type={showPass ? 'text' : 'password'}
-            placeholder="Password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            style={glassInput}
-          />
+          {/* Password */}
+          <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+            <input
+              type={showPass ? 'text' : 'password'}
+              placeholder="Password"
+              name="login_pass_off"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              data-form-type="other"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={glassInput}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPass((v) => !v)}
+              style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
+              aria-label={showPass ? 'Hide password' : 'Show password'}
+            >
+              <i className={`bx ${showPass ? 'bx-lock-open-alt' : 'bx-lock-alt'}`} style={{ fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)' }} />
+            </button>
+          </div>
+
+          {/* Forgot password */}
+          <div style={{ textAlign: 'right', marginTop: '-0.75rem', marginBottom: '1.25rem' }}>
+            <Link
+              href="/forgot-password"
+              style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}
+            >
+              Forgot password?
+            </Link>
+          </div>
+
+          {/* Login button */}
           <button
-            type="button"
-            onClick={() => setShowPass((v) => !v)}
-            style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
-            aria-label={showPass ? 'Hide password' : 'Show password'}
+            type="submit"
+            disabled={loading}
+            style={{
+              display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
+              background: loading ? 'rgba(255,255,255,0.7)' : '#ffffff',
+              color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
+              border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+              marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
+            }}
           >
-            <i className={`bx ${showPass ? 'bx-lock-open-alt' : 'bx-lock-alt'}`} style={{ fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)' }} />
+            {loading ? 'Signing in…' : 'Login'}
           </button>
-        </div>
-
-        {/* Forgot password */}
-        <div style={{ textAlign: 'right', marginTop: '-0.75rem', marginBottom: '1.25rem' }}>
-          <Link
-            href="/forgot-password"
-            style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)', textDecoration: 'none' }}
-          >
-            Forgot password?
-          </Link>
-        </div>
-
-        {/* Login button */}
-        <button
-          onClick={handleLogin}
-          disabled={loading}
-          style={{
-            display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
-            background: loading ? 'rgba(255,255,255,0.7)' : '#ffffff',
-            color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
-            border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-            marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
-          }}
-        >
-          {loading ? 'Signing in…' : 'Login'}
-        </button>
+        </form>
 
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
           Don&apos;t have an account?{' '}
