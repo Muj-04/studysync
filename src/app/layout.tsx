@@ -10,7 +10,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StudySpace",
+  title: "StudySync",
   description: "Your personal PDF study workspace — annotate, record, and focus.",
 };
 
@@ -63,8 +63,9 @@ var ln=g('studysync_language');if(ln==='ar'){r.setAttribute('lang','ar');r.setAt
         />
         {/* PWA */}
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0f1117" />
+        <meta name="theme-color" content="#0f0f0f" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(function(){});` }} />
       </head>
       <body className="min-h-full flex flex-col antialiased">
         <LanguageProvider>{children}</LanguageProvider>
