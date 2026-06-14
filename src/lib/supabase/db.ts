@@ -971,6 +971,30 @@ export async function upsertProfile(profile: { username?: string; avatarUrl?: st
   if (error) console.error('[DB] upsertProfile error:', error.message);
 }
 
+// Creates a profile row for OAuth users on first sign-in if one doesn't exist.
+// Safe to call on every login — ignoreDuplicates prevents overwrites.
+export async function ensureProfile(): Promise<void> {
+  const { data: { user } } = await sb().auth.getUser();
+  if (!user) return;
+  const existing = await sb().from('profiles').select('id').eq('id', user.id).maybeSingle();
+  if (existing.data) return; // already exists
+  const meta = user.user_metadata ?? {};
+  const username =
+    (meta.full_name as string | undefined) ??
+    (meta.name as string | undefined) ??
+    (meta.preferred_username as string | undefined) ??
+    user.email?.split('@')[0] ??
+    null;
+  const avatarUrl =
+    (meta.avatar_url as string | undefined) ??
+    (meta.picture as string | undefined) ??
+    null;
+  const { error } = await sb()
+    .from('profiles')
+    .upsert({ id: user.id, username, avatar_url: avatarUrl }, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) console.error('[DB] ensureProfile error:', error.message);
+}
+
 export async function uploadAvatar(file: File): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
   const ext = file.name.split('.').pop() ?? 'jpg';
