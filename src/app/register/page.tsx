@@ -6,9 +6,9 @@ import { createClient } from '@/lib/supabase/client';
 const OAUTH_REDIRECT = 'https://pdf-study-workspace.vercel.app/auth/callback';
 
 function OAuthButtons() {
-  const [loadingProvider, setLoadingProvider] = useState<'google' | 'apple' | null>(null);
+  const [loadingProvider, setLoadingProvider] = useState<'google' | null>(null);
 
-  const signIn = async (provider: 'google' | 'apple') => {
+  const signIn = async (provider: 'google') => {
     setLoadingProvider(provider);
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
@@ -43,30 +43,6 @@ function OAuthButtons() {
           <path fill="#EA4335" d="M24.48 9.588c3.54 0 6.714 1.218 9.216 3.606l6.912-6.912C36.426 2.394 30.978 0 24.48 0 14.418 0 5.598 5.1 1.674 13.722l8.034 5.82c1.908-5.712 7.23-9.954 13.512-9.954l.26.001z"/>
         </svg>
         {loadingProvider === 'google' ? 'Redirecting…' : 'Continue with Google'}
-      </button>
-
-      {/* Apple */}
-      <button
-        type="button"
-        disabled={loadingProvider !== null}
-        onClick={() => signIn('apple')}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-          width: '100%', height: 44, borderRadius: 9999,
-          background: loadingProvider === 'apple' ? '#111' : '#000000',
-          border: '1.5px solid rgba(255,255,255,0.25)',
-          cursor: loadingProvider !== null ? 'not-allowed' : 'pointer',
-          color: '#ffffff', fontSize: '0.875rem', fontWeight: 600, fontFamily: 'inherit',
-          transition: 'background 0.15s, opacity 0.15s',
-          opacity: loadingProvider !== null && loadingProvider !== 'apple' ? 0.5 : 1,
-        }}
-        onMouseOver={(e) => { if (!loadingProvider) e.currentTarget.style.background = '#1a1a1a'; }}
-        onMouseOut={(e) => { if (!loadingProvider) e.currentTarget.style.background = '#000000'; }}
-      >
-        <svg width="16" height="18" viewBox="0 0 814 1000" style={{ flexShrink: 0 }} fill="#ffffff">
-          <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-37.5-155.5-127.4C46 427.5 114.3 261.3 152.8 194.6c28.4-49.5 74.8-82 127.1-82 50.2 0 84.7 35.4 152.3 35.4 65.8 0 107.5-35.4 164-35.4 56.5 0 100.6 28.6 130.6 77.3zm-219.7-109.4c-12.3-26.6-30.4-53.1-57.7-73.6-27.3-20.5-57.7-33.2-84.5-33.2-2.1 0-4.3.2-6.4.5 1.3 37.2 18.3 74.4 40.6 100.8 21.8 25.7 55.7 47.5 87.7 56.1 2.5.7 5.1 1.1 7.7 1.3 1.3-18 0-36.3-13.3-51.9h26z"/>
-        </svg>
-        {loadingProvider === 'apple' ? 'Redirecting…' : 'Continue with Apple'}
       </button>
 
       {/* Divider */}
