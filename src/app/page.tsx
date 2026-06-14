@@ -1,609 +1,769 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, Mic, PenTool, ArrowRight, Zap, Users, Library } from 'lucide-react';
+import {
+  BookOpen, PenTool, Mic, Users, Sparkles,
+  Check, ArrowRight, ChevronDown,
+} from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+
+// ── Auth redirect ─────────────────────────────────────────────────────────────
+
+function useAuthRedirect() {
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data: { user } }) => {
+      if (user) window.location.replace('/workspace');
+      else setChecking(false);
+    });
+  }, []);
+  return checking;
+}
+
+// ── Smooth-scroll helper ──────────────────────────────────────────────────────
+
+function scrollTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Data ──────────────────────────────────────────────────────────────────────
 
 const FEATURES = [
   {
-    icon: <Mic size={18} />,
+    icon: <PenTool size={20} />,
+    title: 'PDF Annotation',
+    desc: 'Draw, highlight, and take text notes on any PDF. Pen, marker, highlighter — pixel-perfect on every page.',
+    color: '#7c3aed',
+    glow: 'rgba(124,58,237,0.18)',
+  },
+  {
+    icon: <Mic size={20} />,
     title: 'Voice Notes',
-    subtitle: 'Record per-page audio notes while studying. Replay context-aware annotations instantly.',
-    badge: null,
+    desc: 'Record audio notes tied to each page. Replay context-aware annotations exactly where you left them.',
+    color: '#0ea5e9',
+    glow: 'rgba(14,165,233,0.18)',
   },
   {
-    icon: <PenTool size={18} />,
-    title: 'Drawing & Whiteboards',
-    subtitle: 'Annotate PDFs with precision tools. Blank pages for diagrams, mind maps, equations.',
-    badge: null,
+    icon: <Users size={20} />,
+    title: 'Study Rooms',
+    desc: 'Collaborate in real-time with live drawing, voice chat, and shared page navigation for your whole group.',
+    color: '#10b981',
+    glow: 'rgba(16,185,129,0.18)',
   },
   {
-    icon: <Library size={18} />,
-    title: 'PPTX Conversion',
-    subtitle: 'Import PowerPoint lectures and work with them alongside your PDFs seamlessly.',
-    badge: null,
-  },
-  {
-    icon: <Zap size={18} />,
-    title: 'AI Features',
-    subtitle: 'Quiz generation, auto-summarization, and smart flashcards. Phase 2 rollout.',
-    badge: 'Coming Soon',
+    icon: <Sparkles size={20} />,
+    title: 'AI Assistant',
+    desc: 'Summarize chapters, explain concepts, generate flashcards, and quiz yourself — powered by Gemini.',
+    color: '#f59e0b',
+    glow: 'rgba(245,158,11,0.18)',
   },
 ] as const;
 
-// ── App screen mockup ─────────────────────────────────────────────────────────
+const FREE_FEATURES    = ['Up to 3 documents', '30 MB voice storage', 'Basic drawing tools', 'AI Summary (15/month)'];
+const PREMIUM_FEATURES = ['Unlimited documents', '1 GB voice storage', 'All drawing tools', 'AI (300 req/month)', 'Study Rooms (5 members)', 'Friends & invites'];
+const PRO_FEATURES     = ['Everything in Premium', '5 GB voice storage', 'AI (1,000 req/month)', 'Study Rooms (20 members)', 'AI Flashcards & Quiz', 'Early access to features'];
 
-function AppScreen() {
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function NavBar() {
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <div style={{
-      width: '100%', height: '100%',
-      background: 'rgba(6,8,18,0.85)',
-      display: 'flex', flexDirection: 'column',
-      overflow: 'hidden',
-      fontFamily: "'Geist', 'Inter', system-ui, sans-serif",
+    <header style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+      height: 60, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0 clamp(20px, 5vw, 56px)',
+      background: scrolled ? 'rgba(15,17,23,0.88)' : 'transparent',
+      backdropFilter: scrolled ? 'blur(16px)' : 'none',
+      WebkitBackdropFilter: scrolled ? 'blur(16px)' : 'none',
+      borderBottom: scrolled ? '1px solid rgba(255,255,255,0.08)' : '1px solid transparent',
+      transition: 'background 0.3s, border-color 0.3s, backdrop-filter 0.3s',
     }}>
-      {/* Top nav */}
-      <div style={{
-        height: 32, flexShrink: 0,
-        background: 'rgba(255,255,255,0.06)',
-        borderBottom: '1px solid rgba(255,255,255,0.12)',
-        display: 'flex', alignItems: 'center',
-        padding: '0 10px', gap: 7,
-      }}>
+      {/* Logo */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
-          width: 15, height: 15, borderRadius: 3,
-          background: '#ffffff',
+          width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+          background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
+          boxShadow: '0 0 16px rgba(124,58,237,0.45)',
         }}>
-          <div style={{ width: 7, height: 7, border: '1.5px solid #0f172a', borderRadius: 1 }} />
+          <BookOpen size={16} style={{ color: '#fff' }} />
         </div>
-        <span style={{ fontSize: 9, fontWeight: 700, color: '#ffffff' }}>StudySpace</span>
-        <div style={{ display: 'flex', gap: 1, marginLeft: 6 }}>
-          {['Recent', 'Mercury PDF', 'Blank Page'].map((tab, i) => (
-            <div key={i} style={{
-              padding: '2px 7px', borderRadius: '3px 3px 0 0', fontSize: 7,
-              background: i === 1 ? 'rgba(255,255,255,0.15)' : 'transparent',
-              color: i === 1 ? '#ffffff' : 'rgba(255,255,255,0.4)',
-              border: i === 1 ? '1px solid rgba(255,255,255,0.2)' : '1px solid transparent',
-              borderBottom: 'none',
-              fontWeight: i === 1 ? 600 : 400,
-            }}>
-              {tab}
-            </div>
-          ))}
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ width: 42, height: 14, background: 'rgba(255,255,255,0.1)', borderRadius: 3, border: '1px solid rgba(255,255,255,0.2)' }} />
-        <div style={{ width: 28, height: 14, background: '#ffffff', borderRadius: 3 }} />
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em' }}>
+          StudySync
+        </span>
       </div>
 
-      {/* Body */}
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* Thumbnails sidebar */}
-        <div style={{
-          width: 56, flexShrink: 0,
-          background: 'rgba(255,255,255,0.04)',
-          borderRight: '1px solid rgba(255,255,255,0.12)',
-          padding: '6px 4px',
-          display: 'flex', flexDirection: 'column', gap: 4,
-        }}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} style={{
-              width: '100%', paddingBottom: '138%',
-              position: 'relative', flexShrink: 0,
-              background: i === 0 ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)',
-              borderRadius: 2,
-              border: i === 0 ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.12)',
-              overflow: 'hidden',
-            }}>
-              <div style={{ position: 'absolute', inset: 0, padding: '3px' }}>
-                <div style={{ width: '70%', height: 2, background: i === 0 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.25)', borderRadius: 1, marginBottom: 2 }} />
-                {[88, 72, 80, 65, 77].map((w, j) => (
-                  <div key={j} style={{ width: `${w}%`, height: 1.5, background: 'rgba(255,255,255,0.2)', borderRadius: 1, marginBottom: 1.5 }} />
-                ))}
-              </div>
-              <div style={{ position: 'absolute', bottom: 1, right: 2, fontSize: 5, color: 'rgba(255,255,255,0.4)' }}>{i + 1}</div>
-            </div>
-          ))}
-        </div>
+      {/* Nav links (hidden on small screens) */}
+      <nav style={{ display: 'flex', alignItems: 'center', gap: 32 }} className="nav-links-desktop">
+        <button
+          onClick={() => scrollTo('features')}
+          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', padding: 0, transition: 'color 0.15s' }}
+          onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; }}
+          onMouseOut={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
+        >
+          Features
+        </button>
+        <button
+          onClick={() => scrollTo('pricing')}
+          style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', padding: 0, transition: 'color 0.15s' }}
+          onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; }}
+          onMouseOut={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
+        >
+          Pricing
+        </button>
+      </nav>
 
-        {/* Main panels */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {/* Left: PDF */}
-          <div style={{
-            flex: 1, display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            padding: '6px 4px 6px 6px',
-            background: 'rgba(0,0,0,0.3)',
-            borderRight: '1px solid rgba(255,255,255,0.1)',
-          }}>
-            <div style={{
-              width: '96%', height: '96%',
-              background: '#f8fafc',
-              borderRadius: 2,
-              position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{ position: 'absolute', top: 3, right: 4, fontSize: 5, color: '#94a3b8', fontFamily: 'JetBrains Mono, monospace' }}>p. 2</div>
-              <div style={{ padding: '9px 9px 5px' }}>
-                <div style={{ width: '60%', height: 6, background: '#1e293b', borderRadius: 1, marginBottom: 6, opacity: 0.8 }} />
-                {[92, 85, 90, 78, 88, 82, 94, 76, 87, 91, 74, 86].map((w, i) => (
-                  <div key={i} style={{
-                    width: `${w}%`, height: i % 5 === 4 ? 0 : 3,
-                    marginBottom: i % 5 === 4 ? 6 : 2,
-                    background: '#94a3b8', borderRadius: 1, opacity: 0.45,
-                  }} />
-                ))}
-              </div>
-              <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} viewBox="0 0 220 310" preserveAspectRatio="xMidYMid meet">
-                <path d="M18 58 Q35 52 60 59 T110 55 T168 60" stroke="#2563eb" strokeWidth="1.4" fill="none" strokeLinecap="round" opacity="0.75"/>
-                <path d="M18 68 Q45 62 80 69 T155 65" stroke="#2563eb" strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.6"/>
-                <line x1="18" y1="75" x2="105" y2="75" stroke="#2563eb" strokeWidth="1" opacity="0.5" strokeLinecap="round"/>
-                <rect x="18" y="85" width="88" height="6" fill="rgba(37,99,235,0.18)" rx="1"/>
-                <path d="M18 95 Q50 88 90 96 T170 92" stroke="#22c55e" strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.7"/>
-                <text x="2" y="72" fontSize="5" fill="#2563eb" opacity="0.9" fontFamily="system-ui">✓</text>
-              </svg>
-            </div>
-          </div>
-
-          {/* Right: Blank page */}
-          <div style={{
-            flex: 1, display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            padding: '6px 6px 6px 4px',
-            background: 'rgba(0,0,0,0.3)',
-          }}>
-            <div style={{
-              width: '96%', height: '96%',
-              background: '#fafafa',
-              borderRadius: 2,
-              position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute', inset: 0,
-                backgroundImage: 'radial-gradient(circle, rgba(0,0,0,0.09) 1px, transparent 1px)',
-                backgroundSize: '11px 11px',
-              }} />
-              <div style={{ position: 'absolute', top: 3, right: 4, fontSize: 5, color: '#94a3b8' }}>Blank</div>
-              <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} viewBox="0 0 220 310" preserveAspectRatio="xMidYMid meet">
-                <rect x="72" y="48" width="76" height="26" rx="3" fill="rgba(37,99,235,0.1)" stroke="#2563eb" strokeWidth="1.3"/>
-                <text x="110" y="59" textAnchor="middle" fontSize="6.5" fontWeight="600" fill="#2563eb" fontFamily="system-ui">Main Concept</text>
-                <text x="110" y="68" textAnchor="middle" fontSize="5" fill="#3b82f6" fontFamily="system-ui">Overview</text>
-                <path d="M110 74 L50 110" stroke="#2563eb" strokeWidth="1" opacity="0.5"/>
-                <path d="M110 74 L170 110" stroke="#2563eb" strokeWidth="1" opacity="0.5"/>
-                <path d="M110 74 L110 108" stroke="#2563eb" strokeWidth="1" opacity="0.45"/>
-                <rect x="18" y="110" width="64" height="18" rx="3" fill="rgba(34,197,94,0.08)" stroke="#22c55e" strokeWidth="1"/>
-                <text x="50" y="121" textAnchor="middle" fontSize="5.5" fill="#22c55e" fontFamily="system-ui">Sub-topic A</text>
-                <rect x="138" y="110" width="64" height="18" rx="3" fill="rgba(34,197,94,0.08)" stroke="#22c55e" strokeWidth="1"/>
-                <text x="170" y="121" textAnchor="middle" fontSize="5.5" fill="#22c55e" fontFamily="system-ui">Sub-topic B</text>
-                <rect x="80" y="108" width="60" height="16" rx="3" fill="rgba(239,68,68,0.07)" stroke="#ef4444" strokeWidth="0.8"/>
-                <text x="110" y="118" textAnchor="middle" fontSize="5" fill="#ef4444" fontFamily="system-ui">Key Point</text>
-                <text x="14" y="210" fontSize="6.5" fill="#334155" fontFamily="serif" opacity="0.8">f(x) = ax² + bx + c</text>
-                <text x="14" y="222" fontSize="6" fill="#334155" fontFamily="serif" opacity="0.65">∫₀¹ f(x)dx = [F(x)]₀¹</text>
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        {/* Right panel: Voice Notes */}
-        <div style={{
-          width: 136, flexShrink: 0,
-          background: 'rgba(255,255,255,0.05)',
-          borderLeft: '1px solid rgba(255,255,255,0.12)',
-          display: 'flex', flexDirection: 'column',
-        }}>
-          <div style={{
-            padding: '5px 8px 4px',
-            borderBottom: '1px solid rgba(255,255,255,0.12)',
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
-            <span style={{ fontSize: 7.5, fontWeight: 700, color: '#ffffff', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Voice Notes</span>
-          </div>
-          <div style={{ flex: 1, padding: '4px 5px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {[
-              { label: 'Chapter 3 — key concepts', time: '0:22' },
-              { label: 'Note page 5 introduction', time: '0:34' },
-              { label: 'Final review summary', time: '1:12' },
-              { label: 'Problem set walkthrough', time: '0:45' },
-            ].map((item, i) => (
-              <div key={i} style={{
-                padding: '3px 5px',
-                background: i === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
-                borderRadius: 3,
-                border: `1px solid ${i === 0 ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.1)'}`,
-              }}>
-                <div style={{ fontSize: 6, color: i === 0 ? '#ffffff' : 'rgba(255,255,255,0.45)', lineHeight: 1.4, marginBottom: 1.5, fontWeight: i === 0 ? 600 : 400 }}>
-                  {item.label}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div style={{ width: 0, height: 0, borderLeft: '3.5px solid #0f172a', borderTop: '2px solid transparent', borderBottom: '2px solid transparent', marginLeft: 1 }} />
-                  </div>
-                  <span style={{ fontSize: 5, color: 'rgba(255,255,255,0.35)', fontFamily: 'JetBrains Mono, monospace' }}>{item.time}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{
-            padding: '5px 8px',
-            borderTop: '1px solid rgba(255,255,255,0.12)',
-            display: 'flex', alignItems: 'center', gap: 5,
-          }}>
-            <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff' }} />
-            </div>
-            <div style={{ width: 70, height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 2 }} />
-          </div>
-        </div>
+      {/* Auth buttons */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Link
+          href="/login"
+          style={{
+            height: 36, padding: '0 18px',
+            display: 'inline-flex', alignItems: 'center',
+            borderRadius: 8, border: '1px solid rgba(255,255,255,0.18)',
+            color: 'rgba(255,255,255,0.8)', fontSize: 13.5, fontWeight: 500,
+            textDecoration: 'none', fontFamily: 'inherit',
+            background: 'rgba(255,255,255,0.06)',
+            transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+          }}
+          onMouseOver={(e) => { Object.assign(e.currentTarget.style, { background: 'rgba(255,255,255,0.12)', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }); }}
+          onMouseOut={(e) => { Object.assign(e.currentTarget.style, { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.8)', borderColor: 'rgba(255,255,255,0.18)' }); }}
+        >
+          Sign In
+        </Link>
+        <Link
+          href="/register"
+          style={{
+            height: 36, padding: '0 18px',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            borderRadius: 8,
+            background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+            color: '#fff', fontSize: 13.5, fontWeight: 600,
+            textDecoration: 'none', fontFamily: 'inherit',
+            boxShadow: '0 0 20px rgba(124,58,237,0.4)',
+            transition: 'opacity 0.15s, box-shadow 0.15s',
+          }}
+          onMouseOver={(e) => { Object.assign(e.currentTarget.style, { opacity: '0.9', boxShadow: '0 0 28px rgba(124,58,237,0.55)' }); }}
+          onMouseOut={(e) => { Object.assign(e.currentTarget.style, { opacity: '1', boxShadow: '0 0 20px rgba(124,58,237,0.4)' }); }}
+        >
+          Get Started
+        </Link>
       </div>
-
-      {/* Bottom bar */}
-      <div style={{
-        height: 26, flexShrink: 0,
-        background: 'rgba(255,255,255,0.04)',
-        borderTop: '1px solid rgba(255,255,255,0.1)',
-        display: 'flex', alignItems: 'center',
-        padding: '0 9px', gap: 7,
-      }}>
-        <div style={{ width: 44, height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <div style={{ width: 14, height: 14, borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }} />
-          <div style={{ width: 28, height: 5, background: '#ffffff', borderRadius: 2 }} />
-          <div style={{ width: 14, height: 14, borderRadius: 3, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }} />
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ width: 26, height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
-        <div style={{ width: 20, height: 5, background: 'rgba(255,255,255,0.12)', borderRadius: 2 }} />
-      </div>
-    </div>
+    </header>
   );
 }
 
-// ── Tablet frame ──────────────────────────────────────────────────────────────
-
-function TabletMockup() {
+function FeatureCard({ icon, title, desc, color, glow }: typeof FEATURES[number]) {
+  const [hovered, setHovered] = useState(false);
   return (
-    <div style={{
-      width: '90%', maxWidth: 960,
-      margin: '0 auto',
-      position: 'relative',
-    }}>
-      {/* White glow beneath */}
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        flex: '1 1 240px', minWidth: 0,
+        background: hovered ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.04)',
+        border: `1px solid ${hovered ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
+        borderRadius: 16,
+        padding: '28px 24px',
+        position: 'relative', overflow: 'hidden',
+        transition: 'background 0.25s, border-color 0.25s, transform 0.25s, box-shadow 0.25s',
+        transform: hovered ? 'translateY(-4px)' : 'none',
+        boxShadow: hovered ? `0 12px 40px rgba(0,0,0,0.35), 0 0 60px ${glow}` : 'none',
+      }}
+    >
+      {/* Accent glow */}
       <div style={{
-        position: 'absolute',
-        bottom: '-20px', left: '15%', right: '15%',
-        height: 60,
-        background: 'radial-gradient(ellipse, rgba(255,255,255,0.08) 0%, transparent 70%)',
-        filter: 'blur(16px)',
+        position: 'absolute', top: -30, left: -30,
+        width: 120, height: 120,
+        background: glow,
+        borderRadius: '50%',
+        filter: 'blur(40px)',
+        opacity: hovered ? 1 : 0,
+        transition: 'opacity 0.35s',
         pointerEvents: 'none',
       }} />
 
-      {/* Device body */}
       <div style={{
-        background: 'rgba(255,255,255,0.08)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderRadius: 16,
-        padding: '10px 14px 14px',
-        border: '1px solid rgba(255,255,255,0.2)',
-        position: 'relative',
-      }}>
-        {/* Top bezel */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8, position: 'relative' }}>
-          <div style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.15)',
-            border: '1px solid rgba(255,255,255,0.3)',
-          }} />
-          <div style={{ position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ width: 2.5, height: 10, borderRadius: 1.5, background: 'rgba(255,255,255,0.2)' }} />
-            <div style={{ width: 2.5, height: 10, borderRadius: 1.5, background: 'rgba(255,255,255,0.2)' }} />
-          </div>
-          <div style={{ position: 'absolute', right: -14, top: '50%', transform: 'translateY(-50%)' }}>
-            <div style={{ width: 2.5, height: 15, borderRadius: 1.5, background: 'rgba(255,255,255,0.2)' }} />
-          </div>
-        </div>
-
-        {/* Screen */}
-        <div style={{
-          borderRadius: 6,
-          overflow: 'hidden',
-          aspectRatio: '16/9',
-          border: '1px solid rgba(255,255,255,0.15)',
-        }}>
-          <AppScreen />
-        </div>
-
-        {/* Home bar */}
-        <div style={{
-          width: 80, height: 3, borderRadius: 2,
-          background: 'rgba(255,255,255,0.2)',
-          margin: '10px auto 0',
-        }} />
-      </div>
-
-      {/* Stylus */}
-      <div style={{
-        position: 'absolute',
-        right: -12, top: '10%', bottom: '10%',
-        width: 10, borderRadius: 5,
-        background: 'rgba(255,255,255,0.1)',
-        border: '1px solid rgba(255,255,255,0.25)',
-      }}>
-        <div style={{
-          position: 'absolute', bottom: -7,
-          left: '50%', transform: 'translateX(-50%)',
-          width: 0, height: 0,
-          borderLeft: '5px solid transparent',
-          borderRight: '5px solid transparent',
-          borderTop: '8px solid rgba(255,255,255,0.3)',
-        }} />
-        <div style={{
-          position: 'absolute', top: '30%', left: 0, right: 0, height: 18,
-          background: 'rgba(255,255,255,0.08)',
-          borderTop: '1px solid rgba(255,255,255,0.2)',
-          borderBottom: '1px solid rgba(255,255,255,0.2)',
-        }} />
-      </div>
-    </div>
-  );
-}
-
-// ── Feature card ──────────────────────────────────────────────────────────────
-
-function FeatureCard({
-  icon, title, subtitle, badge,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  badge: string | null;
-}) {
-  return (
-    <div style={{
-      flex: 1, minWidth: 200,
-      background: 'rgba(255,255,255,0.08)',
-      backdropFilter: 'blur(12px)',
-      WebkitBackdropFilter: 'blur(12px)',
-      border: '1px solid rgba(255,255,255,0.15)',
-      borderRadius: 4,
-      padding: '20px 18px',
-      position: 'relative',
-      overflow: 'hidden',
-      transition: 'border-color 0.2s, background 0.2s',
-    }}
-      onMouseOver={(e) => {
-        Object.assign((e.currentTarget as HTMLDivElement).style, {
-          borderColor: 'rgba(255,255,255,0.35)',
-          background: 'rgba(255,255,255,0.13)',
-        });
-      }}
-      onMouseOut={(e) => {
-        Object.assign((e.currentTarget as HTMLDivElement).style, {
-          borderColor: 'rgba(255,255,255,0.15)',
-          background: 'rgba(255,255,255,0.08)',
-        });
-      }}
-    >
-      <div style={{
-        width: 34, height: 34, borderRadius: 4,
-        background: 'rgba(255,255,255,0.12)',
-        border: '1px solid rgba(255,255,255,0.25)',
+        width: 44, height: 44, borderRadius: 12, marginBottom: 20,
+        background: `${color}22`,
+        border: `1px solid ${color}44`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: '#ffffff', marginBottom: 14,
+        color,
+        transition: 'transform 0.25s',
+        transform: hovered ? 'scale(1.08)' : 'none',
+        position: 'relative',
       }}>
         {icon}
       </div>
 
-      {badge && (
-        <span style={{
-          display: 'inline-block',
-          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em',
-          padding: '2px 7px', borderRadius: 4, marginBottom: 8,
-          background: 'rgba(239,68,68,0.12)',
-          border: '1px solid rgba(239,68,68,0.25)',
-          color: '#ef4444',
-          textTransform: 'uppercase',
-        }}>
-          {badge}
-        </span>
-      )}
-
-      <h3 style={{ fontSize: 15, fontWeight: 600, color: '#ffffff', margin: '0 0 8px', lineHeight: 1.3 }}>
+      <h3 style={{ fontSize: 17, fontWeight: 600, color: '#fff', margin: '0 0 10px', letterSpacing: '-0.01em' }}>
         {title}
       </h3>
-
-      <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', margin: 0, lineHeight: 1.6 }}>
-        {subtitle}
+      <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.55)', margin: 0, lineHeight: 1.65 }}>
+        {desc}
       </p>
-
-      {/* White accent line at bottom */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, height: 1,
-        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
-      }} />
     </div>
   );
 }
 
-// ── Main landing page ─────────────────────────────────────────────────────────
+function PricingCard({
+  name, price, sub, badge, features, cta, ctaHref, highlight,
+}: {
+  name: string; price: string; sub: string;
+  badge?: string; features: string[];
+  cta: string; ctaHref: string; highlight?: boolean;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        flex: '1 1 260px', minWidth: 0,
+        background: highlight ? 'rgba(124,58,237,0.12)' : 'rgba(255,255,255,0.04)',
+        border: `1.5px solid ${highlight ? 'rgba(124,58,237,0.5)' : hov ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
+        borderRadius: 20,
+        padding: '32px 28px',
+        position: 'relative',
+        display: 'flex', flexDirection: 'column',
+        transition: 'transform 0.25s, box-shadow 0.25s, border-color 0.25s',
+        transform: highlight ? (hov ? 'scale(1.03) translateY(-4px)' : 'scale(1.02)') : (hov ? 'translateY(-4px)' : 'none'),
+        boxShadow: highlight
+          ? (hov ? '0 0 0 1px rgba(124,58,237,0.4), 0 20px 60px rgba(124,58,237,0.25)' : '0 0 40px rgba(124,58,237,0.15)')
+          : (hov ? '0 12px 40px rgba(0,0,0,0.3)' : 'none'),
+      }}
+    >
+      {badge && (
+        <div style={{
+          position: 'absolute', top: -13, left: '50%', transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+          color: '#fff', fontSize: 11, fontWeight: 700,
+          padding: '4px 14px', borderRadius: 9999,
+          whiteSpace: 'nowrap', letterSpacing: '0.04em',
+          boxShadow: '0 4px 16px rgba(124,58,237,0.5)',
+        }}>
+          {badge}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 24 }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 10px' }}>
+          {name}
+        </p>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 42, fontWeight: 800, letterSpacing: '-0.04em', color: '#fff' }}>{price}</span>
+          {sub && <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>{sub}</span>}
+        </div>
+      </div>
+
+      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 28px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+        {features.map((f) => (
+          <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13.5, color: 'rgba(255,255,255,0.75)' }}>
+            <Check size={14} style={{ color: highlight ? '#a78bfa' : 'rgba(255,255,255,0.45)', flexShrink: 0, marginTop: 2 }} />
+            {f}
+          </li>
+        ))}
+      </ul>
+
+      <Link
+        href={ctaHref}
+        style={{
+          display: 'block', textAlign: 'center',
+          padding: '12px 0', borderRadius: 10,
+          background: highlight ? 'linear-gradient(135deg, #7c3aed, #6d28d9)' : 'rgba(255,255,255,0.08)',
+          border: `1px solid ${highlight ? 'transparent' : 'rgba(255,255,255,0.12)'}`,
+          color: '#fff', fontSize: 14, fontWeight: 600,
+          textDecoration: 'none', fontFamily: 'inherit',
+          boxShadow: highlight ? '0 0 24px rgba(124,58,237,0.4)' : 'none',
+          transition: 'opacity 0.15s',
+        }}
+        onMouseOver={(e) => { e.currentTarget.style.opacity = '0.85'; }}
+        onMouseOut={(e) => { e.currentTarget.style.opacity = '1'; }}
+      >
+        {cta}
+      </Link>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
+  const checking = useAuthRedirect();
+  if (checking) return null;
+
   return (
     <div style={{
       minHeight: '100vh',
-      color: '#ffffff',
+      background: '#0f1117',
+      color: '#fff',
       fontFamily: "'Geist', 'Inter', system-ui, -apple-system, sans-serif",
       overflowX: 'hidden',
     }}>
-
-      {/* ══ Hero ══ */}
-      <section style={{
-        minHeight: '100vh',
-        position: 'relative',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        {/* ── Header ── */}
-        <header style={{
-          position: 'relative', zIndex: 10,
-          height: 60, flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 36px',
-          borderBottom: '1px solid rgba(255,255,255,0.12)',
-          background: 'rgba(255,255,255,0.06)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 4, flexShrink: 0,
-              background: '#ffffff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <BookOpen size={16} style={{ color: '#0f172a' }} />
-            </div>
-            <span style={{
-              fontSize: 16, fontWeight: 700,
-              color: '#ffffff', letterSpacing: '-0.02em',
-            }}>
-              StudySpace
-            </span>
-          </div>
-
-          <Link
-            href="/login"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              height: 36, padding: '0 18px',
-              borderRadius: 4,
-              background: '#ffffff',
-              border: 'none',
-              color: '#0f172a',
-              fontSize: 13.5, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-              textDecoration: 'none',
-              transition: 'background 0.15s',
-              letterSpacing: '-0.01em',
-            }}
-            onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.88)'; }}
-            onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#ffffff'; }}
-          >
-            Get Started <ArrowRight size={14} />
-          </Link>
-        </header>
-
-        {/* ── Hero content ── */}
+      {/* Ambient gradients */}
+      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
         <div style={{
-          position: 'relative', zIndex: 1,
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
-          textAlign: 'center',
-          padding: '56px 24px 0',
+          position: 'absolute', top: -200, left: '50%', transform: 'translateX(-50%)',
+          width: 900, height: 600,
+          background: 'radial-gradient(ellipse, rgba(124,58,237,0.15) 0%, transparent 70%)',
+          filter: 'blur(60px)',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '30%', right: -200,
+          width: 500, height: 500,
+          background: 'radial-gradient(ellipse, rgba(14,165,233,0.08) 0%, transparent 70%)',
+          filter: 'blur(60px)',
+        }} />
+      </div>
+
+      <NavBar />
+
+      {/* ══ HERO ══ */}
+      <section style={{
+        position: 'relative', zIndex: 1,
+        minHeight: '100vh',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        textAlign: 'center',
+        padding: 'clamp(100px, 14vh, 160px) clamp(20px, 5vw, 48px) 80px',
+      }}>
+        {/* Badge */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '6px 16px', borderRadius: 9999, marginBottom: 28,
+          background: 'rgba(124,58,237,0.12)',
+          border: '1px solid rgba(124,58,237,0.35)',
         }}>
-          {/* Badge */}
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#a78bfa' }} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: '#c4b5fd', letterSpacing: '0.05em' }}>
+            For University Students
+          </span>
+        </div>
+
+        {/* Headline */}
+        <h1 style={{
+          fontSize: 'clamp(2.6rem, 7vw, 5.2rem)',
+          fontWeight: 800,
+          lineHeight: 1.06,
+          letterSpacing: '-0.04em',
+          color: '#fff',
+          margin: '0 0 22px',
+          maxWidth: 860,
+        }}>
+          Study Smarter,{' '}
+          <span style={{
+            background: 'linear-gradient(135deg, #a78bfa 0%, #7c3aed 60%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}>
+            Together
+          </span>
+        </h1>
+
+        {/* Subheadline */}
+        <p style={{
+          fontSize: 'clamp(1rem, 1.8vw, 1.15rem)',
+          color: 'rgba(255,255,255,0.6)',
+          lineHeight: 1.7,
+          maxWidth: 580,
+          margin: '0 0 40px',
+        }}>
+          Annotate PDFs, record voice notes, collaborate in real-time study rooms,
+          and get AI-powered insights — all in one workspace.
+        </p>
+
+        {/* CTAs */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Link
+            href="/register"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              height: 50, padding: '0 30px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+              color: '#fff', fontSize: 15.5, fontWeight: 600,
+              textDecoration: 'none', fontFamily: 'inherit',
+              boxShadow: '0 0 28px rgba(124,58,237,0.5)',
+              transition: 'opacity 0.15s, box-shadow 0.15s',
+            }}
+            onMouseOver={(e) => { Object.assign(e.currentTarget.style, { opacity: '0.9', boxShadow: '0 0 40px rgba(124,58,237,0.65)' }); }}
+            onMouseOut={(e) => { Object.assign(e.currentTarget.style, { opacity: '1', boxShadow: '0 0 28px rgba(124,58,237,0.5)' }); }}
+          >
+            Get Started Free <ArrowRight size={16} />
+          </Link>
+
+          <button
+            onClick={() => scrollTo('features')}
+            style={{
+              height: 50, padding: '0 30px',
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              color: 'rgba(255,255,255,0.8)', fontSize: 15.5, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'inherit',
+              transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+            }}
+            onMouseOver={(e) => { Object.assign(e.currentTarget.style, { background: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.28)', color: '#fff' }); }}
+            onMouseOut={(e) => { Object.assign(e.currentTarget.style, { background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.8)' }); }}
+          >
+            See how it works <ChevronDown size={16} />
+          </button>
+        </div>
+
+        {/* App mockup */}
+        <div style={{
+          marginTop: 72, width: '100%', maxWidth: 900,
+          position: 'relative',
+        }}>
+          {/* Glow beneath */}
           <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            padding: '4px 12px', borderRadius: 4, marginBottom: 24,
-            background: 'rgba(255,255,255,0.1)',
-            border: '1px solid rgba(255,255,255,0.25)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            position: 'absolute', bottom: -40, left: '10%', right: '10%', height: 80,
+            background: 'radial-gradient(ellipse, rgba(124,58,237,0.3) 0%, transparent 70%)',
+            filter: 'blur(30px)',
+            pointerEvents: 'none',
+          }} />
+
+          {/* Frame */}
+          <div style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 20,
+            padding: '10px 12px 12px',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
           }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ffffff' }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#ffffff', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-              For University Students
-            </span>
+            {/* Browser chrome */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              marginBottom: 10, paddingLeft: 4,
+            }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['#ef4444', '#f59e0b', '#22c55e'].map((c, i) => (
+                  <div key={i} style={{ width: 11, height: 11, borderRadius: '50%', background: c, opacity: 0.7 }} />
+                ))}
+              </div>
+              <div style={{
+                flex: 1, height: 26, maxWidth: 340, margin: '0 auto',
+                background: 'rgba(255,255,255,0.06)', borderRadius: 6,
+                border: '1px solid rgba(255,255,255,0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.02em' }}>
+                  app.studysync.io/workspace
+                </span>
+              </div>
+              <div style={{ width: 11 }} />
+            </div>
+
+            {/* Screen */}
+            <div style={{
+              borderRadius: 12, overflow: 'hidden',
+              border: '1px solid rgba(255,255,255,0.1)',
+              aspectRatio: '16/9',
+              background: 'rgba(6,8,18,0.9)',
+              display: 'flex',
+            }}>
+              {/* Sidebar */}
+              <div style={{
+                width: 64, flexShrink: 0,
+                background: 'rgba(255,255,255,0.04)',
+                borderRight: '1px solid rgba(255,255,255,0.1)',
+                padding: '8px 5px', display: 'flex', flexDirection: 'column', gap: 5,
+              }}>
+                {[0,1,2,3].map((i) => (
+                  <div key={i} style={{
+                    width: '100%', paddingBottom: '140%', position: 'relative',
+                    background: i === 0 ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.05)',
+                    borderRadius: 3,
+                    border: i === 0 ? '1px solid rgba(124,58,237,0.5)' : '1px solid rgba(255,255,255,0.08)',
+                  }}>
+                    <div style={{ position: 'absolute', inset: '4px' }}>
+                      {[85,70,80,65].map((w,j) => (
+                        <div key={j} style={{ width:`${w}%`, height: 2, background: 'rgba(255,255,255,0.2)', borderRadius: 1, marginBottom: 3 }} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Main PDF area */}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 10, background: 'rgba(0,0,0,0.2)' }}>
+                <div style={{ width: '82%', height: '92%', background: '#f8fafc', borderRadius: 4, position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 10px 5px' }}>
+                    <div style={{ width: '55%', height: 7, background: '#1e293b', borderRadius: 1, marginBottom: 8, opacity: 0.8 }} />
+                    {[92,85,90,78,88,82,94,76].map((w,i) => (
+                      <div key={i} style={{ width:`${w}%`, height: i % 5 === 4 ? 0 : 3, marginBottom: i%5===4 ? 7 : 2.5, background:'#94a3b8', borderRadius:1, opacity:0.4 }} />
+                    ))}
+                  </div>
+                  <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} viewBox="0 0 220 290" preserveAspectRatio="xMidYMid meet">
+                    <path d="M18 55 Q40 50 70 56 T130 53 T185 57" stroke="#7c3aed" strokeWidth="1.5" fill="none" strokeLinecap="round" opacity="0.8"/>
+                    <rect x="18" y="72" width="95" height="7" fill="rgba(124,58,237,0.2)" rx="1"/>
+                    <path d="M18 86 Q55 80 100 87 T185 83" stroke="#22c55e" strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.7"/>
+                    <text x="2" y="63" fontSize="6" fill="#7c3aed" opacity="0.9" fontFamily="system-ui">✓</text>
+                  </svg>
+                </div>
+              </div>
+
+              {/* Right panel mockup */}
+              <div style={{
+                width: 110, flexShrink: 0,
+                background: 'rgba(255,255,255,0.04)',
+                borderLeft: '1px solid rgba(255,255,255,0.1)',
+                display: 'flex', flexDirection: 'column',
+              }}>
+                <div style={{ padding: '6px 8px 5px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444' }} />
+                  <span style={{ fontSize: 7, fontWeight: 700, color: '#fff', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Voice Notes</span>
+                </div>
+                <div style={{ flex: 1, padding: '5px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {['Chapter 3 key concepts', 'Intro notes page 4', 'Review summary'].map((label, i) => (
+                    <div key={i} style={{
+                      padding: '3px 5px', borderRadius: 3,
+                      background: i === 0 ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.05)',
+                      border: `1px solid ${i === 0 ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.08)'}`,
+                    }}>
+                      <div style={{ fontSize: 5.5, color: i === 0 ? '#fff' : 'rgba(255,255,255,0.4)', lineHeight: 1.4, fontWeight: i === 0 ? 600 : 400 }}>
+                        {label}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
 
-          {/* Headline */}
-          <h1 style={{
-            fontSize: 'clamp(2.4rem, 6.5vw, 5rem)',
-            fontWeight: 800,
-            lineHeight: 1.07,
-            letterSpacing: '-0.035em',
-            color: '#ffffff',
-            margin: '0 0 20px',
-            maxWidth: 840,
-          }}>
-            Don&apos;t Just Read Your<br />
-            Study — Interact With It
-          </h1>
+        {/* Scroll indicator */}
+        <button
+          onClick={() => scrollTo('features')}
+          style={{
+            marginTop: 64, background: 'none', border: 'none', cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+            color: 'rgba(255,255,255,0.3)', fontFamily: 'inherit',
+          }}
+        >
+          <span style={{ fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Explore features</span>
+          <ChevronDown size={18} style={{ animation: 'bounce 2s ease-in-out infinite' }} />
+        </button>
+      </section>
 
-          {/* Subtitle */}
-          <p style={{
-            fontSize: 'clamp(0.9rem, 1.5vw, 1.05rem)',
-            color: 'rgba(255,255,255,0.65)',
-            lineHeight: 1.7,
-            maxWidth: 560,
-            margin: '0 0 36px',
-          }}>
-            The complete workspace for serious students.
-            Annotate PDFs, record voice notes, draw diagrams — all in one place.
+      {/* ══ FEATURES ══ */}
+      <section id="features" style={{
+        position: 'relative', zIndex: 1,
+        padding: 'clamp(80px, 10vw, 120px) clamp(20px, 5vw, 64px)',
+        maxWidth: 1100, margin: '0 auto',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <p style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#a78bfa', margin: '0 0 14px' }}>
+            Everything you need
           </p>
+          <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 16px', color: '#fff' }}>
+            Built for deep studying
+          </h2>
+          <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.5)', margin: 0, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+            Every tool you need to go from passive reading to active learning.
+          </p>
+        </div>
 
-          {/* CTA */}
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 64 }}>
-            <Link
-              href="/login"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                height: 46, padding: '0 28px',
-                borderRadius: 4,
-                background: '#ffffff',
-                border: 'none',
-                color: '#0f172a',
-                fontSize: 15, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-                textDecoration: 'none',
-                letterSpacing: '-0.01em',
-                transition: 'background 0.15s',
-              }}
-              onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(255,255,255,0.88)'; }}
-              onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#ffffff'; }}
-            >
-              Start for Free <ArrowRight size={15} />
-            </Link>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          {FEATURES.map((f) => <FeatureCard key={f.title} {...f} />)}
+        </div>
+      </section>
 
-            <button
-              style={{
-                height: 46, padding: '0 28px',
-                borderRadius: 4,
-                background: 'transparent',
-                border: '1px solid rgba(255,255,255,0.25)',
-                color: 'rgba(255,255,255,0.75)',
-                fontSize: 15, fontWeight: 500,
-                cursor: 'pointer', fontFamily: 'inherit',
-                letterSpacing: '-0.01em',
-                transition: 'border-color 0.15s, color 0.15s',
-              }}
-              onMouseOver={(e) => {
-                Object.assign(e.currentTarget.style, { borderColor: 'rgba(255,255,255,0.5)', color: '#ffffff' });
-              }}
-              onMouseOut={(e) => {
-                Object.assign(e.currentTarget.style, { borderColor: 'rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.75)' });
-              }}
-            >
-              Watch Demo
-            </button>
+      {/* ══ PRICING ══ */}
+      <section id="pricing" style={{
+        position: 'relative', zIndex: 1,
+        padding: 'clamp(80px, 10vw, 120px) clamp(20px, 5vw, 64px)',
+      }}>
+        {/* Divider glow */}
+        <div style={{
+          position: 'absolute', top: 0, left: '20%', right: '20%', height: 1,
+          background: 'linear-gradient(90deg, transparent, rgba(124,58,237,0.4), transparent)',
+        }} />
+
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <p style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#a78bfa', margin: '0 0 14px' }}>
+            Simple pricing
+          </p>
+          <h2 style={{ fontSize: 'clamp(1.8rem, 4vw, 3rem)', fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 16px', color: '#fff' }}>
+            Start free, scale when ready
+          </h2>
+          <p style={{ fontSize: 15.5, color: 'rgba(255,255,255,0.5)', margin: 0, maxWidth: 440, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+            No credit card required for Free. Upgrade any time.
+          </p>
+        </div>
+
+        <div style={{
+          display: 'flex', gap: 20, flexWrap: 'wrap', justifyContent: 'center',
+          maxWidth: 1000, margin: '0 auto',
+        }}>
+          <PricingCard
+            name="Free"
+            price="$0"
+            sub="forever"
+            features={FREE_FEATURES}
+            cta="Get Started Free"
+            ctaHref="/register"
+          />
+          <PricingCard
+            name="Premium"
+            price="$4.99"
+            sub="/month"
+            badge="Most Popular"
+            features={PREMIUM_FEATURES}
+            cta="Start Premium"
+            ctaHref="/register"
+            highlight
+          />
+          <PricingCard
+            name="Pro"
+            price="$13.99"
+            sub="/month"
+            features={PRO_FEATURES}
+            cta="Start Pro"
+            ctaHref="/register"
+          />
+        </div>
+
+        <p style={{ textAlign: 'center', marginTop: 28, fontSize: 14, color: 'rgba(255,255,255,0.35)' }}>
+          All paid plans include a 7-day free trial.{' '}
+          <Link href="/pricing" style={{ color: '#a78bfa', textDecoration: 'none' }}
+            onMouseOver={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+            onMouseOut={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
+          >
+            See full comparison →
+          </Link>
+        </p>
+      </section>
+
+      {/* ══ FOOTER ══ */}
+      <footer style={{
+        position: 'relative', zIndex: 1,
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        padding: 'clamp(40px, 6vw, 64px) clamp(20px, 5vw, 64px) clamp(28px, 4vw, 40px)',
+      }}>
+        <div style={{
+          maxWidth: 1100, margin: '0 auto',
+          display: 'flex', gap: 40, flexWrap: 'wrap',
+          justifyContent: 'space-between',
+          marginBottom: 40,
+        }}>
+          {/* Brand */}
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: 8,
+                background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 12px rgba(124,58,237,0.4)',
+              }}>
+                <BookOpen size={14} style={{ color: '#fff' }} />
+              </div>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em' }}>StudySync</span>
+            </div>
+            <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.4)', lineHeight: 1.65, margin: 0, maxWidth: 240 }}>
+              The collaborative PDF workspace for students who take studying seriously.
+            </p>
           </div>
 
-          {/* Tablet mockup */}
-          <TabletMockup />
-
-          {/* Feature cards */}
-          <div style={{
-            width: '90%', maxWidth: 960,
-            display: 'flex', gap: 12,
-            margin: '48px auto 0',
-            flexWrap: 'wrap',
-          }}>
-            {FEATURES.map((f) => (
-              <FeatureCard key={f.title} {...f} />
+          {/* Links */}
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+            <p style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 14px' }}>
+              Product
+            </p>
+            {[
+              { label: 'Dashboard', href: '/dashboard' },
+              { label: 'Workspace', href: '/workspace' },
+              { label: 'Pricing', href: '/pricing' },
+              { label: 'Community', href: '/community' },
+            ].map(({ label, href }) => (
+              <Link key={label} href={href} style={{
+                display: 'block', fontSize: 14, color: 'rgba(255,255,255,0.55)',
+                textDecoration: 'none', marginBottom: 10, transition: 'color 0.15s',
+              }}
+                onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; }}
+                onMouseOut={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; }}
+              >
+                {label}
+              </Link>
             ))}
           </div>
 
-          <div style={{ height: 64 }} />
+          {/* Account */}
+          <div style={{ flex: '1 1 140px', minWidth: 0 }}>
+            <p style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 14px' }}>
+              Account
+            </p>
+            {[
+              { label: 'Sign In', href: '/login' },
+              { label: 'Register', href: '/register' },
+              { label: 'Settings', href: '/settings' },
+            ].map(({ label, href }) => (
+              <Link key={label} href={href} style={{
+                display: 'block', fontSize: 14, color: 'rgba(255,255,255,0.55)',
+                textDecoration: 'none', marginBottom: 10, transition: 'color 0.15s',
+              }}
+                onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; }}
+                onMouseOut={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.55)'; }}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+
+          {/* Support */}
+          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+            <p style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', margin: '0 0 14px' }}>
+              Support
+            </p>
+            <a
+              href="mailto:support@studysync.io"
+              style={{ fontSize: 14, color: '#a78bfa', textDecoration: 'none', transition: 'color 0.15s' }}
+              onMouseOver={(e) => { e.currentTarget.style.color = '#c4b5fd'; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = '#a78bfa'; }}
+            >
+              support@studysync.io
+            </a>
+          </div>
         </div>
-      </section>
+
+        <div style={{
+          maxWidth: 1100, margin: '0 auto',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          paddingTop: 24,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          flexWrap: 'wrap', gap: 12,
+        }}>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)', margin: 0 }}>
+            © 2026 StudySync. All rights reserved.
+          </p>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.25)', margin: 0 }}>
+            Built for learners everywhere.
+          </p>
+        </div>
+      </footer>
+
+      {/* Keyframes */}
+      <style>{`
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50%       { transform: translateY(6px); }
+        }
+        .nav-links-desktop {
+          display: flex;
+        }
+        @media (max-width: 600px) {
+          .nav-links-desktop { display: none !important; }
+        }
+      `}</style>
     </div>
   );
 }
