@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Pencil, Eraser, Trash2, X, Type, Undo2, MousePointer } from 'lucide-react';
+import { Pencil, Eraser, Trash2, X, Type, Undo2, MousePointer, Maximize2, Minimize2 } from 'lucide-react';
 import type { Tool, PenType } from '@/lib/drawing';
 import { PRESET_COLORS } from '@/lib/drawing';
 import DragScrubber from './DragScrubber';
@@ -93,6 +93,8 @@ interface Props {
   onSwitchSide?: (side: 'left' | 'right') => void;
   containerRef?: React.RefObject<HTMLElement | null>;
   bottomBarRef?: React.RefObject<HTMLElement | null>;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -103,6 +105,7 @@ export default function FloatingAnnotationToolbar({
   color, setColor, strokeSize, setStrokeSize,
   onClear, onUndo, splitMode, activeSide, onSwitchSide,
   containerRef, bottomBarRef,
+  isFullscreen, onToggleFullscreen,
 }: Props) {
   const { t } = useLanguage();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -567,6 +570,35 @@ export default function FloatingAnnotationToolbar({
               {t('ann_clear_page')}
             </button>
           </div>
+
+          {onToggleFullscreen && (
+            <>
+              <Hr />
+              <div style={{ padding: '6px 8px 10px' }}>
+                <button
+                  onClick={onToggleFullscreen}
+                  style={{
+                    width: '100%', height: 30,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    borderRadius: 4, border: `1px solid ${isFullscreen ? 'rgba(124,58,237,0.4)' : 'transparent'}`,
+                    background: isFullscreen ? 'rgba(124,58,237,0.15)' : 'transparent',
+                    color: isFullscreen ? '#a78bfa' : '#ffffff',
+                    cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
+                    transition: 'background 0.12s, border-color 0.12s, color 0.12s',
+                  }}
+                  onMouseOver={(e) => {
+                    if (!isFullscreen) Object.assign(e.currentTarget.style, { background: '#2a2a2a', borderColor: '#444444' });
+                  }}
+                  onMouseOut={(e) => {
+                    if (!isFullscreen) Object.assign(e.currentTarget.style, { background: 'transparent', borderColor: 'transparent' });
+                  }}
+                >
+                  {isFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                  {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
