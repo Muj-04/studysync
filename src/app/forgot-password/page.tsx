@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
           Reset Password
         </h1>
         <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>
-          {sent ? 'Check your inbox for the reset link.' : 'Enter your email and we\'ll send a reset link.'}
+          {sent ? 'Check your inbox and follow the instructions.' : 'Enter your email and we\'ll send a reset link.'}
         </p>
 
         {error && (
@@ -83,10 +83,11 @@ export default function ForgotPasswordPage() {
           }}>
             <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>📬</div>
             <p style={{ fontSize: '0.85rem', color: '#6ee7b7', margin: 0, lineHeight: 1.5 }}>
-              Check your email for a reset link.<br />
-              <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem' }}>
-                It may take a minute to arrive.
-              </span>
+              We sent a reset link to{' '}
+              <span style={{ color: '#ffffff', fontWeight: 600 }}>{email.trim()}</span>
+            </p>
+            <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', margin: '4px 0 0', lineHeight: 1.5 }}>
+              It may take a minute to arrive.
             </p>
           </div>
         ) : (
