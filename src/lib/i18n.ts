@@ -145,6 +145,7 @@ const en = {
   set_nav_privacy: 'Privacy',
   set_nav_notifications: 'Notifications',
   set_nav_data: 'Data & Storage',
+  set_nav_referral: 'Referrals',
 
   // ── Settings — Account ──
   set_acc_title: 'Account',
@@ -737,6 +738,7 @@ const ar: typeof en = {
   set_nav_privacy: 'الخصوصية',
   set_nav_notifications: 'الإشعارات',
   set_nav_data: 'البيانات والتخزين',
+  set_nav_referral: 'الإحالات',
 
   // ── Settings — Account ──
   set_acc_title: 'الحساب',

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { ensureProfile } from '@/lib/supabase/db';
+import { ensureProfile, ensureReferralCode, processReferral } from '@/lib/supabase/db';
 
 // Handles the OAuth redirect. Supabase sends users here with a `code` param
 // (PKCE flow). The client exchanges it for a session, we ensure a profile row
@@ -20,6 +20,14 @@ export default function AuthCallbackPage() {
 
       // Ensure a profile row exists (no-op if already created by DB trigger).
       await ensureProfile();
+      await ensureReferralCode();
+
+      // Process any pending referral stored before OAuth redirect.
+      const pendingRef = localStorage.getItem('studysync_pending_ref');
+      if (pendingRef) {
+        await processReferral(pendingRef);
+        localStorage.removeItem('studysync_pending_ref');
+      }
 
       // Redirect to the app.
       window.location.replace('/workspace');
