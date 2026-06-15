@@ -24,16 +24,20 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  org: "studysync-ec",
-  project: "javascript-nextjs",
-  silent: !process.env.CI,
-  widenClientFileUpload: true,
-  tunnelRoute: "/monitoring",
-  webpack: {
-    automaticVercelMonitors: true,
-    treeshake: {
-      removeDebugLogging: true,
-    },
-  },
-});
+const hasAuthToken = !!process.env.SENTRY_AUTH_TOKEN;
+
+export default hasAuthToken
+  ? withSentryConfig(nextConfig, {
+      org: "studysync-ec",
+      project: "javascript-nextjs",
+      silent: true,
+      widenClientFileUpload: true,
+      tunnelRoute: "/monitoring",
+      webpack: {
+        automaticVercelMonitors: true,
+        treeshake: {
+          removeDebugLogging: true,
+        },
+      },
+    })
+  : nextConfig;
