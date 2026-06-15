@@ -995,6 +995,68 @@ export async function ensureProfile(): Promise<void> {
   if (error) console.error('[DB] ensureProfile error:', error.message);
 }
 
+// ── Referrals ─────────────────────────────────────────────────────────────────
+
+const BASE_URL = 'https://pdf-study-workspace.vercel.app';
+
+function makeReferralCode(uid: string): string {
+  return uid.replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+export async function ensureReferralCode(): Promise<string | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data } = await sb().from('profiles').select('referral_code').eq('id', uid).maybeSingle();
+  if (data?.referral_code) return data.referral_code as string;
+  const code = makeReferralCode(uid);
+  await sb().from('profiles').update({ referral_code: code }).eq('id', uid);
+  return code;
+}
+
+export async function processReferral(referralCode: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const code = referralCode.trim().toUpperCase();
+  const { data: referrer } = await sb()
+    .from('profiles').select('id').eq('referral_code', code).maybeSingle();
+  if (!referrer || referrer.id === uid) return;
+  // Idempotent — unique constraint prevents duplicates
+  const { error } = await sb().from('referrals').upsert(
+    { referrer_id: referrer.id, referred_id: uid },
+    { onConflict: 'referrer_id,referred_id', ignoreDuplicates: true },
+  );
+  if (error) { console.error('[DB] processReferral insert error:', error.message); return; }
+  // Grant 7-day premium to both
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  await Promise.all([
+    sb().from('profiles').update({ plan: 'premium', referral_expires_at: expiresAt }).eq('id', referrer.id),
+    sb().from('profiles').update({ plan: 'premium', referral_expires_at: expiresAt }).eq('id', uid),
+    sb().from('referrals').update({ reward_granted: true })
+      .eq('referrer_id', referrer.id).eq('referred_id', uid),
+  ]);
+}
+
+export async function getReferralStats(): Promise<{
+  referralCode: string | null;
+  referralLink: string | null;
+  referralCount: number;
+  rewardActive: boolean;
+  rewardExpiresAt: string | null;
+} | null> {
+  const uid = await userId(); if (!uid) return null;
+  const [profileRes, countRes] = await Promise.all([
+    sb().from('profiles').select('referral_code, referral_expires_at').eq('id', uid).maybeSingle(),
+    sb().from('referrals').select('id', { count: 'exact', head: true }).eq('referrer_id', uid),
+  ]);
+  const code = (profileRes.data?.referral_code as string | null) ?? null;
+  const expiresAt = (profileRes.data?.referral_expires_at as string | null) ?? null;
+  return {
+    referralCode: code,
+    referralLink: code ? `${BASE_URL}/register?ref=${code}` : null,
+    referralCount: countRes.count ?? 0,
+    rewardActive: expiresAt ? new Date(expiresAt) > new Date() : false,
+    rewardExpiresAt: expiresAt,
+  };
+}
+
 export async function uploadAvatar(file: File): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
   const ext = file.name.split('.').pop() ?? 'jpg';

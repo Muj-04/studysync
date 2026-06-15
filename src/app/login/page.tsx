@@ -6,6 +6,8 @@ import {
   checkActiveSession,
   registerSession,
   getOrCreateSessionId,
+  ensureReferralCode,
+  processReferral,
 } from '@/lib/supabase/db';
 
 const OAUTH_REDIRECT = 'https://pdf-study-workspace.vercel.app/auth/callback';
@@ -147,6 +149,16 @@ export default function LoginPage() {
       } catch {
         // Session check failed - proceed anyway
       }
+
+      // Process any referral pending since registration
+      try {
+        await ensureReferralCode();
+        const pendingRef = localStorage.getItem('studysync_pending_ref');
+        if (pendingRef) {
+          await processReferral(pendingRef);
+          localStorage.removeItem('studysync_pending_ref');
+        }
+      } catch { /* non-fatal */ }
 
       try {
         window.location.href = '/dashboard';

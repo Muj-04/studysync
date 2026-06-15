@@ -80,6 +80,10 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Persist referral code from URL so it survives email confirmation + OAuth redirects
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) localStorage.setItem('studysync_pending_ref', ref.trim().toUpperCase());
+
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) window.location.replace('/dashboard');
