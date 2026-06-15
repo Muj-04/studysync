@@ -1292,6 +1292,19 @@ export default function WorkspacePage() {
   const voiceNoteListRef = useRef<import('@/components/VoiceNoteList').VoiceNoteListHandle>(null);
 
   const [annotationBarOpen, setAnnotationBarOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const exitFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((f) => {
+      if (f) { return false; }
+      setVoiceSheetOpen(false);
+      return true;
+    });
+  }, []);
 
   // ── Persistence: text notes ───────────────────────────────────────────────
   useEffect(() => {
@@ -1536,6 +1549,7 @@ export default function WorkspacePage() {
 
       // Escape always works
       if (e.key === 'Escape') {
+        if (isFullscreen) { exitFullscreen(); return; }
         setAnnotationBarOpen(false);
         setShortcutsOpen(false);
         setSearchOpen(false);
@@ -1610,7 +1624,8 @@ export default function WorkspacePage() {
     return () => window.removeEventListener('keydown', down);
   }, [goVirtualNext, goVirtualPrev, handleLeftZoomChange, handleRightZoomChange, handleUndo,
       handleToggleBookmark, handleInsertBlankPage, showToast,
-      setLeftTool, setRightTool, setLeftPenType, setRightPenType]);
+      setLeftTool, setRightTool, setLeftPenType, setRightPenType,
+      isFullscreen, exitFullscreen]);
 
   // ── Clear handler — targets the correct canvas per context ────────────────
   const handleClear = useCallback(() => {
@@ -1911,15 +1926,17 @@ export default function WorkspacePage() {
 
       {/* ══ Header ══ */}
       <header style={{
-        height: 56, flexShrink: 0,
+        height: isFullscreen ? 0 : 56, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 12px 0 8px',
+        padding: isFullscreen ? '0' : '0 12px 0 8px',
         background: 'rgba(0, 0, 0, 0.65)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(255,255,255,0.1)',
+        borderBottom: isFullscreen ? 'none' : '1px solid rgba(255,255,255,0.1)',
         position: 'relative', zIndex: 20,
         gap: 8,
+        overflow: 'hidden',
+        transition: 'height 0.3s ease, padding 0.3s ease',
       }}>
 
         {/* Left: sidebar toggle + brand + nav */}
@@ -2222,7 +2239,7 @@ export default function WorkspacePage() {
           {/* ── Left sidebar (thumbnails) ── */}
           <div
             style={{
-              width: sidebarOpen ? sidebarWidth : 0,
+              width: isFullscreen ? 0 : sidebarOpen ? sidebarWidth : 0,
               overflow: 'hidden',
               transition: isDraggingLeft ? 'none' : 'width 0.3s ease',
               flexShrink: 0,
@@ -2251,7 +2268,7 @@ export default function WorkspacePage() {
           </div>
 
           {/* ── Left resize handle ── */}
-          {sidebarOpen && (
+          {sidebarOpen && !isFullscreen && (
             <div
               onMouseDown={startLeftDrag}
               style={{
@@ -2483,10 +2500,10 @@ export default function WorkspacePage() {
                 {/* ── Bottom panels (collapsible) ── */}
                 <div ref={bottomBarRef} style={{
                   flexShrink: 0, overflow: 'hidden',
-                  maxHeight: navBarVisible ? 800 : 0,
-                  transition: navBarVisible
-                    ? 'max-height 0.3s cubic-bezier(0,0,0.2,1)'
-                    : 'max-height 0.22s cubic-bezier(0.4,0,1,1)',
+                  maxHeight: isFullscreen ? 0 : navBarVisible ? 800 : 0,
+                  transition: (isFullscreen || !navBarVisible)
+                    ? 'max-height 0.22s cubic-bezier(0.4,0,1,1)'
+                    : 'max-height 0.3s cubic-bezier(0,0,0.2,1)',
                 }}>
 
                   {/* Voice notes panel: hidden in scroll mode (shown per-page there) */}
@@ -2551,6 +2568,8 @@ export default function WorkspacePage() {
                   onSwitchSide={showSplit ? setActiveSide : undefined}
                   containerRef={mainRef}
                   bottomBarRef={bottomBarRef}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={toggleFullscreen}
                 />
 
                 {/* Restore bottom bar button */}
@@ -2592,7 +2611,7 @@ export default function WorkspacePage() {
           </main>
 
           {/* ── Right resize handle ── */}
-          {rightPanelOpen && (
+          {rightPanelOpen && !isFullscreen && (
             <div
               onMouseDown={startRightDrag}
               style={{
@@ -2611,7 +2630,7 @@ export default function WorkspacePage() {
           {/* ── Right panel (document tools) ── */}
           <div
             style={{
-              width: rightPanelOpen ? rightPanelWidth : 0,
+              width: isFullscreen ? 0 : rightPanelOpen ? rightPanelWidth : 0,
               overflow: 'hidden',
               transition: isDraggingRight ? 'none' : 'width 0.3s ease',
               flexShrink: 0,
