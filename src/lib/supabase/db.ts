@@ -1012,23 +1012,78 @@ export async function ensureReferralCode(): Promise<string | null> {
   return code;
 }
 
-export async function processReferral(referralCode: string): Promise<void> {
+export async function processReferral(referralCode: string, ipAddress?: string): Promise<void> {
   const uid = await userId(); if (!uid) return;
+
+  // 1. Email verification required — unverified accounts never trigger rewards
+  const { data: { user } } = await sb().auth.getUser();
+  if (!user?.email_confirmed_at) return;
+
   const code = referralCode.trim().toUpperCase();
+
+  // 2. Find referrer + account age check (must be ≥24 h old)
   const { data: referrer } = await sb()
-    .from('profiles').select('id').eq('referral_code', code).maybeSingle();
-  if (!referrer || referrer.id === uid) return;
-  // Idempotent — unique constraint prevents duplicates
+    .from('profiles')
+    .select('id, created_at')
+    .eq('referral_code', code)
+    .maybeSingle();
+  if (!referrer || referrer.id === uid) return; // not found or self-referral
+  const referrerAgeMs = Date.now() - new Date(referrer.created_at as string).getTime();
+  if (referrerAgeMs < 24 * 60 * 60 * 1000) return; // referrer account < 24 h old
+
+  // 4. One referral per referred user — they can only be referred once ever
+  const { data: alreadyReferred } = await sb()
+    .from('referrals').select('id').eq('referred_id', uid).maybeSingle();
+  if (alreadyReferred) return;
+
+  // 2b. IP-based abuse check — same IP used before for this referrer
+  if (ipAddress) {
+    const { data: ipConflict } = await sb()
+      .from('referrals')
+      .select('id')
+      .eq('referrer_id', referrer.id)
+      .eq('ip_address', ipAddress)
+      .maybeSingle();
+    if (ipConflict) return;
+  }
+
+  // 3. Monthly referral limit — max 10 rewarded referrals per referrer per calendar month
+  const monthStart = new Date();
+  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const { count: monthCount } = await sb()
+    .from('referrals')
+    .select('id', { count: 'exact', head: true })
+    .eq('referrer_id', referrer.id)
+    .eq('reward_granted', true)
+    .gte('created_at', monthStart.toISOString());
+  if ((monthCount ?? 0) >= 10) return;
+
+  // Insert referral row
   const { error } = await sb().from('referrals').upsert(
-    { referrer_id: referrer.id, referred_id: uid },
+    { referrer_id: referrer.id, referred_id: uid, ip_address: ipAddress ?? null },
     { onConflict: 'referrer_id,referred_id', ignoreDuplicates: true },
   );
   if (error) { console.error('[DB] processReferral insert error:', error.message); return; }
-  // Grant 7-day premium to both
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Stacking reward: newExpiry = max(current_expires_at, now()) + 7 days
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const stackExpiry = (current: string | null): string => {
+    const currentMs = current ? new Date(current).getTime() : 0;
+    return new Date(Math.max(currentMs, now) + SEVEN_DAYS_MS).toISOString();
+  };
+
+  const [referrerRow, referredRow] = await Promise.all([
+    sb().from('profiles').select('referral_expires_at').eq('id', referrer.id).maybeSingle(),
+    sb().from('profiles').select('referral_expires_at').eq('id', uid).maybeSingle(),
+  ]);
+
+  const referrerExpiry = stackExpiry((referrerRow.data?.referral_expires_at as string | null) ?? null);
+  const referredExpiry = stackExpiry((referredRow.data?.referral_expires_at as string | null) ?? null);
+
   await Promise.all([
-    sb().from('profiles').update({ plan: 'premium', referral_expires_at: expiresAt }).eq('id', referrer.id),
-    sb().from('profiles').update({ plan: 'premium', referral_expires_at: expiresAt }).eq('id', uid),
+    sb().from('profiles').update({ plan: 'premium', referral_expires_at: referrerExpiry }).eq('id', referrer.id),
+    sb().from('profiles').update({ plan: 'premium', referral_expires_at: referredExpiry }).eq('id', uid),
     sb().from('referrals').update({ reward_granted: true })
       .eq('referrer_id', referrer.id).eq('referred_id', uid),
   ]);
