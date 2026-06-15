@@ -155,7 +155,16 @@ export default function LoginPage() {
         await ensureReferralCode();
         const pendingRef = localStorage.getItem('studysync_pending_ref');
         if (pendingRef) {
-          await processReferral(pendingRef);
+          let ip: string | undefined;
+          try {
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), 3000);
+            const res = await fetch('https://api.ipify.org?format=json', { signal: ctrl.signal });
+            clearTimeout(t);
+            const json = await res.json() as { ip?: string };
+            ip = json.ip;
+          } catch { /* non-fatal */ }
+          await processReferral(pendingRef, ip);
           localStorage.removeItem('studysync_pending_ref');
         }
       } catch { /* non-fatal */ }

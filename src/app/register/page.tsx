@@ -90,9 +90,24 @@ export default function RegisterPage() {
     });
   }, []);
 
+  const DISPOSABLE_DOMAINS = new Set([
+    'tempmail.com','guerrillamail.com','guerrillamail.net','guerrillamail.org','guerrillamail.biz','guerrillamail.de',
+    '10minutemail.com','10minutemail.net','10minutemail.org','mailinator.com','yopmail.com','yopmail.fr',
+    'sharklasers.com','guerrillamailblock.com','grr.la','guerrillamail.info','spam4.me','trashmail.com',
+    'trashmail.me','trashmail.net','trashmail.at','trashmail.io','trashmail.org','mailnull.com',
+    'spamgourmet.com','throwam.com','throwam.net','getnada.com','filzmail.com','dispostable.com',
+    'mailnesia.com','maildrop.cc','discard.email','spamfree24.org','fakeinbox.com','tempr.email',
+    'zetmail.com','crazymailing.com','meltmail.com','wegwerfmail.de','wegwerfmail.net','wegwerfmail.org',
+  ]);
+
   const handleRegister = async () => {
     if (!username || !email || !password) { setError('Please fill in all fields.'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    const emailDomain = email.trim().toLowerCase().split('@')[1] ?? '';
+    if (DISPOSABLE_DOMAINS.has(emailDomain)) {
+      setError('Disposable email addresses are not allowed. Please use a real email.');
+      return;
+    }
     setError('');
     setLoading(true);
     const supabase = createClient();
