@@ -796,12 +796,16 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     }}>
 
       {/* ── Header ── */}
+      {/* position:relative + zIndex floats the whole header (and any dropdowns
+          rooted inside it — NotificationBell, etc.) above sibling rows whose
+          backdrop-filter would otherwise paint over it. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
         padding: '8px 16px', borderBottom: '1px solid rgba(255,255,255,0.1)',
         background: 'var(--bg-panel)',
         backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
         flexShrink: 0,
+        position: 'relative', zIndex: 100,
       }}>
         <span style={{
           fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
@@ -921,6 +925,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       </div>
 
       {/* ── Drawing toolbar ── */}
+      {/* Sits above the PDF area so the blank-page menu (and any future
+          toolbar popovers) can overflow downward without being clipped by
+          the next sibling's stacking context. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '6px 14px', borderBottom: '1px solid #333333',
@@ -929,6 +936,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
         flexShrink: 0, flexWrap: 'wrap',
         rowGap: 6,
+        position: 'relative', zIndex: 90,
       }}>
 
         {/* ── Tools ── */}
@@ -1061,7 +1069,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
               border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 4, padding: 10,
-              zIndex: 200,
+              zIndex: 9999,
             }}>
               <p style={{
                 fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
@@ -1313,7 +1321,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           position: 'fixed', bottom: 70, left: '50%', transform: 'translateX(-50%)',
           background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)',
           color: '#ef4444', fontSize: 12, fontWeight: 500, padding: '8px 16px',
-          borderRadius: 4, zIndex: 400, whiteSpace: 'nowrap',
+          borderRadius: 4, zIndex: 9999, whiteSpace: 'nowrap',
           backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         }}>
           {voiceError}
