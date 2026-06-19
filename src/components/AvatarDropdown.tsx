@@ -100,7 +100,7 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
             border: '1px solid var(--bg-float-border)',
             boxShadow: 'var(--shadow-float)',
             borderRadius: 4,
-            zIndex: 300,
+            zIndex: 9999,
             overflow: 'hidden',
           }}
         >

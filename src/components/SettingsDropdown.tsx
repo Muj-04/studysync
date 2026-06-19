@@ -185,7 +185,7 @@ export default function SettingsDropdown({
             border: '1px solid var(--bg-float-border)',
             boxShadow: 'var(--shadow-float)',
             borderRadius: 4,
-            zIndex: 200,
+            zIndex: 9999,
             padding: '14px',
           }}
         >
