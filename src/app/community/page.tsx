@@ -16,6 +16,7 @@ import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -241,6 +242,7 @@ const SAVED_POSTS_KEY = 'community_saved_posts';
 type LocalTab = CommunityFeedTab | 'saved';
 
 export default function CommunityPage() {
+  useAuthGuard();
   const { t } = useLanguage();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);

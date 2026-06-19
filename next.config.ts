@@ -8,6 +8,25 @@ const securityHeaders = [
   { key: 'Permissions-Policy',           value: 'camera=(), microphone=(self)' },
 ];
 
+// Prevents the browser from serving a logged-in page from bfcache / disk cache
+// after sign-out — otherwise the back button can render the workspace without
+// a valid session.
+const noStoreHeaders = [
+  { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate, max-age=0' },
+  { key: 'Pragma',        value: 'no-cache' },
+  { key: 'Expires',       value: '0' },
+];
+
+const protectedSources = [
+  '/workspace/:path*',
+  '/dashboard/:path*',
+  '/library/:path*',
+  '/community/:path*',
+  '/friends/:path*',
+  '/settings/:path*',
+  '/room/:path*',
+];
+
 const nextConfig: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
@@ -20,6 +39,10 @@ const nextConfig: NextConfig = {
         source: '/(.*)',
         headers: securityHeaders,
       },
+      ...protectedSources.map((source) => ({
+        source,
+        headers: noStoreHeaders,
+      })),
     ];
   },
 };

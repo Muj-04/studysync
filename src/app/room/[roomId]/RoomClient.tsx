@@ -32,6 +32,7 @@ import DragScrubber from '@/components/DragScrubber';
 import type { Tool, PenType } from '@/lib/drawing';
 import type { BlankPage } from '@/types';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 // ── Virtual page sequence ─────────────────────────────────────────────────────
 
@@ -200,6 +201,7 @@ function IconBtn({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function RoomClient({ roomId }: { roomId: string }) {
+  useAuthGuard();
   const router = useRouter();
   const { t } = useLanguage();
 
