@@ -1927,6 +1927,12 @@ export default function WorkspacePage() {
     >
 
       {/* ══ Header ══ */}
+      {/* overflow:visible (non-fullscreen) lets dropdowns escape downward —
+          previously overflow:hidden was clipping NotificationBell /
+          SettingsDropdown / AvatarDropdown the moment they extended past
+          the 56px header. z-index 700 lifts the header above sibling fixed
+          floats (FloatingAnnotationToolbar z 200, PageNavigation z 100,
+          PomodoroWidget z 600) while staying below modals (z 800/1000). */}
       <header style={{
         height: isFullscreen ? 0 : 56, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1935,9 +1941,9 @@ export default function WorkspacePage() {
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
         borderBottom: isFullscreen ? 'none' : '1px solid rgba(255,255,255,0.1)',
-        position: 'relative', zIndex: 20,
+        position: 'relative', zIndex: 700,
         gap: 8,
-        overflow: 'hidden',
+        overflow: isFullscreen ? 'hidden' : 'visible',
         transition: 'height 0.3s ease, padding 0.3s ease',
       }}>
 
