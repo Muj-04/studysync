@@ -12,6 +12,7 @@ import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -107,6 +108,7 @@ function MiniPostCard({ post, myUserId, onLike, onDelete }: {
 }
 
 export default function ProfilePage({ params }: { params: Promise<{ userId: string }> }) {
+  useAuthGuard();
   const { userId: targetId } = use(params);
   const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [posts, setPosts] = useState<CommunityPost[]>([]);

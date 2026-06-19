@@ -9,6 +9,7 @@ import {
   BookOpen, Shield, Flame, Globe2, Gift, Copy, Users,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
 import {
   getUserStorageStats,
@@ -464,7 +465,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
     const { error } = await deleteUserAccount();
     if (error) { setDelLoading(false); alert('Failed to delete account: ' + error); return; }
     await sb.auth.signOut();
-    router.push('/login');
+    router.replace('/login');
   }, [router, sb]);
 
   return (
@@ -570,7 +571,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
         <GhostBtn
           onClick={async () => {
             await sb.auth.signOut();
-            router.push('/login');
+            router.replace('/login');
           }}
         >
           <LogOut size={13} />
@@ -1623,6 +1624,7 @@ function DataSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  useAuthGuard();
   const { t } = useLanguage();
   const [active, setActive] = useState<Section>('account');
   const [userEmail, setUserEmail] = useState('');
@@ -1634,7 +1636,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     sb.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) { router.push('/login'); return; }
+      if (!user) { router.replace('/login'); return; }
       setUserEmail(user.email ?? '');
       const profile = await getProfile();
       setDisplayName(profile?.username ?? user.email?.split('@')[0] ?? '');

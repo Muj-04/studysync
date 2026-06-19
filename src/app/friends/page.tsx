@@ -15,6 +15,7 @@ import type { UserResult, FriendEntry, FriendRequest, MyFriendship } from '@/lib
 import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,7 @@ function EmptyState({ icon: Icon, title, sub }: { icon: React.ElementType; title
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function FriendsPage() {
+  useAuthGuard();
   const router = useRouter();
   const { t } = useLanguage();
   const [userEmail, setUserEmail]     = useState('');
