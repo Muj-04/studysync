@@ -9,6 +9,7 @@ import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 interface DocEntry {
   id: string;
@@ -42,6 +43,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
 }
 
 export default function DashboardPage() {
+  useAuthGuard();
   useSessionGuard({ onKicked: () => { window.location.href = '/login?kicked=1'; } });
   const { t } = useLanguage();
   const [docs, setDocs] = useState<DocEntry[]>([]);

@@ -13,6 +13,7 @@ import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { usePDFPageImages } from '@/hooks/usePDFPageImages';
 import { useStudySession } from '@/hooks/useStudySession';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import PDFUploader from '@/components/PDFUploader';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import PDFScrollViewer from '@/components/PDFScrollViewer';
@@ -853,6 +854,7 @@ function HelpModal({ onClose }: { onClose: () => void }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function WorkspacePage() {
+  useAuthGuard();
   useSessionGuard({ onKicked: () => { window.location.href = '/login?kicked=1'; } });
   const { t } = useLanguage();
 

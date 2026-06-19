@@ -47,7 +47,9 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
 
   const handleLogout = async () => {
     await createClient().auth.signOut();
-    window.location.href = '/login';
+    // Use replace (not assign) so the protected page is dropped from history —
+    // pressing back after logout must not reveal the cached view.
+    window.location.replace('/login');
   };
 
   return (

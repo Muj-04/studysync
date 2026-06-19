@@ -17,6 +17,7 @@ import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { setPendingReopenFile } from '@/lib/pendingReopenFile';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -356,6 +357,7 @@ function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => vo
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LibraryPage() {
+  useAuthGuard();
   const { t } = useLanguage();
   const [docs, setDocs] = useState<LibraryDocument[]>([]);
   const [tagsMap, setTagsMap] = useState<Record<string, string[]>>({});
