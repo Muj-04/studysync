@@ -237,6 +237,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // ── Blank pages state ─────────────────────────────────────────────────────
   const [docId, setDocId]                 = useState<string | null>(null);
   const [roomBlankPages, setRoomBlankPages] = useState<RoomBlankPagePayload[]>([]);
+  // Per-blank-page-id drawing data URLs. Kept in memory only — broadcast over
+  // the existing 'blank_drawing' realtime channel so other members see strokes
+  // live, mirroring how PDF-page drawings sync. DB persistence would need a
+  // new table; out of scope for this fix.
+  const [blankDrawings, setBlankDrawings] = useState<Record<string, string>>({});
   const [virtualIndex, setVirtualIndex]   = useState(0);
   const [blankMenuOpen, setBlankMenuOpen] = useState(false);
   const [docChangePrompt, setDocChangePrompt] = useState<{ uploaderName: string; fileName: string } | null>(null);
@@ -344,7 +349,14 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     });
   }, []);
 
-  const handleIncomingBlankDrawing = useCallback((_pageId: string, _data: string) => {}, []);
+  const handleIncomingBlankDrawing = useCallback((pageId: string, data: string) => {
+    setBlankDrawings((prev) => ({ ...prev, [pageId]: data }));
+  }, []);
+
+  const getBlankDrawing = useCallback(
+    (pageId: string) => blankDrawings[pageId],
+    [blankDrawings],
+  );
 
   const handleIncomingDocChange = useCallback((uploaderName: string, fileName: string) => {
     setDocChangePrompt({ uploaderName, fileName });
@@ -593,6 +605,13 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       saveRoomDrawing(roomId, page, data);
     }, 500);
   }, [saveDrawing, broadcastDrawing, roomId]);
+
+  // Local save + realtime broadcast for blank-page strokes. Supabase channel
+  // is configured with broadcast.self=false so we won't echo back to ourselves.
+  const handleSaveBlankDrawing = useCallback((pageId: string, data: string) => {
+    setBlankDrawings((prev) => ({ ...prev, [pageId]: data }));
+    broadcastBlankDrawing(pageId, data);
+  }, [broadcastBlankDrawing]);
 
   const handlePdfFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1255,6 +1274,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             annotationActive={tool !== 'cursor'}
             getDrawing={getDrawing}
             saveDrawing={handleSavePageDrawing}
+            getBlankDrawing={getBlankDrawing}
+            saveBlankDrawing={handleSaveBlankDrawing}
           />
         )}
       </div>
