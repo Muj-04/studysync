@@ -178,6 +178,10 @@ interface PageItemProps {
   annotationActive: boolean;
   savedDrawing?: string;
   onSavePageDrawing: (docId: string, page: number, data: string) => void;
+  // Blank-page drawing — opt-in so existing callers keep their current
+  // (no-canvas) blank-page rendering.
+  savedBlankDrawing?: string;
+  onSaveBlankDrawing?: (pageId: string, data: string) => void;
 }
 
 const ScrollPageItem = memo(function ScrollPageItem({
@@ -186,6 +190,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
   pageRefsMap, index,
   tool, penType, color, strokeSize, annotationActive,
   savedDrawing, onSavePageDrawing,
+  savedBlankDrawing, onSaveBlankDrawing,
 }: PageItemProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -320,6 +325,33 @@ const ScrollPageItem = memo(function ScrollPageItem({
     lastPos.current = null;
   }, [cssDims?.w, cssDims?.h, vp.type, nearViewport, savedDrawing]);
 
+  // Blank-page drawing canvas setup — mirrors the PDF effect above but uses
+  // synthetic dimensions (no PDF render produces cssDims for blank pages).
+  // Re-runs when savedBlankDrawing changes so remote strokes paint in.
+  useEffect(() => {
+    if (vp.type !== 'blank' || !nearViewport || containerWidth < 10) return;
+    const drawCanvas = drawCanvasRef.current;
+    if (!drawCanvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = containerWidth * zoom;
+    const h = w * 1.414;
+    canvasDimsRef.current = { w, h };
+    drawCanvas.width = Math.round(w * dpr);
+    drawCanvas.height = Math.round(h * dpr);
+    drawCanvas.style.width = `${w}px`;
+    drawCanvas.style.height = `${h}px`;
+    const ctx = drawCanvas.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (savedBlankDrawing) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, w, h);
+      img.src = savedBlankDrawing;
+    }
+    isDrawing.current = false;
+    lastPos.current = null;
+  }, [vp.type, nearViewport, containerWidth, zoom, savedBlankDrawing]);
+
   const getPos = (e: { clientX: number; clientY: number }) => {
     const dims = canvasDimsRef.current;
     const drawCanvas = drawCanvasRef.current;
@@ -333,10 +365,13 @@ const ScrollPageItem = memo(function ScrollPageItem({
 
   const saveCanvas = useCallback(() => {
     const drawCanvas = drawCanvasRef.current;
-    if (drawCanvas && vp.type === 'pdf') {
+    if (!drawCanvas) return;
+    if (vp.type === 'pdf') {
       onSavePageDrawing(document.id, vp.pdfPage, drawCanvas.toDataURL('image/png'));
+    } else if (vp.type === 'blank' && onSaveBlankDrawing) {
+      onSaveBlankDrawing(vp.blankPage.id, drawCanvas.toDataURL('image/png'));
     }
-  }, [document.id, onSavePageDrawing, vp]);
+  }, [document.id, onSavePageDrawing, onSaveBlankDrawing, vp]);
 
   const startDraw = (pos: { x: number; y: number }) => {
     if (tool === 'text') return;
@@ -375,7 +410,10 @@ const ScrollPageItem = memo(function ScrollPageItem({
     saveCanvas();
   };
 
-  const canDrawNow = annotationActive && vp.type === 'pdf' && tool !== 'text';
+  const canDrawNow =
+    annotationActive
+    && tool !== 'text'
+    && (vp.type === 'pdf' || (vp.type === 'blank' && !!onSaveBlankDrawing));
   const pageW = containerWidth * zoom;
   const pageH = cssDims?.h ?? pageW * 1.414;
   const shadow = '0 2px 16px rgba(0,0,0,0.45)';
@@ -399,10 +437,11 @@ const ScrollPageItem = memo(function ScrollPageItem({
 
   if (vp.type === 'blank') {
     const isDark = vp.blankPage.bgTheme === 'dark';
+    const blankH = pageW * 1.414;
     return (
       <div ref={outerRef} style={{
         position: 'relative',
-        width: pageW, height: pageW * 1.414,
+        width: pageW, height: blankH,
         borderRadius: 4, boxShadow: shadow, flexShrink: 0, overflow: 'hidden',
         backgroundColor: isDark ? '#1e1e2e' : '#ffffff',
         backgroundImage: `radial-gradient(circle, ${isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'} 1px, transparent 1px)`,
@@ -415,6 +454,37 @@ const ScrollPageItem = memo(function ScrollPageItem({
         }}>
           Blank
         </span>
+        {/* Drawing canvas overlay — mirrors the PDF branch. Only mounts when
+            the parent opts in via onSaveBlankDrawing; without it the page
+            stays read-only as before. */}
+        {onSaveBlankDrawing && (
+          <canvas
+            ref={drawCanvasRef}
+            style={{
+              position: 'absolute', top: 0, left: 0,
+              display: 'block',
+              zIndex: 3,
+              pointerEvents: canDrawNow ? 'auto' : 'none',
+              cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
+              touchAction: canDrawNow ? 'none' : 'pan-y',
+            }}
+            onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent)); }}
+            onMouseMove={(e) => { if (!canDrawNow) return; continueDraw(getPos(e.nativeEvent)); }}
+            onMouseUp={() => canDrawNow && stopDraw()}
+            onMouseLeave={() => canDrawNow && stopDraw()}
+            onTouchStart={(e) => {
+              if (!canDrawNow) return;
+              e.preventDefault();
+              if (e.touches.length === 1) startDraw(getPos(e.touches[0]));
+            }}
+            onTouchMove={(e) => {
+              if (!canDrawNow) return;
+              e.preventDefault();
+              if (e.touches.length === 1) continueDraw(getPos(e.touches[0]));
+            }}
+            onTouchEnd={() => canDrawNow && stopDraw()}
+          />
+        )}
         <VoiceNoteBadge
           notes={notes} isRecordingHere={isRecordingHere}
           onRecordStart={onRecordStart} onRecordStop={onRecordStop}
@@ -503,6 +573,8 @@ interface Props {
   annotationActive: boolean;
   getDrawing: (docId: string, page: number) => string | undefined;
   saveDrawing: (docId: string, page: number, data: string) => void;
+  getBlankDrawing?: (pageId: string) => string | undefined;
+  saveBlankDrawing?: (pageId: string, data: string) => void;
 }
 
 export default function PDFScrollViewer({
@@ -511,6 +583,7 @@ export default function PDFScrollViewer({
   onRecordStart, onRecordStop,
   tool, penType, color, strokeSize, annotationActive,
   getDrawing, saveDrawing,
+  getBlankDrawing, saveBlankDrawing,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -613,6 +686,9 @@ export default function PDFScrollViewer({
         const savedDrawing = vp.type === 'pdf'
           ? getDrawing(document.id, vp.pdfPage)
           : undefined;
+        const savedBlankDrawing = vp.type === 'blank' && getBlankDrawing
+          ? getBlankDrawing(vp.blankPage.id)
+          : undefined;
 
         return (
           <ScrollPageItem
@@ -634,6 +710,8 @@ export default function PDFScrollViewer({
             annotationActive={annotationActive}
             savedDrawing={savedDrawing}
             onSavePageDrawing={saveDrawing}
+            savedBlankDrawing={savedBlankDrawing}
+            onSaveBlankDrawing={saveBlankDrawing}
           />
         );
       })}
