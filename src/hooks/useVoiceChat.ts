@@ -12,6 +12,7 @@ export interface UseVoiceChatReturn {
   join:        () => Promise<void>;
   leave:       () => Promise<void>;
   toggleMute:  () => void;
+  disconnectImmediate: () => void;
 }
 
 export function useVoiceChat(roomId: string, userId: string, displayName: string): UseVoiceChatReturn {
@@ -152,5 +153,16 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
     lkRoom.current = null;
   }, []);
 
-  return { connected, connecting, muted, speakingIds, voiceError, join, leave, toggleMute };
+  // Synchronous, fire-and-forget disconnect — for `pagehide` and other
+  // tab-close paths where there is no time to await `leave()`. Initiates
+  // the LiveKit Leave frame so the server sees the disconnect immediately
+  // and notifies other participants.
+  const disconnectImmediate = useCallback(() => {
+    audioEls.current.forEach((el) => el.remove());
+    audioEls.current.clear();
+    lkRoom.current?.disconnect();
+    lkRoom.current = null;
+  }, []);
+
+  return { connected, connecting, muted, speakingIds, voiceError, join, leave, toggleMute, disconnectImmediate };
 }

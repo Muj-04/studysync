@@ -379,6 +379,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     broadcastBlankPageAdded, broadcastRoomClosed,
     broadcastDocChanged,
     memberCount, members,
+    disconnectChannel,
   } = useStudyRoom(
     roomId, handleIncomingDrawing, handleReconnect,
     handleIncomingVoiceNoteAdded, handleIncomingVoiceNoteDelete,
@@ -398,6 +399,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     join: voiceJoin,
     leave: voiceLeave,
     toggleMute: voiceToggleMute,
+    disconnectImmediate: voiceDisconnectImmediate,
   } = useVoiceChat(roomId, userId, userName);
 
   // Stable broadcast callbacks for voice notes
@@ -584,17 +586,38 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiresAt, status]);
 
-  // Pagehide: best-effort leave on browser close/refresh
+  // Pagehide: tab close / refresh / bfcache. A regular `await leaveRoom(...)`
+  // here is unreliable — browsers cancel in-flight fetches once the page is
+  // unloading, so the room_members row never gets deleted (ghost member,
+  // bumps capacity count, breaks invites). The fix has three parts that
+  // each survive unload differently:
+  //   1. Voice: lkRoom.disconnect() is a synchronous initiator of the
+  //      LiveKit Leave frame — survives because the WS close goes out
+  //      immediately, no async round-trip required.
+  //   2. Realtime: channel.untrack() + .unsubscribe() likewise initiate
+  //      WS frames that go out before the page tears down, so other
+  //      members' presence-sync fires the leave promptly (rather than
+  //      waiting for Realtime's keepalive timeout).
+  //   3. DB: navigator.sendBeacon POSTs survive unload. The endpoint
+  //      reads the Supabase SSR cookie for auth, never trusts the body
+  //      for the user id, and performs the same DELETE + maybe-close
+  //      that leaveRoom() does server-side.
   useEffect(() => {
     const handleUnload = () => {
-      if (hasJoinedRef.current) {
-        hasJoinedRef.current = false;
-        leaveRoom(roomId).catch(() => {});
-      }
+      if (!hasJoinedRef.current) return;
+      hasJoinedRef.current = false;
+      voiceDisconnectImmediate();
+      disconnectChannel();
+      try {
+        const body = JSON.stringify({ roomId });
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon('/api/room/leave', blob);
+      } catch { /* sendBeacon best-effort */ }
+      try { localStorage.removeItem('activeRoom'); } catch { /* */ }
     };
     window.addEventListener('pagehide', handleUnload);
     return () => window.removeEventListener('pagehide', handleUnload);
-  }, [roomId]);
+  }, [roomId, voiceDisconnectImmediate, disconnectChannel]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSavePageDrawing = useCallback((docId: string, page: number, data: string) => {
