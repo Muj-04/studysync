@@ -9,6 +9,7 @@ import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
 import { useVoiceNotes } from '@/hooks/useVoiceNotes';
 import { useBlankPages } from '@/hooks/useBlankPages';
+import { useBlankPageDrawing } from '@/hooks/useBlankPageDrawing';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { usePDFPageImages } from '@/hooks/usePDFPageImages';
 import { useStudySession } from '@/hooks/useStudySession';
@@ -1527,42 +1528,19 @@ export default function WorkspacePage() {
     : [];
   const pageKey = activeDocument ? `${activeDocument.id}:${pageIdentifier}` : '';
 
-  // ── Scroll-mode blank-page drawing + text-note wiring ────────────────────
-  // PDFScrollViewer supports blank-page drawing and text notes via opt-in
-  // props; we provide them here so strokes and notes round-trip through the
-  // same `canvasData` / `pageTextNotes` state used by single-page mode.
-  // The undo stack is a per-page history of previous canvasData URLs so the
-  // toolbar's Undo button works on blank pages in scroll mode (where
-  // blankDrawingRef is null because BlankPageCanvas isn't mounted).
-  //
-  // Earlier this lookup used a ref kept in sync via useEffect — but the
-  // effect runs AFTER commit, so the very first render after
-  // updateCanvasData() saw stale data and Undo/Clear silently no-op'd
-  // visually. Reading docBlankPages directly fixes that ordering bug.
-  const blankUndoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
-
-  // The single source of truth for "which blank page is the toolbar
-  // currently acting on in scroll mode". Updated on every stroke and every
-  // note placement; read by handleUndo/handleClear so they can't drift to
-  // a different page than the one the user actually drew on. (currentVP
-  // tracks the scroll midpoint, which is not the same thing.)
-  const lastInteractedBlankIdRef = useRef<string | null>(null);
-
-  const getBlankDrawingScroll = useCallback((pageId: string): string | undefined => {
-    return docBlankPages.find((p) => p.id === pageId)?.canvasData;
-  }, [docBlankPages]);
-
-  const saveBlankDrawingScroll = useCallback((pageId: string, data: string) => {
-    const prev = docBlankPages.find((p) => p.id === pageId)?.canvasData;
-    if (prev === data) return;
-    const stack = blankUndoStacksRef.current[pageId] ?? [];
-    stack.push(prev);
-    // Cap history to a reasonable depth so a long session doesn't grow without bound.
-    if (stack.length > 50) stack.shift();
-    blankUndoStacksRef.current[pageId] = stack;
-    lastInteractedBlankIdRef.current = pageId;
-    updateCanvasData(pageId, data);
-  }, [docBlankPages, updateCanvasData]);
+  // ── Scroll-mode blank-page drawing wiring ────────────────────────────────
+  // The drawing-side state + helpers live in `useBlankPageDrawing` (pure
+  // extraction — same identifiers and bodies). Text-note glue stays here
+  // because it depends on workspace-level state (`pageTextNotes`,
+  // `setLeftTool`); `markBlankInteracted` is exposed so the note-save path
+  // can still stamp `lastInteractedBlankIdRef` exactly as before.
+  const {
+    blankUndoStacksRef,
+    getBlankDrawingScroll,
+    saveBlankDrawingScroll,
+    resolveScrollBlankPageId,
+    markBlankInteracted,
+  } = useBlankPageDrawing({ docBlankPages, updateCanvasData, currentVP });
 
   const getBlankNotesScroll = useCallback((pageId: string): TextNote[] => {
     if (!activeDocument) return [];
@@ -1573,19 +1551,11 @@ export default function WorkspacePage() {
     if (!activeDocument) return;
     const key = `${activeDocument.id}:${pageId}`;
     setPageTextNotes((prev) => ({ ...prev, [key]: notes }));
-    lastInteractedBlankIdRef.current = pageId;
-  }, [activeDocument]);
+    markBlankInteracted(pageId);
+  }, [activeDocument, markBlankInteracted]);
 
   const activateTextToolScroll = useCallback(() => setLeftTool('text'), []);
   const exitTextToolScroll = useCallback(() => setLeftTool('pen'), []);
-
-  // Helper: returns the page id Undo/Clear should target in scroll mode.
-  // Prefers currentVP when it's already on a blank page (the common case);
-  // otherwise falls back to the last page the user actually saved on.
-  const resolveScrollBlankPageId = useCallback((): string | null => {
-    if (currentVP?.type === 'blank') return currentVP.blankPage.id;
-    return lastInteractedBlankIdRef.current;
-  }, [currentVP]);
 
   // ── Undo handler — targets the correct canvas per context ────────────────
   const handleUndo = useCallback(() => {
