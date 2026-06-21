@@ -258,11 +258,27 @@ export function useStudyRoom(
       .catch((err) => console.error('[StudyRoom] broadcast doc_changed error:', err));
   }, []);
 
+  // Synchronous, fire-and-forget channel teardown for tab-close paths.
+  // Untrack first so other members' presence-sync sees us leave promptly
+  // (rather than waiting for Realtime's keepalive timeout), then
+  // unsubscribe. Flips deadRef so the auto-reconnect loop doesn't bring
+  // the channel back up after we've torn it down.
+  const disconnectChannel = useCallback(() => {
+    const ch = channelRef.current;
+    deadRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!ch) return;
+    ch.untrack().catch(() => {});
+    ch.unsubscribe();
+    channelRef.current = null;
+  }, []);
+
   return {
     broadcastDrawing, broadcastBlankDrawing,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
     broadcastBlankPageAdded, broadcastRoomClosed,
     broadcastDocChanged,
     memberCount, members,
+    disconnectChannel,
   };
 }
