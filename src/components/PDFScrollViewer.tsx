@@ -212,6 +212,13 @@ const ScrollPageItem = memo(function ScrollPageItem({
   // Ref mirrors cssDims so the IO callback can read it without stale closure
   const cssDimsRef = useRef<{ w: number; h: number } | null>(null);
   const renderKeyRef = useRef(0);
+  // Tracks the in-flight PDF.js render so the next effect run can cancel it
+  // before starting a new render on the same canvas. Without this, two
+  // page.render() calls race on a single 2D context — `canvas.width = …`
+  // between starts resets the transform, and PDF.js's transform applications
+  // collide, producing intermittent 180°-flipped pages. (Matches the
+  // renderTaskRef pattern used in src/components/PDFViewer.tsx.)
+  const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
 
   // Drawing state
   const isDrawing = useRef(false);
@@ -268,6 +275,11 @@ const ScrollPageItem = memo(function ScrollPageItem({
     const canvas = canvasRef.current;
     if (!canvas || containerWidth < 10) return;
     const key = ++renderKeyRef.current;
+    // Cancel any in-flight render on this canvas before starting a new one.
+    // Without this, the next page.render() races with the previous one on the
+    // same 2D context and produces intermittent 180°-flipped output.
+    renderTaskRef.current?.cancel();
+    renderTaskRef.current = null;
 
     (async () => {
       try {
@@ -288,7 +300,9 @@ const ScrollPageItem = memo(function ScrollPageItem({
         canvas.style.height = `${cssVp.height}px`;
 
         const renderTask = page.render({ canvas, viewport });
+        renderTaskRef.current = renderTask;
         await renderTask.promise;
+        if (renderTaskRef.current === renderTask) renderTaskRef.current = null;
         if (key !== renderKeyRef.current) return;
         setCssDims({ w: cssVp.width, h: cssVp.height });
 
@@ -308,6 +322,13 @@ const ScrollPageItem = memo(function ScrollPageItem({
         }
       } catch { /* cancelled or PDF error */ }
     })();
+
+    return () => {
+      // Cleanup: cancel render on unmount or before re-run so the next
+      // effect cycle doesn't collide with a still-running render.
+      renderTaskRef.current?.cancel();
+      renderTaskRef.current = null;
+    };
   }, [visible, nearViewport, vp, document.url, containerWidth, zoom]);
 
   // Drawing canvas setup — nearViewport added so drawings reload when returning to window
