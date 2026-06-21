@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import type { PDFDocument, VoiceNote, BlankPage } from '@/types';
+import type { PDFDocument, VoiceNote, BlankPage, TextNote } from '@/types';
 import type { Tool, PenType } from '@/lib/drawing';
 import { getDrawingCursor } from '@/lib/drawing';
 import { Mic, Plus, Square } from 'lucide-react';
+import TextNotesLayer from './TextNotesLayer';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,13 @@ interface PageItemProps {
   // (no-canvas) blank-page rendering.
   savedBlankDrawing?: string;
   onSaveBlankDrawing?: (pageId: string, data: string) => void;
+  // Blank-page text notes — opt-in. Mounted only when both notes + saver
+  // are provided so the room (which has no per-page text-note store) is
+  // unaffected.
+  blankNotes?: TextNote[];
+  onSaveBlankNotes?: (pageId: string, notes: TextNote[]) => void;
+  onActivateTextTool?: () => void;
+  onExitTextTool?: () => void;
 }
 
 const ScrollPageItem = memo(function ScrollPageItem({
@@ -191,6 +199,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
   tool, penType, color, strokeSize, annotationActive,
   savedDrawing, onSavePageDrawing,
   savedBlankDrawing, onSaveBlankDrawing,
+  blankNotes, onSaveBlankNotes, onActivateTextTool, onExitTextTool,
 }: PageItemProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -485,6 +494,20 @@ const ScrollPageItem = memo(function ScrollPageItem({
             onTouchEnd={() => canDrawNow && stopDraw()}
           />
         )}
+        {/* Text notes overlay — opt-in. TextNotesLayer is inset:0 and only
+            captures clicks when toolActive (tool==='text'); otherwise it
+            lets pointer events fall through to the drawing canvas below.
+            The drawing canvas above is pointerEvents:'none' for tool==='text'
+            (see canDrawNow), so the two never fight for input. */}
+        {onSaveBlankNotes && blankNotes !== undefined && (
+          <TextNotesLayer
+            notes={blankNotes}
+            onChange={(next) => onSaveBlankNotes(vp.blankPage.id, next)}
+            toolActive={tool === 'text'}
+            onActivateTextTool={onActivateTextTool}
+            onExitTextTool={onExitTextTool}
+          />
+        )}
         <VoiceNoteBadge
           notes={notes} isRecordingHere={isRecordingHere}
           onRecordStart={onRecordStart} onRecordStop={onRecordStop}
@@ -575,6 +598,10 @@ interface Props {
   saveDrawing: (docId: string, page: number, data: string) => void;
   getBlankDrawing?: (pageId: string) => string | undefined;
   saveBlankDrawing?: (pageId: string, data: string) => void;
+  getBlankNotes?: (pageId: string) => TextNote[];
+  saveBlankNotes?: (pageId: string, notes: TextNote[]) => void;
+  onActivateTextTool?: () => void;
+  onExitTextTool?: () => void;
 }
 
 export default function PDFScrollViewer({
@@ -584,6 +611,7 @@ export default function PDFScrollViewer({
   tool, penType, color, strokeSize, annotationActive,
   getDrawing, saveDrawing,
   getBlankDrawing, saveBlankDrawing,
+  getBlankNotes, saveBlankNotes, onActivateTextTool, onExitTextTool,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -689,6 +717,9 @@ export default function PDFScrollViewer({
         const savedBlankDrawing = vp.type === 'blank' && getBlankDrawing
           ? getBlankDrawing(vp.blankPage.id)
           : undefined;
+        const blankNotes = vp.type === 'blank' && getBlankNotes
+          ? getBlankNotes(vp.blankPage.id)
+          : undefined;
 
         return (
           <ScrollPageItem
@@ -712,6 +743,10 @@ export default function PDFScrollViewer({
             onSavePageDrawing={saveDrawing}
             savedBlankDrawing={savedBlankDrawing}
             onSaveBlankDrawing={saveBlankDrawing}
+            blankNotes={blankNotes}
+            onSaveBlankNotes={saveBlankNotes}
+            onActivateTextTool={onActivateTextTool}
+            onExitTextTool={onExitTextTool}
           />
         );
       })}

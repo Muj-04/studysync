@@ -1527,25 +1527,26 @@ export default function WorkspacePage() {
     : [];
   const pageKey = activeDocument ? `${activeDocument.id}:${pageIdentifier}` : '';
 
-  // ── Scroll-mode blank-page drawing wiring ────────────────────────────────
-  // PDFScrollViewer supports blank-page drawing via opt-in props; we provide
-  // them here so strokes are captured and persisted to the same `canvasData`
-  // field used by single-page-mode BlankPageCanvas (round-trip via Supabase
-  // dbSaveBlankPages — no schema change). The undo stack is a per-page
-  // history of previous data URLs so the toolbar's Undo button works on
-  // blank pages in scroll mode (where blankDrawingRef is null because
-  // BlankPageCanvas isn't mounted).
-  const docBlankPagesRef = useRef(docBlankPages);
-  useEffect(() => { docBlankPagesRef.current = docBlankPages; }, [docBlankPages]);
-
+  // ── Scroll-mode blank-page drawing + text-note wiring ────────────────────
+  // PDFScrollViewer supports blank-page drawing and text notes via opt-in
+  // props; we provide them here so strokes and notes round-trip through the
+  // same `canvasData` / `pageTextNotes` state used by single-page mode.
+  // The undo stack is a per-page history of previous canvasData URLs so the
+  // toolbar's Undo button works on blank pages in scroll mode (where
+  // blankDrawingRef is null because BlankPageCanvas isn't mounted).
+  //
+  // Earlier this lookup used a ref kept in sync via useEffect — but the
+  // effect runs AFTER commit, so the very first render after
+  // updateCanvasData() saw stale data and Undo/Clear silently no-op'd
+  // visually. Reading docBlankPages directly fixes that ordering bug.
   const blankUndoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
 
   const getBlankDrawingScroll = useCallback((pageId: string): string | undefined => {
-    return docBlankPagesRef.current.find((p) => p.id === pageId)?.canvasData;
-  }, []);
+    return docBlankPages.find((p) => p.id === pageId)?.canvasData;
+  }, [docBlankPages]);
 
   const saveBlankDrawingScroll = useCallback((pageId: string, data: string) => {
-    const prev = docBlankPagesRef.current.find((p) => p.id === pageId)?.canvasData;
+    const prev = docBlankPages.find((p) => p.id === pageId)?.canvasData;
     if (prev === data) return;
     const stack = blankUndoStacksRef.current[pageId] ?? [];
     stack.push(prev);
@@ -1553,7 +1554,21 @@ export default function WorkspacePage() {
     if (stack.length > 50) stack.shift();
     blankUndoStacksRef.current[pageId] = stack;
     updateCanvasData(pageId, data);
-  }, [updateCanvasData]);
+  }, [docBlankPages, updateCanvasData]);
+
+  const getBlankNotesScroll = useCallback((pageId: string): TextNote[] => {
+    if (!activeDocument) return [];
+    return pageTextNotes[`${activeDocument.id}:${pageId}`] ?? [];
+  }, [activeDocument, pageTextNotes]);
+
+  const saveBlankNotesScroll = useCallback((pageId: string, notes: TextNote[]) => {
+    if (!activeDocument) return;
+    const key = `${activeDocument.id}:${pageId}`;
+    setPageTextNotes((prev) => ({ ...prev, [key]: notes }));
+  }, [activeDocument]);
+
+  const activateTextToolScroll = useCallback(() => setLeftTool('text'), []);
+  const exitTextToolScroll = useCallback(() => setLeftTool('pen'), []);
 
   // ── Undo handler — targets the correct canvas per context ────────────────
   const handleUndo = useCallback(() => {
@@ -1682,7 +1697,7 @@ export default function WorkspacePage() {
     } else if (currentVP?.type === 'blank') {
       if (viewMode === 'scroll') {
         const pageId = currentVP.blankPage.id;
-        const prev = docBlankPagesRef.current.find((p) => p.id === pageId)?.canvasData;
+        const prev = docBlankPages.find((p) => p.id === pageId)?.canvasData;
         if (prev) {
           const stack = blankUndoStacksRef.current[pageId] ?? [];
           stack.push(prev);
@@ -1696,7 +1711,7 @@ export default function WorkspacePage() {
     } else {
       pdfDrawingRef.current?.clear();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const bypass = isVip || userPlan !== 'free';
@@ -2404,6 +2419,10 @@ export default function WorkspacePage() {
                         saveDrawing={saveDrawing}
                         getBlankDrawing={getBlankDrawingScroll}
                         saveBlankDrawing={saveBlankDrawingScroll}
+                        getBlankNotes={getBlankNotesScroll}
+                        saveBlankNotes={saveBlankNotesScroll}
+                        onActivateTextTool={activateTextToolScroll}
+                        onExitTextTool={exitTextToolScroll}
                       />
                     ) : !showSplit && isBlankPage ? (
                       <BlankPageCanvas
