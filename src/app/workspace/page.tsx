@@ -10,6 +10,7 @@ import { usePDF } from '@/hooks/usePDF';
 import { useVoiceNotes } from '@/hooks/useVoiceNotes';
 import { useBlankPages } from '@/hooks/useBlankPages';
 import { useBlankPageDrawing } from '@/hooks/useBlankPageDrawing';
+import { useUndoClear } from '@/hooks/useUndoClear';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { usePDFPageImages } from '@/hooks/usePDFPageImages';
 import { useStudySession } from '@/hooks/useStudySession';
@@ -1557,44 +1558,13 @@ export default function WorkspacePage() {
   const activateTextToolScroll = useCallback(() => setLeftTool('text'), []);
   const exitTextToolScroll = useCallback(() => setLeftTool('pen'), []);
 
-  // ── Undo handler — targets the correct canvas per context ────────────────
-  const handleUndo = useCallback(() => {
-    if (showSplit) {
-      if (activeSide === 'left') {
-        pdfDrawingRef.current?.undo?.();
-      } else if (rightSideMode === 'blank') {
-        blankDrawingRef.current?.undo?.();
-      } else {
-        rightDocDrawingRef.current?.undo?.();
-      }
-      return;
-    }
-    // In scroll mode, prefer the in-workspace blank-page undo stack whenever
-    // the user has touched a blank page recently — currentVP tracks the
-    // scroll midpoint and can be a PDF page even right after the user drew
-    // on a blank that's off-centre. Page mode keeps the BlankPageCanvas
-    // ref path because BlankPageCanvas is mounted for the visible page.
-    if (viewMode === 'scroll') {
-      const blankId = resolveScrollBlankPageId();
-      if (blankId) {
-        const stack = blankUndoStacksRef.current[blankId];
-        if (stack && stack.length > 0) {
-          const prev = stack.pop();
-          updateCanvasData(blankId, prev ?? '');
-          return;
-        }
-        // Empty stack for this blank → fall through to PDF undo (which is
-        // a no-op in scroll mode today, same as before this fix).
-      }
-      pdfDrawingRef.current?.undo?.();
-      return;
-    }
-    if (currentVP?.type === 'blank') {
-      blankDrawingRef.current?.undo?.();
-    } else {
-      pdfDrawingRef.current?.undo?.();
-    }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, resolveScrollBlankPageId]);
+  // ── Undo + Clear handlers (pure extraction — see useUndoClear) ───────────
+  const { handleUndo, handleClear } = useUndoClear({
+    showSplit, activeSide, rightSideMode, viewMode, currentVP,
+    pdfDrawingRef, blankDrawingRef, rightDocDrawingRef,
+    blankUndoStacksRef, resolveScrollBlankPageId,
+    updateCanvasData, docBlankPages,
+  });
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1680,41 +1650,6 @@ export default function WorkspacePage() {
       handleToggleBookmark, handleInsertBlankPage, showToast,
       setLeftTool, setRightTool, setLeftPenType, setRightPenType,
       isFullscreen, exitFullscreen]);
-
-  // ── Clear handler — targets the correct canvas per context ────────────────
-  const handleClear = useCallback(() => {
-    if (showSplit) {
-      if (activeSide === 'left') {
-        pdfDrawingRef.current?.clear();
-      } else if (rightSideMode === 'blank') {
-        blankDrawingRef.current?.clear();
-      } else {
-        rightDocDrawingRef.current?.clear();
-      }
-      return;
-    }
-    if (viewMode === 'scroll') {
-      const blankId = resolveScrollBlankPageId();
-      if (blankId) {
-        const prev = docBlankPages.find((p) => p.id === blankId)?.canvasData;
-        if (prev) {
-          const stack = blankUndoStacksRef.current[blankId] ?? [];
-          stack.push(prev);
-          if (stack.length > 50) stack.shift();
-          blankUndoStacksRef.current[blankId] = stack;
-        }
-        updateCanvasData(blankId, '');
-        return;
-      }
-      pdfDrawingRef.current?.clear();
-      return;
-    }
-    if (currentVP?.type === 'blank') {
-      blankDrawingRef.current?.clear();
-    } else {
-      pdfDrawingRef.current?.clear();
-    }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages, resolveScrollBlankPageId]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const bypass = isVip || userPlan !== 'free';
