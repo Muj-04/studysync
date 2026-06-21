@@ -1,7 +1,7 @@
 'use client';
 import { useCallback } from 'react';
 import type { RefObject } from 'react';
-import type { BlankPage } from '@/types';
+import type { BlankPage, PDFDocument } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
 
 // Same minimal structural shape used by useBlankPageDrawing — declared
@@ -32,6 +32,15 @@ interface Args {
   // Blank-page persistence + lookup (sourced from useBlankPages)
   updateCanvasData: (id: string, data: string) => void;
   docBlankPages:    BlankPage[];
+
+  // PDF-page drawing state (workspace-owned; mirrors the blank-page stack
+  // pattern). Keys are `${docId}:${pdfPage}`. Used only in scroll mode —
+  // single-page-mode PDF undo/clear continue to go through pdfDrawingRef.
+  pdfUndoStacksRef:           RefObject<Record<string, Array<string | undefined>>>;
+  lastInteractedPdfPageRef:   RefObject<{ docId: string; pdfPage: number } | null>;
+  activeDocument:             PDFDocument | null;
+  getPdfDrawing:              (docId: string, page: number) => string | undefined;
+  savePdfDrawing:             (docId: string, page: number, data: string) => void;
 }
 
 /**
@@ -53,7 +62,22 @@ export function useUndoClear({
   resolveScrollBlankPageId,
   updateCanvasData,
   docBlankPages,
+  pdfUndoStacksRef,
+  lastInteractedPdfPageRef,
+  activeDocument,
+  getPdfDrawing,
+  savePdfDrawing,
 }: Args) {
+  // Helper for the scroll-mode PDF-page Undo branch. Mirrors
+  // resolveScrollBlankPageId's "current or last-touched" semantics so
+  // pressing Undo right after a stroke still finds its target even if the
+  // user scrolled away mid-stroke.
+  const resolveScrollPdfTarget = (): { docId: string; pdfPage: number } | null => {
+    if (currentVP?.type === 'pdf' && activeDocument) {
+      return { docId: activeDocument.id, pdfPage: currentVP.pdfPage };
+    }
+    return lastInteractedPdfPageRef.current;
+  };
   // ── Undo handler — targets the correct canvas per context ────────────────
   const handleUndo = useCallback(() => {
     if (showSplit) {
@@ -66,12 +90,24 @@ export function useUndoClear({
       }
       return;
     }
-    // In scroll mode, prefer the in-workspace blank-page undo stack whenever
-    // the user has touched a blank page recently — currentVP tracks the
-    // scroll midpoint and can be a PDF page even right after the user drew
-    // on a blank that's off-centre. Page mode keeps the BlankPageCanvas
-    // ref path because BlankPageCanvas is mounted for the visible page.
+    // In scroll mode, blank and PDF pages each have their own in-workspace
+    // undo stack (BlankPageCanvas / PDFWithDrawing aren't mounted here, so
+    // pdfDrawingRef is null). Preference order:
+    //   1. If currentVP is a PDF page and its stack has entries → pop it.
+    //   2. Else try the blank stack (current or last-touched blank).
+    //   3. Else fall back to the last-touched PDF page's stack.
+    //   4. Last resort: pdfDrawingRef (null in scroll mode, but kept for
+    //      future-proofing / page-mode parity if this branch is ever shared).
     if (viewMode === 'scroll') {
+      if (currentVP?.type === 'pdf' && activeDocument) {
+        const key = `${activeDocument.id}:${currentVP.pdfPage}`;
+        const pdfStack = pdfUndoStacksRef.current[key];
+        if (pdfStack && pdfStack.length > 0) {
+          const prev = pdfStack.pop();
+          savePdfDrawing(activeDocument.id, currentVP.pdfPage, prev ?? '');
+          return;
+        }
+      }
       const blankId = resolveScrollBlankPageId();
       if (blankId) {
         const stack = blankUndoStacksRef.current[blankId];
@@ -80,8 +116,16 @@ export function useUndoClear({
           updateCanvasData(blankId, prev ?? '');
           return;
         }
-        // Empty stack for this blank → fall through to PDF undo (which is
-        // a no-op in scroll mode today, same as before this fix).
+      }
+      const pdfTarget = resolveScrollPdfTarget();
+      if (pdfTarget) {
+        const key = `${pdfTarget.docId}:${pdfTarget.pdfPage}`;
+        const pdfStack = pdfUndoStacksRef.current[key];
+        if (pdfStack && pdfStack.length > 0) {
+          const prev = pdfStack.pop();
+          savePdfDrawing(pdfTarget.docId, pdfTarget.pdfPage, prev ?? '');
+          return;
+        }
       }
       pdfDrawingRef.current?.undo?.();
       return;
@@ -91,7 +135,7 @@ export function useUndoClear({
     } else {
       pdfDrawingRef.current?.undo?.();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, resolveScrollBlankPageId, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, resolveScrollBlankPageId, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef, pdfUndoStacksRef, lastInteractedPdfPageRef, activeDocument, savePdfDrawing]);
 
   // ── Clear handler — targets the correct canvas per context ────────────────
   const handleClear = useCallback(() => {
@@ -106,6 +150,22 @@ export function useUndoClear({
       return;
     }
     if (viewMode === 'scroll') {
+      // PDF page clear: only act on the currently-centred page — Clear is
+      // destructive, no fallback to last-touched.
+      if (currentVP?.type === 'pdf' && activeDocument) {
+        const key = `${activeDocument.id}:${currentVP.pdfPage}`;
+        const prev = getPdfDrawing(activeDocument.id, currentVP.pdfPage);
+        if (prev) {
+          const pdfStack = pdfUndoStacksRef.current[key] ?? [];
+          pdfStack.push(prev);
+          if (pdfStack.length > 50) pdfStack.shift();
+          pdfUndoStacksRef.current[key] = pdfStack;
+        }
+        savePdfDrawing(activeDocument.id, currentVP.pdfPage, '');
+        return;
+      }
+      // Blank page clear (existing behaviour preserved — resolveScrollBlank-
+      // PageId may fall back to last-touched, which is the pre-fix contract).
       const blankId = resolveScrollBlankPageId();
       if (blankId) {
         const prev = docBlankPages.find((p) => p.id === blankId)?.canvasData;
@@ -126,7 +186,7 @@ export function useUndoClear({
     } else {
       pdfDrawingRef.current?.clear();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages, resolveScrollBlankPageId, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages, resolveScrollBlankPageId, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef, pdfUndoStacksRef, activeDocument, getPdfDrawing, savePdfDrawing]);
 
   return { handleUndo, handleClear };
 }

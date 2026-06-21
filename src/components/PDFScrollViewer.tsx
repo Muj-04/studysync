@@ -190,6 +190,11 @@ interface PageItemProps {
   onSaveBlankNotes?: (pageId: string, notes: TextNote[]) => void;
   onActivateTextTool?: () => void;
   onExitTextTool?: () => void;
+  // PDF-page text notes — parallel opt-in to the blank-page pair above so
+  // the same TextNotesLayer + click-create overlay can mount on PDF pages
+  // in scroll mode. Keyed by pdfPage (number) instead of blankPage.id.
+  pdfNotes?: TextNote[];
+  onSavePdfNotes?: (pdfPage: number, notes: TextNote[]) => void;
 }
 
 const ScrollPageItem = memo(function ScrollPageItem({
@@ -200,6 +205,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
   savedDrawing, onSavePageDrawing,
   savedBlankDrawing, onSaveBlankDrawing,
   blankNotes, onSaveBlankNotes, onActivateTextTool, onExitTextTool,
+  pdfNotes, onSavePdfNotes,
 }: PageItemProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -224,6 +230,11 @@ const ScrollPageItem = memo(function ScrollPageItem({
   const isDrawing = useRef(false);
   const lastPos = useRef<{ x: number; y: number } | null>(null);
   const canvasDimsRef = useRef<{ w: number; h: number } | null>(null);
+  // Snapshot of the draw canvas captured when a line-tool stroke starts.
+  // Each pointermove restores it then redraws the straight line from
+  // start → current, giving a rubber-band preview without leaving prior
+  // intermediate lines behind. Cleared on stopDraw.
+  const lineSnapshotRef = useRef<ImageData | null>(null);
 
   // Keep cssDimsRef in sync
   useEffect(() => { cssDimsRef.current = cssDims; }, [cssDims]);
@@ -410,6 +421,13 @@ const ScrollPageItem = memo(function ScrollPageItem({
     if (!drawCanvas || !ctx || !canvasDimsRef.current) return;
     isDrawing.current = true;
     lastPos.current = pos;
+    if (tool === 'line') {
+      // Snapshot the pre-line canvas; continueDraw will restore it before
+      // each rubber-band redraw. Skip the starting dot so an unmoved click
+      // leaves the canvas untouched.
+      lineSnapshotRef.current = ctx.getImageData(0, 0, drawCanvas.width, drawCanvas.height);
+      return;
+    }
     ctx.save();
     applyCtx(ctx, tool, penType, color, strokeSize);
     ctx.beginPath();
@@ -423,6 +441,19 @@ const ScrollPageItem = memo(function ScrollPageItem({
     const drawCanvas = drawCanvasRef.current;
     const ctx = drawCanvas?.getContext('2d');
     if (!drawCanvas || !ctx) return;
+    if (tool === 'line') {
+      // Restore the pre-line snapshot then draw the straight line. Don't
+      // advance lastPos — it stays as the line's anchor for the next move.
+      if (lineSnapshotRef.current) ctx.putImageData(lineSnapshotRef.current, 0, 0);
+      ctx.save();
+      applyCtx(ctx, tool, penType, color, strokeSize);
+      ctx.beginPath();
+      ctx.moveTo(lastPos.current.x, lastPos.current.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
     ctx.save();
     applyCtx(ctx, tool, penType, color, strokeSize);
     ctx.beginPath();
@@ -437,6 +468,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
     if (!isDrawing.current) return;
     isDrawing.current = false;
     lastPos.current = null;
+    lineSnapshotRef.current = null;
     saveCanvas();
   };
 
@@ -623,6 +655,51 @@ const ScrollPageItem = memo(function ScrollPageItem({
           onTouchEnd={() => canDrawNow && stopDraw()}
         />
       )}
+      {/* Text notes overlay (PDF pages) — mirrors the blank-page branch.
+          TextNotesLayer renders existing notes; toolActive is false so its
+          internal click-create overlay never arms — placement is owned by
+          the dedicated z:5 overlay below. */}
+      {onSavePdfNotes && pdfNotes !== undefined && (
+        <TextNotesLayer
+          notes={pdfNotes}
+          onChange={(next) => onSavePdfNotes(vp.pdfPage, next)}
+          toolActive={false}
+          onActivateTextTool={onActivateTextTool}
+          onExitTextTool={onExitTextTool}
+        />
+      )}
+      {/* Dedicated text-note placement overlay for PDF pages — same z:5
+          layering as the blank branch: above the drawing canvas (z:3) so
+          empty clicks land here, below the TextNotesLayer wrapper (z:10)
+          so existing notes still capture clicks. */}
+      {onSavePdfNotes && tool === 'text' && (
+        <div
+          style={{
+            position: 'absolute', inset: 0,
+            zIndex: 5,
+            pointerEvents: 'auto',
+            cursor: 'text',
+            touchAction: 'manipulation',
+          }}
+          onClick={(e) => {
+            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width)  * 100;
+            const y = ((e.clientY - rect.top)  / rect.height) * 100;
+            const newNote: TextNote = {
+              id: crypto.randomUUID(),
+              x: Math.max(0, Math.min(78, x)),
+              y: Math.max(0, Math.min(95, y)),
+              width: 20,
+              height: 5,
+              content: '',
+              fontSize: 13,
+              color: '#222222',
+            };
+            onSavePdfNotes(vp.pdfPage, [...(pdfNotes ?? []), newNote]);
+            onExitTextTool?.();
+          }}
+        />
+      )}
       <VoiceNoteBadge
         notes={notes} isRecordingHere={isRecordingHere}
         onRecordStart={onRecordStart} onRecordStop={onRecordStop}
@@ -657,6 +734,8 @@ interface Props {
   saveBlankNotes?: (pageId: string, notes: TextNote[]) => void;
   onActivateTextTool?: () => void;
   onExitTextTool?: () => void;
+  getPdfNotes?: (pdfPage: number) => TextNote[];
+  savePdfNotes?: (pdfPage: number, notes: TextNote[]) => void;
 }
 
 export default function PDFScrollViewer({
@@ -667,6 +746,7 @@ export default function PDFScrollViewer({
   getDrawing, saveDrawing,
   getBlankDrawing, saveBlankDrawing,
   getBlankNotes, saveBlankNotes, onActivateTextTool, onExitTextTool,
+  getPdfNotes, savePdfNotes,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -775,6 +855,9 @@ export default function PDFScrollViewer({
         const blankNotes = vp.type === 'blank' && getBlankNotes
           ? getBlankNotes(vp.blankPage.id)
           : undefined;
+        const pdfNotesForPage = vp.type === 'pdf' && getPdfNotes
+          ? getPdfNotes(vp.pdfPage)
+          : undefined;
 
         return (
           <ScrollPageItem
@@ -802,6 +885,8 @@ export default function PDFScrollViewer({
             onSaveBlankNotes={saveBlankNotes}
             onActivateTextTool={onActivateTextTool}
             onExitTextTool={onExitTextTool}
+            pdfNotes={pdfNotesForPage}
+            onSavePdfNotes={savePdfNotes}
           />
         );
       })}
