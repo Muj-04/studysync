@@ -1527,6 +1527,34 @@ export default function WorkspacePage() {
     : [];
   const pageKey = activeDocument ? `${activeDocument.id}:${pageIdentifier}` : '';
 
+  // ── Scroll-mode blank-page drawing wiring ────────────────────────────────
+  // PDFScrollViewer supports blank-page drawing via opt-in props; we provide
+  // them here so strokes are captured and persisted to the same `canvasData`
+  // field used by single-page-mode BlankPageCanvas (round-trip via Supabase
+  // dbSaveBlankPages — no schema change). The undo stack is a per-page
+  // history of previous data URLs so the toolbar's Undo button works on
+  // blank pages in scroll mode (where blankDrawingRef is null because
+  // BlankPageCanvas isn't mounted).
+  const docBlankPagesRef = useRef(docBlankPages);
+  useEffect(() => { docBlankPagesRef.current = docBlankPages; }, [docBlankPages]);
+
+  const blankUndoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
+
+  const getBlankDrawingScroll = useCallback((pageId: string): string | undefined => {
+    return docBlankPagesRef.current.find((p) => p.id === pageId)?.canvasData;
+  }, []);
+
+  const saveBlankDrawingScroll = useCallback((pageId: string, data: string) => {
+    const prev = docBlankPagesRef.current.find((p) => p.id === pageId)?.canvasData;
+    if (prev === data) return;
+    const stack = blankUndoStacksRef.current[pageId] ?? [];
+    stack.push(prev);
+    // Cap history to a reasonable depth so a long session doesn't grow without bound.
+    if (stack.length > 50) stack.shift();
+    blankUndoStacksRef.current[pageId] = stack;
+    updateCanvasData(pageId, data);
+  }, [updateCanvasData]);
+
   // ── Undo handler — targets the correct canvas per context ────────────────
   const handleUndo = useCallback(() => {
     if (showSplit) {
@@ -1538,11 +1566,23 @@ export default function WorkspacePage() {
         rightDocDrawingRef.current?.undo?.();
       }
     } else if (currentVP?.type === 'blank') {
-      blankDrawingRef.current?.undo?.();
+      // Scroll mode uses an in-workspace undo stack because BlankPageCanvas
+      // (which owns its own undo) isn't mounted. Page mode falls through to
+      // the BlankPageCanvas ref as before.
+      if (viewMode === 'scroll') {
+        const pageId = currentVP.blankPage.id;
+        const stack = blankUndoStacksRef.current[pageId];
+        if (stack && stack.length > 0) {
+          const prev = stack.pop();
+          updateCanvasData(pageId, prev ?? '');
+        }
+      } else {
+        blankDrawingRef.current?.undo?.();
+      }
     } else {
       pdfDrawingRef.current?.undo?.();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1640,11 +1680,23 @@ export default function WorkspacePage() {
         rightDocDrawingRef.current?.clear();
       }
     } else if (currentVP?.type === 'blank') {
-      blankDrawingRef.current?.clear();
+      if (viewMode === 'scroll') {
+        const pageId = currentVP.blankPage.id;
+        const prev = docBlankPagesRef.current.find((p) => p.id === pageId)?.canvasData;
+        if (prev) {
+          const stack = blankUndoStacksRef.current[pageId] ?? [];
+          stack.push(prev);
+          if (stack.length > 50) stack.shift();
+          blankUndoStacksRef.current[pageId] = stack;
+        }
+        updateCanvasData(pageId, '');
+      } else {
+        blankDrawingRef.current?.clear();
+      }
     } else {
       pdfDrawingRef.current?.clear();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const bypass = isVip || userPlan !== 'free';
@@ -2350,6 +2402,8 @@ export default function WorkspacePage() {
                         annotationActive={leftTool !== 'cursor'}
                         getDrawing={getDrawing}
                         saveDrawing={saveDrawing}
+                        getBlankDrawing={getBlankDrawingScroll}
+                        saveBlankDrawing={saveBlankDrawingScroll}
                       />
                     ) : !showSplit && isBlankPage ? (
                       <BlankPageCanvas
