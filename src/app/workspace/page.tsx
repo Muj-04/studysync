@@ -1580,12 +1580,50 @@ export default function WorkspacePage() {
     markBlankInteracted,
   });
 
+  // ── Scroll-mode PDF-page undo/clear + text-note wiring ───────────────────
+  // Mirrors the blank-page pattern. PDFScrollViewer doesn't mount
+  // PDFWithDrawing, so pdfDrawingRef is null in scroll mode → there's no
+  // built-in undo. The wrapper below pushes the previous canvasData URL
+  // onto a per-(docId:pdfPage) stack before each save; useUndoClear's
+  // scroll-mode branch pops it on Undo. lastInteractedPdfPageRef is the
+  // PDF analogue of the blank lastInteracted ref (used as a fallback if
+  // the user scrolled away between their stroke and the Undo click).
+  const pdfUndoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
+  const lastInteractedPdfPageRef = useRef<{ docId: string; pdfPage: number } | null>(null);
+
+  const savePdfDrawingScroll = useCallback((docId: string, page: number, data: string) => {
+    const key = `${docId}:${page}`;
+    const prev = getDrawing(docId, page);
+    if (prev !== data) {
+      const stack = pdfUndoStacksRef.current[key] ?? [];
+      stack.push(prev);
+      if (stack.length > 50) stack.shift();
+      pdfUndoStacksRef.current[key] = stack;
+      lastInteractedPdfPageRef.current = { docId, pdfPage: page };
+    }
+    saveDrawing(docId, page, data);
+  }, [getDrawing, saveDrawing]);
+
+  const getPdfNotesScroll = useCallback((pdfPage: number): TextNote[] => {
+    if (!activeDocument) return [];
+    return pageTextNotes[`${activeDocument.id}:${pdfPage}`] ?? [];
+  }, [activeDocument, pageTextNotes]);
+
+  const savePdfNotesScroll = useCallback((pdfPage: number, notes: TextNote[]) => {
+    if (!activeDocument) return;
+    const key = `${activeDocument.id}:${pdfPage}`;
+    setPageTextNotes((prev) => ({ ...prev, [key]: notes }));
+    lastInteractedPdfPageRef.current = { docId: activeDocument.id, pdfPage };
+  }, [activeDocument]);
+
   // ── Undo + Clear handlers (pure extraction — see useUndoClear) ───────────
   const { handleUndo, handleClear } = useUndoClear({
     showSplit, activeSide, rightSideMode, viewMode, currentVP,
     pdfDrawingRef, blankDrawingRef, rightDocDrawingRef,
     blankUndoStacksRef, resolveScrollBlankPageId,
     updateCanvasData, docBlankPages,
+    pdfUndoStacksRef, lastInteractedPdfPageRef, activeDocument,
+    getPdfDrawing: getDrawing, savePdfDrawing: saveDrawing,
   });
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -2365,13 +2403,15 @@ export default function WorkspacePage() {
                         strokeSize={leftStrokeSize}
                         annotationActive={leftTool !== 'cursor'}
                         getDrawing={getDrawing}
-                        saveDrawing={saveDrawing}
+                        saveDrawing={savePdfDrawingScroll}
                         getBlankDrawing={getBlankDrawingScroll}
                         saveBlankDrawing={saveBlankDrawingScroll}
                         getBlankNotes={getBlankNotesScroll}
                         saveBlankNotes={saveBlankNotesScroll}
                         onActivateTextTool={activateTextToolScroll}
                         onExitTextTool={exitTextToolScroll}
+                        getPdfNotes={getPdfNotesScroll}
+                        savePdfNotes={savePdfNotesScroll}
                       />
                     ) : !showSplit && isBlankPage ? (
                       <BlankPageCanvas
