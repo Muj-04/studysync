@@ -11,6 +11,8 @@ import { useVoiceNotes } from '@/hooks/useVoiceNotes';
 import { useBlankPages } from '@/hooks/useBlankPages';
 import { useBlankPageDrawing } from '@/hooks/useBlankPageDrawing';
 import { useUndoClear } from '@/hooks/useUndoClear';
+import { useScrollMode } from '@/hooks/useScrollMode';
+import { useSinglePageMode } from '@/hooks/useSinglePageMode';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { usePDFPageImages } from '@/hooks/usePDFPageImages';
 import { useStudySession } from '@/hooks/useStudySession';
@@ -59,7 +61,6 @@ import {
 } from '@/lib/supabase/db';
 import { getPendingReopenFile, clearPendingReopenFile } from '@/lib/pendingReopenFile';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
-import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
 import type { Tool, PenType } from '@/lib/drawing';
 
 // ── Doc order helper ──────────────────────────────────────────────────────────
@@ -1203,9 +1204,9 @@ export default function WorkspacePage() {
   // ── Active side ───────────────────────────────────────────────────────────
   const [activeSide, setActiveSide] = useState<'left' | 'right'>('left');
 
-  const pdfDrawingRef      = useRef<DrawingCanvasHandle | null>(null);
-  const blankDrawingRef    = useRef<DrawingCanvasHandle | null>(null);
-  const rightDocDrawingRef = useRef<DrawingCanvasHandle | null>(null);
+  // The three drawing-canvas refs live in useSinglePageMode (extracted in
+  // step 3) — they're destructured below alongside the right-pane text-note
+  // wiring once leftNotesKey / splitRightBlankPage / rightDocId are ready.
   const mainRef            = useRef<HTMLElement>(null);
   const bottomBarRef       = useRef<HTMLDivElement>(null);
 
@@ -1529,12 +1530,35 @@ export default function WorkspacePage() {
     : [];
   const pageKey = activeDocument ? `${activeDocument.id}:${pageIdentifier}` : '';
 
+  // leftNotesKey is the canonical text-note key for the centred/active page.
+  // It's a 1:1 alias of pageKey, lifted here so useSinglePageMode (and its
+  // handleLeftNotesChange) can be wired right after pageKey is computed.
+  const leftNotesKey = pageKey;
+
+  // ── Single-page-mode rendering wiring (pure extraction — see useSinglePageMode) ──
+  const {
+    pdfDrawingRef,
+    blankDrawingRef,
+    rightDocDrawingRef,
+    rightBlankNotesKey,
+    rightDocNotesKey,
+    handleLeftNotesChange,
+    handleRightBlankNotesChange,
+    handleRightDocNotesChange,
+  } = useSinglePageMode({
+    leftNotesKey,
+    splitRightBlankPage,
+    activeDocument,
+    rightDocId,
+    rightDocPage,
+    setPageTextNotes,
+  });
+
   // ── Scroll-mode blank-page drawing wiring ────────────────────────────────
-  // The drawing-side state + helpers live in `useBlankPageDrawing` (pure
-  // extraction — same identifiers and bodies). Text-note glue stays here
-  // because it depends on workspace-level state (`pageTextNotes`,
-  // `setLeftTool`); `markBlankInteracted` is exposed so the note-save path
-  // can still stamp `lastInteractedBlankIdRef` exactly as before.
+  // Drawing state + helpers live in useBlankPageDrawing (step 1). Text-note
+  // glue + tool-toggle callbacks for PDFScrollViewer live in useScrollMode
+  // (step 3). markBlankInteracted bridges the two so a note save still
+  // stamps the lastInteractedBlankIdRef that resolveScrollBlankPageId reads.
   const {
     blankUndoStacksRef,
     getBlankDrawingScroll,
@@ -1543,20 +1567,18 @@ export default function WorkspacePage() {
     markBlankInteracted,
   } = useBlankPageDrawing({ docBlankPages, updateCanvasData, currentVP });
 
-  const getBlankNotesScroll = useCallback((pageId: string): TextNote[] => {
-    if (!activeDocument) return [];
-    return pageTextNotes[`${activeDocument.id}:${pageId}`] ?? [];
-  }, [activeDocument, pageTextNotes]);
-
-  const saveBlankNotesScroll = useCallback((pageId: string, notes: TextNote[]) => {
-    if (!activeDocument) return;
-    const key = `${activeDocument.id}:${pageId}`;
-    setPageTextNotes((prev) => ({ ...prev, [key]: notes }));
-    markBlankInteracted(pageId);
-  }, [activeDocument, markBlankInteracted]);
-
-  const activateTextToolScroll = useCallback(() => setLeftTool('text'), []);
-  const exitTextToolScroll = useCallback(() => setLeftTool('pen'), []);
+  const {
+    getBlankNotesScroll,
+    saveBlankNotesScroll,
+    activateTextToolScroll,
+    exitTextToolScroll,
+  } = useScrollMode({
+    activeDocument,
+    pageTextNotes,
+    setPageTextNotes,
+    setLeftTool,
+    markBlankInteracted,
+  });
 
   // ── Undo + Clear handlers (pure extraction — see useUndoClear) ───────────
   const { handleUndo, handleClear } = useUndoClear({
@@ -1854,16 +1876,12 @@ export default function WorkspacePage() {
   rightZoomRef.current     = rightZoom;
 
   // ── Text notes helpers ────────────────────────────────────────────────────
-  const leftNotesKey = pageKey;
-  const rightBlankNotesKey = activeDocument && splitRightBlankPage
-    ? `${activeDocument.id}:${splitRightBlankPage.id}` : '';
-  const rightDocNotesKey = rightDocId && rightDocPage
-    ? `${rightDocId}:${rightDocPage}` : '';
-
-  const handleLeftNotesChange = useCallback((notes: TextNote[]) => {
-    if (!leftNotesKey) return;
-    setPageTextNotes(prev => ({ ...prev, [leftNotesKey]: notes }));
-  }, [leftNotesKey]);
+  // leftNotesKey, rightBlankNotesKey, rightDocNotesKey, handleLeftNotesChange,
+  // handleRightBlankNotesChange, handleRightDocNotesChange are now sourced
+  // from useSinglePageMode (step 3, declared above near useUndoClear).
+  // handleInsertTextNote / handleDeleteTextNote stay here — they're used by
+  // PageNavigation and SidebarThumbnails (both modes), not strictly
+  // single-page rendering.
 
   const handleInsertTextNote = useCallback((note: Omit<TextNote, 'id'>) => {
     if (!leftNotesKey) return;
@@ -1914,15 +1932,8 @@ export default function WorkspacePage() {
     setVirtualIndex((i) => i + 1);
   }, [activeDocument, currentVP, insertBlankPage, updateCanvasData, defaultBgTheme]);
 
-  const handleRightBlankNotesChange = useCallback((notes: TextNote[]) => {
-    if (!rightBlankNotesKey) return;
-    setPageTextNotes(prev => ({ ...prev, [rightBlankNotesKey]: notes }));
-  }, [rightBlankNotesKey]);
-
-  const handleRightDocNotesChange = useCallback((notes: TextNote[]) => {
-    if (!rightDocNotesKey) return;
-    setPageTextNotes(prev => ({ ...prev, [rightDocNotesKey]: notes }));
-  }, [rightDocNotesKey]);
+  // handleRightBlankNotesChange / handleRightDocNotesChange now come from
+  // useSinglePageMode (step 3, declared above near useUndoClear).
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
