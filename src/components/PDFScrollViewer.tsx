@@ -494,18 +494,52 @@ const ScrollPageItem = memo(function ScrollPageItem({
             onTouchEnd={() => canDrawNow && stopDraw()}
           />
         )}
-        {/* Text notes overlay — opt-in. TextNotesLayer is inset:0 and only
-            captures clicks when toolActive (tool==='text'); otherwise it
-            lets pointer events fall through to the drawing canvas below.
-            The drawing canvas above is pointerEvents:'none' for tool==='text'
-            (see canDrawNow), so the two never fight for input. */}
+        {/* Text notes overlay — opt-in. TextNotesLayer renders/edits the
+            notes themselves; we DON'T rely on its internal z:-1 click-
+            create overlay for placement here, because it sits inside the
+            wrapper's z:10 stacking context above a z:3 drawing canvas and
+            hit-test of that arrangement is fragile across browsers. */}
         {onSaveBlankNotes && blankNotes !== undefined && (
           <TextNotesLayer
             notes={blankNotes}
             onChange={(next) => onSaveBlankNotes(vp.blankPage.id, next)}
-            toolActive={tool === 'text'}
+            toolActive={false}
             onActivateTextTool={onActivateTextTool}
             onExitTextTool={onExitTextTool}
+          />
+        )}
+        {/* Dedicated text-note placement overlay — only mounted when the
+            text tool is active. zIndex:5 puts it ABOVE the drawing canvas
+            (z:3) so empty-area clicks land here, but BELOW the
+            TextNotesLayer wrapper (z:10) so existing notes (which have
+            pointer-events:auto inside the wrapper) keep capturing clicks
+            for selection/edit. */}
+        {onSaveBlankNotes && tool === 'text' && (
+          <div
+            style={{
+              position: 'absolute', inset: 0,
+              zIndex: 5,
+              pointerEvents: 'auto',
+              cursor: 'text',
+              touchAction: 'manipulation',
+            }}
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+              const x = ((e.clientX - rect.left) / rect.width)  * 100;
+              const y = ((e.clientY - rect.top)  / rect.height) * 100;
+              const newNote: TextNote = {
+                id: crypto.randomUUID(),
+                x: Math.max(0, Math.min(78, x)),
+                y: Math.max(0, Math.min(95, y)),
+                width: 20,
+                height: 5,
+                content: '',
+                fontSize: 13,
+                color: '#222222',
+              };
+              onSaveBlankNotes(vp.blankPage.id, [...(blankNotes ?? []), newNote]);
+              onExitTextTool?.();
+            }}
           />
         )}
         <VoiceNoteBadge

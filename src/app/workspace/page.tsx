@@ -1541,6 +1541,13 @@ export default function WorkspacePage() {
   // visually. Reading docBlankPages directly fixes that ordering bug.
   const blankUndoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
 
+  // The single source of truth for "which blank page is the toolbar
+  // currently acting on in scroll mode". Updated on every stroke and every
+  // note placement; read by handleUndo/handleClear so they can't drift to
+  // a different page than the one the user actually drew on. (currentVP
+  // tracks the scroll midpoint, which is not the same thing.)
+  const lastInteractedBlankIdRef = useRef<string | null>(null);
+
   const getBlankDrawingScroll = useCallback((pageId: string): string | undefined => {
     return docBlankPages.find((p) => p.id === pageId)?.canvasData;
   }, [docBlankPages]);
@@ -1553,6 +1560,7 @@ export default function WorkspacePage() {
     // Cap history to a reasonable depth so a long session doesn't grow without bound.
     if (stack.length > 50) stack.shift();
     blankUndoStacksRef.current[pageId] = stack;
+    lastInteractedBlankIdRef.current = pageId;
     updateCanvasData(pageId, data);
   }, [docBlankPages, updateCanvasData]);
 
@@ -1565,10 +1573,19 @@ export default function WorkspacePage() {
     if (!activeDocument) return;
     const key = `${activeDocument.id}:${pageId}`;
     setPageTextNotes((prev) => ({ ...prev, [key]: notes }));
+    lastInteractedBlankIdRef.current = pageId;
   }, [activeDocument]);
 
   const activateTextToolScroll = useCallback(() => setLeftTool('text'), []);
   const exitTextToolScroll = useCallback(() => setLeftTool('pen'), []);
+
+  // Helper: returns the page id Undo/Clear should target in scroll mode.
+  // Prefers currentVP when it's already on a blank page (the common case);
+  // otherwise falls back to the last page the user actually saved on.
+  const resolveScrollBlankPageId = useCallback((): string | null => {
+    if (currentVP?.type === 'blank') return currentVP.blankPage.id;
+    return lastInteractedBlankIdRef.current;
+  }, [currentVP]);
 
   // ── Undo handler — targets the correct canvas per context ────────────────
   const handleUndo = useCallback(() => {
@@ -1580,24 +1597,34 @@ export default function WorkspacePage() {
       } else {
         rightDocDrawingRef.current?.undo?.();
       }
-    } else if (currentVP?.type === 'blank') {
-      // Scroll mode uses an in-workspace undo stack because BlankPageCanvas
-      // (which owns its own undo) isn't mounted. Page mode falls through to
-      // the BlankPageCanvas ref as before.
-      if (viewMode === 'scroll') {
-        const pageId = currentVP.blankPage.id;
-        const stack = blankUndoStacksRef.current[pageId];
+      return;
+    }
+    // In scroll mode, prefer the in-workspace blank-page undo stack whenever
+    // the user has touched a blank page recently — currentVP tracks the
+    // scroll midpoint and can be a PDF page even right after the user drew
+    // on a blank that's off-centre. Page mode keeps the BlankPageCanvas
+    // ref path because BlankPageCanvas is mounted for the visible page.
+    if (viewMode === 'scroll') {
+      const blankId = resolveScrollBlankPageId();
+      if (blankId) {
+        const stack = blankUndoStacksRef.current[blankId];
         if (stack && stack.length > 0) {
           const prev = stack.pop();
-          updateCanvasData(pageId, prev ?? '');
+          updateCanvasData(blankId, prev ?? '');
+          return;
         }
-      } else {
-        blankDrawingRef.current?.undo?.();
+        // Empty stack for this blank → fall through to PDF undo (which is
+        // a no-op in scroll mode today, same as before this fix).
       }
+      pdfDrawingRef.current?.undo?.();
+      return;
+    }
+    if (currentVP?.type === 'blank') {
+      blankDrawingRef.current?.undo?.();
     } else {
       pdfDrawingRef.current?.undo?.();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, resolveScrollBlankPageId]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1694,24 +1721,30 @@ export default function WorkspacePage() {
       } else {
         rightDocDrawingRef.current?.clear();
       }
-    } else if (currentVP?.type === 'blank') {
-      if (viewMode === 'scroll') {
-        const pageId = currentVP.blankPage.id;
-        const prev = docBlankPages.find((p) => p.id === pageId)?.canvasData;
+      return;
+    }
+    if (viewMode === 'scroll') {
+      const blankId = resolveScrollBlankPageId();
+      if (blankId) {
+        const prev = docBlankPages.find((p) => p.id === blankId)?.canvasData;
         if (prev) {
-          const stack = blankUndoStacksRef.current[pageId] ?? [];
+          const stack = blankUndoStacksRef.current[blankId] ?? [];
           stack.push(prev);
           if (stack.length > 50) stack.shift();
-          blankUndoStacksRef.current[pageId] = stack;
+          blankUndoStacksRef.current[blankId] = stack;
         }
-        updateCanvasData(pageId, '');
-      } else {
-        blankDrawingRef.current?.clear();
+        updateCanvasData(blankId, '');
+        return;
       }
+      pdfDrawingRef.current?.clear();
+      return;
+    }
+    if (currentVP?.type === 'blank') {
+      blankDrawingRef.current?.clear();
     } else {
       pdfDrawingRef.current?.clear();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages, resolveScrollBlankPageId]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
     const bypass = isVip || userPlan !== 'free';
