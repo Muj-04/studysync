@@ -1449,6 +1449,30 @@ export async function sendDirectMessage(
     .select('id, sender_id, recipient_id, content, read, created_at')
     .single();
   if (error || !data) { console.error('[DB] sendDirectMessage error:', error?.message); return null; }
+
+  // Fire-and-forget notification for the recipient — same client-side
+  // pattern used by sendFriendRequest / inviteToRoom / respondFriendRequest.
+  // Recipient-side suppression (when their ChatPanel is open) is handled
+  // in useNotifications via the activeDmChatRef singleton; we always
+  // insert here so the notification row survives across sessions.
+  (async () => {
+    const { data: myProfile } = await sb()
+      .from('profiles').select('username, avatar_url')
+      .eq('id', uid).maybeSingle();
+    await sb().from('notifications').insert({
+      user_id: recipientId,
+      type: 'direct_message',
+      data: {
+        sender_id:     uid,
+        sender_name:   myProfile?.username ?? null,
+        sender_avatar: myProfile?.avatar_url ?? null,
+        // Snippet so the bell text reads naturally even without the
+        // recipient opening the chat — capped short to keep the row tidy.
+        snippet: safe.slice(0, 80),
+      },
+    });
+  })().catch((e) => console.error('[DB] sendDirectMessage notif insert:', e));
+
   return mapDirectMessage(data as DirectMessageRow);
 }
 
