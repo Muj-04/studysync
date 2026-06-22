@@ -166,6 +166,32 @@ export function useStudyRoom(
           );
           setMemberCount(unique.length || 1);
         })
+        // Postgres Changes DELETE on room_members — DB row existence is the
+        // source of truth for "is this user still here". Presence-untrack
+        // from a closing tab can fail to flush before the runtime dies
+        // (same unload-timing class as the original fetch() bug). By
+        // listening to the row delete here, remaining members see the
+        // departure as soon as ANY mechanism deletes the row (sendBeacon,
+        // fetch+keepalive, explicit Leave button, server-side reaper).
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'room_members',
+            filter: `room_id=eq.${roomId}`,
+          },
+          (payload) => {
+            if (generation !== generationRef.current) return;
+            const removedUserId = (payload.old as { user_id?: string } | undefined)?.user_id;
+            if (!removedUserId) return;
+            setMembers((prev) => {
+              const next = prev.filter((m) => m.userId !== removedUserId);
+              if (next.length !== prev.length) setMemberCount((c) => Math.max(1, c - 1));
+              return next;
+            });
+          },
+        )
         .subscribe(async (status) => {
           if (deadRef.current || generation !== generationRef.current) return;
 
