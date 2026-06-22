@@ -1393,6 +1393,107 @@ export async function inviteToRoom(friendId: string, roomId: string, roomName: s
   });
 }
 
+// ── Direct messages (1:1 friend chat) ────────────────────────────────────────
+//
+// The `direct_messages` table is RLS-protected at the database level:
+//   * INSERT requires sender_id = auth.uid() AND an accepted friendship row
+//     between sender and recipient (in either direction) — non-friends can't
+//     message each other even via direct client calls.
+//   * SELECT is limited to rows where the caller is sender or recipient.
+//   * UPDATE is limited to the recipient, and a BEFORE UPDATE trigger pins
+//     every column except `read` so the recipient can only mark-as-read,
+//     not rewrite content.
+// The helpers below are convenience wrappers; the security boundary lives
+// in Postgres, not here.
+
+export interface DirectMessage {
+  id:          string;
+  senderId:    string;
+  recipientId: string;
+  content:     string;
+  read:        boolean;
+  createdAt:   string;
+}
+
+type DirectMessageRow = {
+  id:           string;
+  sender_id:    string;
+  recipient_id: string;
+  content:      string;
+  read:         boolean;
+  created_at:   string;
+};
+
+function mapDirectMessage(r: DirectMessageRow): DirectMessage {
+  return {
+    id:          r.id,
+    senderId:    r.sender_id,
+    recipientId: r.recipient_id,
+    content:     r.content,
+    read:        r.read,
+    createdAt:   r.created_at,
+  };
+}
+
+export async function sendDirectMessage(
+  recipientId: string,
+  content:     string,
+): Promise<DirectMessage | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { sanitizeText } = await import('@/lib/sanitize');
+  const safe = sanitizeText(content).slice(0, 4000);
+  if (!safe) return null;
+  const { data, error } = await sb()
+    .from('direct_messages')
+    .insert({ sender_id: uid, recipient_id: recipientId, content: safe })
+    .select('id, sender_id, recipient_id, content, read, created_at')
+    .single();
+  if (error || !data) { console.error('[DB] sendDirectMessage error:', error?.message); return null; }
+  return mapDirectMessage(data as DirectMessageRow);
+}
+
+export async function getConversation(
+  friendId: string,
+  limit:    number = 100,
+): Promise<DirectMessage[]> {
+  const uid = await userId(); if (!uid) return [];
+  // RLS already restricts visibility to rows where caller is sender or
+  // recipient. Filtering on the pair narrows to this specific conversation.
+  const { data, error } = await sb()
+    .from('direct_messages')
+    .select('id, sender_id, recipient_id, content, read, created_at')
+    .or(`and(sender_id.eq.${uid},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${uid})`)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) { console.error('[DB] getConversation error:', error.message); return []; }
+  return (data ?? []).map((r) => mapDirectMessage(r as DirectMessageRow));
+}
+
+export async function markMessagesRead(friendId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  // Only flips rows the trigger + UPDATE policy allow: caller is recipient.
+  await sb().from('direct_messages')
+    .update({ read: true })
+    .eq('sender_id', friendId)
+    .eq('recipient_id', uid)
+    .eq('read', false);
+}
+
+export async function getUnreadMessageCounts(): Promise<Record<string, number>> {
+  const uid = await userId(); if (!uid) return {};
+  const { data, error } = await sb()
+    .from('direct_messages')
+    .select('sender_id')
+    .eq('recipient_id', uid)
+    .eq('read', false);
+  if (error) { console.error('[DB] getUnreadMessageCounts error:', error.message); return {}; }
+  const counts: Record<string, number> = {};
+  for (const r of (data ?? []) as Array<{ sender_id: string }>) {
+    counts[r.sender_id] = (counts[r.sender_id] ?? 0) + 1;
+  }
+  return counts;
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export interface AppNotification {
