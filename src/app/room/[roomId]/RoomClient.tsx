@@ -255,6 +255,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [invitedIds, setInvitedIds]     = useState<Set<string>>(new Set());
 
   const hasJoinedRef    = useRef(false);
+  // Cached Supabase access token for the unload-time DB delete. Read once
+  // on init + refreshed on auth state changes — the pagehide handler runs
+  // too late to await a fresh getSession().
+  const accessTokenRef  = useRef<string | null>(null);
   const docIdRef        = useRef<string | null>(null);
   const currentPageRef  = useRef<number>(1);
   const currentVPRef    = useRef<VirtualPage | null>(null);
@@ -439,6 +443,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     let cancelled = false;
     async function init() {
       const supabase = createClient();
+      // Cache the access token before doing anything else — needed
+      // synchronously by the pagehide handler for the keepalive fetch.
+      const { data: { session } } = await supabase.auth.getSession();
+      accessTokenRef.current = session?.access_token ?? null;
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace('/login'); return; }
 
@@ -546,6 +554,16 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
+  // Keep the cached access token current — Supabase refreshes tokens
+  // periodically; the unload handler needs whatever is valid now.
+  useEffect(() => {
+    const supabase = createClient();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      accessTokenRef.current = session?.access_token ?? null;
+    });
+    return () => { sub.subscription.unsubscribe(); };
+  }, []);
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : (activeDocument?.currentPage ?? 1);
   const totalPages     = virtualSequence.length || (activeDocument?.pageCount ?? 1);
@@ -608,11 +626,27 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       hasJoinedRef.current = false;
       voiceDisconnectImmediate();
       disconnectChannel();
+      // Use fetch+keepalive instead of navigator.sendBeacon: keepalive
+      // POSTs survive unload (same property as sendBeacon) but we can
+      // send a proper Authorization header. Cookie-only auth via
+      // sendBeacon proved unreliable across browsers/SameSite quirks —
+      // the DB delete from yesterday's test was never persisting. The
+      // Bearer header is read from accessTokenRef, which is cached on
+      // init and kept fresh by the auth-state-change listener.
       try {
-        const body = JSON.stringify({ roomId });
-        const blob = new Blob([body], { type: 'application/json' });
-        navigator.sendBeacon('/api/room/leave', blob);
-      } catch { /* sendBeacon best-effort */ }
+        const token = accessTokenRef.current;
+        if (token) {
+          fetch('/api/room/leave', {
+            method: 'POST',
+            keepalive: true,
+            headers: {
+              'Content-Type':  'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ roomId }),
+          }).catch(() => { /* unload — nobody to surface to */ });
+        }
+      } catch { /* */ }
       try { localStorage.removeItem('activeRoom'); } catch { /* */ }
     };
     window.addEventListener('pagehide', handleUnload);

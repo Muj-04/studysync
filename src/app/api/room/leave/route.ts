@@ -29,36 +29,47 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'missing roomId' }, { status: 400 });
   }
 
-  // Cookie-bound auth — same pattern as src/proxy.ts.
-  const cookieStore = await cookies();
-  const sessionClient = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll(); },
-        // No-op: response cookies aren't useful here, this is a one-shot.
-        setAll() {},
-      },
-    },
-  );
-  const { data: { user } } = await sessionClient.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  }
-
-  // Service-role client for the mutation (matches the leaveRoom helper in
-  // src/lib/supabase/db.ts which assumes RLS allows the delete; using the
-  // service role here is robust against either policy choice).
+  // Service-role client for both the auth-token validation and the
+  // mutation. RoomClient now sends an explicit `Authorization: Bearer
+  // <access_token>` because cookie-only auth via sendBeacon was
+  // unreliable in practice (the previous fix never persisted any
+  // deletes). Cookies are still accepted as a fallback in case future
+  // callers use them.
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
+  const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  let userId: string | null = null;
+  if (bearer) {
+    const { data: { user } } = await admin.auth.getUser(bearer);
+    userId = user?.id ?? null;
+  }
+  if (!userId) {
+    // Fallback: cookie-bound auth (same pattern as src/proxy.ts).
+    const cookieStore = await cookies();
+    const sessionClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll() {},
+        },
+      },
+    );
+    const { data: { user } } = await sessionClient.auth.getUser();
+    userId = user?.id ?? null;
+  }
+  if (!userId) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
   await admin.from('room_members')
     .delete()
     .eq('room_id', roomId)
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
 
   // Mirror leaveRoom()'s "last member out closes the room" behaviour.
   const { count } = await admin.from('room_members')
