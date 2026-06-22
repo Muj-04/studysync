@@ -3,14 +3,17 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronLeft, Search, UserPlus, UserCheck, UserMinus,
-  Users, Clock, X, Check,
+  Users, Clock, X, Check, MessageSquare,
 } from 'lucide-react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import {
   searchUsers, sendFriendRequest, cancelFriendRequest, respondFriendRequest,
   removeFriend, getFriends, getFriendRequests, getMyFriendships, inviteToRoom,
   getProfile,
+  getUnreadMessageCounts,
 } from '@/lib/supabase/db';
+import ChatPanel from '@/components/ChatPanel';
 import type { UserResult, FriendEntry, FriendRequest, MyFriendship } from '@/lib/supabase/db';
 import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
@@ -122,6 +125,13 @@ export default function FriendsPage() {
   const [inviteSent, setInviteSent]   = useState<Set<string>>(new Set());
   const [activeRoom, setActiveRoom]   = useState<{ roomId: string; roomName: string } | null>(null);
 
+  // ── Direct-message state ──────────────────────────────────────────────────
+  // myUserId is captured separately from auth so the chat subscription can
+  // filter postgres_changes by recipient_id without re-querying getUser().
+  const [myUserId, setMyUserId]         = useState<string | null>(null);
+  const [openChat, setOpenChat]         = useState<FriendEntry | null>(null);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auth + initial data load
@@ -129,6 +139,7 @@ export default function FriendsPage() {
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { router.replace('/login'); return; }
+      setMyUserId(user.id);
       setUserEmail(user.email ?? '');
       const profile = await getProfile();
       setDisplayName(profile?.username ?? user.email?.split('@')[0] ?? '');
@@ -156,6 +167,57 @@ export default function FriendsPage() {
   }, []);
 
   useEffect(() => { if (authReady) loadData(); }, [authReady, loadData]);
+
+  // ── Direct-message unread counts + realtime inbox subscription ─────────────
+  // Initial counts come from getUnreadMessageCounts(). After that, a single
+  // postgres_changes subscription on direct_messages INSERT filtered to
+  // `recipient_id = me` increments the count for each new message's sender.
+  // The open ChatPanel calls back into onConversationRead to clear that
+  // friend's count when its messages are marked read. Pattern mirrors the
+  // postgres_changes subscription in useStudyRoom (room_members DELETE) —
+  // separate channel, no shared state with the study-room flow.
+  useEffect(() => {
+    if (!authReady || !myUserId) return;
+    let cancelled = false;
+    getUnreadMessageCounts().then((counts) => {
+      if (!cancelled) setUnreadCounts(counts);
+    });
+
+    const supabase = createClient();
+    const channel: RealtimeChannel = supabase
+      .channel(`dm_inbox:${myUserId}`)
+      .on(
+        'postgres_changes',
+        {
+          event:  'INSERT',
+          schema: 'public',
+          table:  'direct_messages',
+          filter: `recipient_id=eq.${myUserId}`,
+        },
+        (payload) => {
+          const r = payload.new as { sender_id: string };
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [r.sender_id]: (prev[r.sender_id] ?? 0) + 1,
+          }));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      channel.unsubscribe();
+    };
+  }, [authReady, myUserId]);
+
+  const handleConversationRead = useCallback((friendId: string) => {
+    setUnreadCounts((prev) => {
+      if (!prev[friendId]) return prev;
+      const next = { ...prev };
+      delete next[friendId];
+      return next;
+    });
+  }, []);
 
   // Debounced search
   useEffect(() => {
@@ -295,6 +357,7 @@ export default function FriendsPage() {
     const isPending = actionPending === f.userId;
     const sent = inviteSent.has(f.userId);
     const displayN = f.username || 'Unknown user';
+    const unread = unreadCounts[f.userId] ?? 0;
 
     return (
       <div style={{
@@ -308,6 +371,31 @@ export default function FriendsPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            onClick={() => setOpenChat(f)}
+            title="Chat"
+            aria-label={`Chat with ${displayN}${unread > 0 ? `, ${unread} unread` : ''}`}
+            style={{
+              ...ghostBtnStyle,
+              position: 'relative',
+              paddingRight: unread > 0 ? 22 : 12,
+            }}
+          >
+            <MessageSquare size={12} /> Chat
+            {unread > 0 && (
+              <span style={{
+                position: 'absolute', top: -5, right: -5,
+                minWidth: 16, height: 16, padding: '0 4px',
+                borderRadius: 9999,
+                background: '#ef4444', color: '#fff',
+                fontSize: 9.5, fontWeight: 700, lineHeight: '16px',
+                textAlign: 'center',
+                boxShadow: '0 0 0 2px var(--bg-app)',
+              }}>
+                {unread > 9 ? '9+' : unread}
+              </span>
+            )}
+          </button>
           {activeRoom && (
             <button
               onClick={() => handleInvite(f.userId)}
@@ -533,6 +621,18 @@ export default function FriendsPage() {
           </>
         )}
       </div>
+
+      {/* Direct-message chat panel (slides in from the right) */}
+      {openChat && myUserId && (
+        <ChatPanel
+          friendId={openChat.userId}
+          friendName={openChat.username || 'Unknown user'}
+          friendAvatar={openChat.avatarUrl}
+          myUserId={myUserId}
+          onClose={() => setOpenChat(null)}
+          onConversationRead={handleConversationRead}
+        />
+      )}
     </div>
   );
 }
