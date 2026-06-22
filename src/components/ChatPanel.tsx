@@ -9,6 +9,7 @@ import {
   markMessagesRead,
 } from '@/lib/supabase/db';
 import type { DirectMessage } from '@/lib/supabase/db';
+import { activeDmChatRef } from '@/lib/activeDmChat';
 
 interface Props {
   friendId:     string;
@@ -51,6 +52,17 @@ export default function ChatPanel({
   const [text, setText]           = useState('');
   const [sending, setSending]     = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Tell useNotifications (via shared module ref) that THIS friend's chat
+  // is currently active. Lets it suppress the bell-badge bump for new
+  // direct_message notifications from this sender while the panel is
+  // open. Cleared on unmount.
+  useEffect(() => {
+    activeDmChatRef.current = friendId;
+    return () => {
+      if (activeDmChatRef.current === friendId) activeDmChatRef.current = null;
+    };
+  }, [friendId]);
 
   // ── Initial load + mark inbound as read ─────────────────────────────────────
   useEffect(() => {
