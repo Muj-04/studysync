@@ -111,13 +111,36 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     const supabase = createClient();
-    const { error: err } = await supabase.auth.signUp({
+    const { data, error: err } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { username } },
     });
     setLoading(false);
     if (err) { setError(err.message); return; }
+
+    // Supabase Auth, with email-confirm enabled, returns error=null even
+    // when the email is already in use — an intentional anti-enumeration
+    // behavior. The discriminator is data.user.identities:
+    //   * length === 0  → email belongs to a CONFIRMED user; the returned
+    //                     user object is a placeholder, no row is created,
+    //                     no email is sent. We must surface this clearly
+    //                     so the visitor doesn't think they own a new
+    //                     account (and isn't lured into checking an inbox
+    //                     they don't control).
+    //   * length  >= 1  → genuine new signup OR an existing UNCONFIRMED
+    //                     user (Supabase re-sent the confirmation email).
+    //                     Both cases legitimately need "check your email";
+    //                     the only side effect for the unconfirmed-existing
+    //                     case is a confirmation re-send, which is the
+    //                     desired UX (user lost the previous email).
+    const identities = data?.user?.identities;
+    if (identities && identities.length === 0) {
+      setError(
+        'An account with this email already exists. Try logging in, or use Forgot password to reset it.',
+      );
+      return;
+    }
     setMessage('Account created! Check your email to confirm, then log in.');
   };
 
