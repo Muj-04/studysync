@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ChevronLeft, Search, UserPlus, UserCheck, UserMinus,
@@ -100,10 +100,36 @@ function EmptyState({ icon: Icon, title, sub }: { icon: React.ElementType; title
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+// useSearchParams() requires a Suspense boundary above it under Next.js's
+// CSR-bailout rules — wrapping the whole FriendsPage would defeat the
+// point, so we isolate the only param-dependent logic (the
+// ?openChat=<friendUserId> deep-link from NotificationBell) into this
+// tiny child component and mount it under <Suspense fallback={null} />.
+// Renders nothing; pure side effect.
+function OpenChatParamWatcher({
+  friends, authReady, onOpen,
+}: {
+  friends:    FriendEntry[];
+  authReady:  boolean;
+  onOpen:     (f: FriendEntry) => void;
+}) {
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  useEffect(() => {
+    if (!authReady) return;
+    const param = searchParams?.get('openChat');
+    if (!param) return;
+    if (!friends.length) return;
+    const match = friends.find((f) => f.userId === param);
+    if (match) onOpen(match);
+    router.replace('/friends');
+  }, [authReady, searchParams, friends, router, onOpen]);
+  return null;
+}
+
 export default function FriendsPage() {
   useAuthGuard();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { t } = useLanguage();
   const [userEmail, setUserEmail]     = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -169,22 +195,9 @@ export default function FriendsPage() {
 
   useEffect(() => { if (authReady) loadData(); }, [authReady, loadData]);
 
-  // ?openChat=<friendUserId> — set by NotificationBell when the user
-  // clicks a direct_message notification. We wait for the friends list
-  // to load, then match the param against a FriendEntry and open the
-  // panel. If the param references someone who's no longer a friend,
-  // we silently ignore it. The param is consumed once and removed via
-  // router.replace so a manual refresh doesn't keep re-opening the
-  // panel.
-  useEffect(() => {
-    if (!authReady) return;
-    const param = searchParams?.get('openChat');
-    if (!param) return;
-    if (!friends.length) return;
-    const match = friends.find((f) => f.userId === param);
-    if (match) setOpenChat(match);
-    router.replace('/friends');
-  }, [authReady, searchParams, friends, router]);
+  // ?openChat=<friendUserId> deep-link is consumed by
+  // <OpenChatParamWatcher /> below, wrapped in <Suspense> so Next.js's
+  // CSR-bailout rule on useSearchParams() doesn't break the build.
 
   // ── Direct-message unread counts + realtime inbox subscription ─────────────
   // Initial counts come from getUnreadMessageCounts(). After that, a single
@@ -639,6 +652,16 @@ export default function FriendsPage() {
           </>
         )}
       </div>
+
+      {/* ?openChat=<userId> deep-link watcher — Suspense-isolated so
+          useSearchParams() doesn't trigger Next.js's CSR-bailout. */}
+      <Suspense fallback={null}>
+        <OpenChatParamWatcher
+          friends={friends}
+          authReady={authReady}
+          onOpen={setOpenChat}
+        />
+      </Suspense>
 
       {/* Direct-message chat panel (slides in from the right) */}
       {openChat && myUserId && (
