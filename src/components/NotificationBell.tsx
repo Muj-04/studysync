@@ -51,29 +51,34 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  // Action handlers mark the notification READ rather than deleting it,
+  // so the list keeps its history (like an email inbox). The Dismiss
+  // button on `friend_accepted` (further down) is intentionally still a
+  // delete — it's the only way to clear a notification type that has no
+  // interactive action of its own.
   const handleAccept = useCallback(async (notifId: string, friendshipId: string) => {
     setActionPending(notifId);
     await respondFriendRequest(friendshipId, 'accepted');
-    await deleteNotif(notifId);
+    await markRead(notifId);
     setActionPending(null);
-  }, [deleteNotif]);
+  }, [markRead]);
 
   const handleReject = useCallback(async (notifId: string, friendshipId: string) => {
     setActionPending(notifId);
     await respondFriendRequest(friendshipId, 'rejected');
-    await deleteNotif(notifId);
+    await markRead(notifId);
     setActionPending(null);
-  }, [deleteNotif]);
+  }, [markRead]);
 
   const handleJoinRoom = useCallback(async (notifId: string, roomId: string) => {
-    await deleteNotif(notifId);
+    await markRead(notifId);
     router.push(`/room/${roomId}`);
     setOpen(false);
-  }, [deleteNotif, router]);
+  }, [markRead, router]);
 
   const handleDeclineInvite = useCallback(async (notifId: string) => {
-    await deleteNotif(notifId);
-  }, [deleteNotif]);
+    await markRead(notifId);
+  }, [markRead]);
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -202,8 +207,13 @@ export default function NotificationBell() {
                         </p>
                         <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(n.createdAt)}</p>
 
-                        {/* Action buttons */}
-                        {n.type === 'friend_request' && (
+                        {/* Action buttons — hidden once the notification has
+                            been read, because the action has already been
+                            taken and re-clicking would re-fire the
+                            respondFriendRequest / router.push call. The
+                            notification body + sender + timestamp + read
+                            styling all stay visible. */}
+                        {n.type === 'friend_request' && !n.read && (
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button
                               onClick={() => handleAccept(n.id, String(d.friendship_id))}
@@ -233,7 +243,7 @@ export default function NotificationBell() {
                             </button>
                           </div>
                         )}
-                        {n.type === 'room_invite' && (
+                        {n.type === 'room_invite' && !n.read && (
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button
                               onClick={() => handleJoinRoom(n.id, String(d.room_id))}
