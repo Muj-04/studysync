@@ -999,94 +999,57 @@ export async function ensureProfile(): Promise<void> {
 
 const BASE_URL = 'https://pdf-study-workspace.vercel.app';
 
-function makeReferralCode(uid: string): string {
-  return uid.replace(/-/g, '').slice(0, 8).toUpperCase();
-}
+// (makeReferralCode moved into src/app/api/referral/code/route.ts —
+// the server-side route owns the derivation now that referral_code
+// writes are gated by profiles_lock_privileged_cols.)
 
 export async function ensureReferralCode(): Promise<string | null> {
-  const uid = await userId(); if (!uid) return null;
-  const { data } = await sb().from('profiles').select('referral_code').eq('id', uid).maybeSingle();
-  if (data?.referral_code) return data.referral_code as string;
-  const code = makeReferralCode(uid);
-  await sb().from('profiles').update({ referral_code: code }).eq('id', uid);
-  return code;
+  // Privileged writes to profiles.referral_code are blocked at the DB
+  // level by the profiles_lock_privileged_cols trigger. Delegate to the
+  // service-role-backed /api/referral/code route, which performs the
+  // same ensure-or-create logic.
+  const { data: { session } } = await sb().auth.getSession();
+  if (!session?.access_token) return null;
+  try {
+    const res = await fetch('/api/referral/code', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: '{}',
+    });
+    if (!res.ok) return null;
+    const j = await res.json() as { referralCode?: string };
+    return j.referralCode ?? null;
+  } catch (e) {
+    console.error('[DB] ensureReferralCode fetch error:', e);
+    return null;
+  }
 }
 
 export async function processReferral(referralCode: string, ipAddress?: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-
-  // 1. Email verification required — unverified accounts never trigger rewards
-  const { data: { user } } = await sb().auth.getUser();
-  if (!user?.email_confirmed_at) return;
-
-  const code = referralCode.trim().toUpperCase();
-
-  // 2. Find referrer + account age check (must be ≥24 h old)
-  const { data: referrer } = await sb()
-    .from('profiles')
-    .select('id, created_at')
-    .eq('referral_code', code)
-    .maybeSingle();
-  if (!referrer || referrer.id === uid) return; // not found or self-referral
-  const referrerAgeMs = Date.now() - new Date(referrer.created_at as string).getTime();
-  if (referrerAgeMs < 24 * 60 * 60 * 1000) return; // referrer account < 24 h old
-
-  // 4. One referral per referred user — they can only be referred once ever
-  const { data: alreadyReferred } = await sb()
-    .from('referrals').select('id').eq('referred_id', uid).maybeSingle();
-  if (alreadyReferred) return;
-
-  // 2b. IP-based abuse check — same IP used before for this referrer
-  if (ipAddress) {
-    const { data: ipConflict } = await sb()
-      .from('referrals')
-      .select('id')
-      .eq('referrer_id', referrer.id)
-      .eq('ip_address', ipAddress)
-      .maybeSingle();
-    if (ipConflict) return;
+  // The full anti-abuse pipeline + privileged writes (profiles.plan,
+  // profiles.referral_expires_at, the cross-user referrer update) now run
+  // server-side under the service-role client. The trigger
+  // profiles_lock_privileged_cols rejects these writes from the
+  // authenticated role, so this client wrapper just forwards the inputs
+  // to /api/referral/process. Same parameters, same semantics, same
+  // (lack of) reward-amount changes — only the host moved.
+  const { data: { session } } = await sb().auth.getSession();
+  if (!session?.access_token) return;
+  try {
+    await fetch('/api/referral/process', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ referralCode, ipAddress }),
+    });
+  } catch (e) {
+    console.error('[DB] processReferral fetch error:', e);
   }
-
-  // 3. Monthly referral limit — max 10 rewarded referrals per referrer per calendar month
-  const monthStart = new Date();
-  monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-  const { count: monthCount } = await sb()
-    .from('referrals')
-    .select('id', { count: 'exact', head: true })
-    .eq('referrer_id', referrer.id)
-    .eq('reward_granted', true)
-    .gte('created_at', monthStart.toISOString());
-  if ((monthCount ?? 0) >= 10) return;
-
-  // Insert referral row
-  const { error } = await sb().from('referrals').upsert(
-    { referrer_id: referrer.id, referred_id: uid, ip_address: ipAddress ?? null },
-    { onConflict: 'referrer_id,referred_id', ignoreDuplicates: true },
-  );
-  if (error) { console.error('[DB] processReferral insert error:', error.message); return; }
-
-  // Stacking reward: newExpiry = max(current_expires_at, now()) + 7 days
-  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-  const now = Date.now();
-  const stackExpiry = (current: string | null): string => {
-    const currentMs = current ? new Date(current).getTime() : 0;
-    return new Date(Math.max(currentMs, now) + SEVEN_DAYS_MS).toISOString();
-  };
-
-  const [referrerRow, referredRow] = await Promise.all([
-    sb().from('profiles').select('referral_expires_at').eq('id', referrer.id).maybeSingle(),
-    sb().from('profiles').select('referral_expires_at').eq('id', uid).maybeSingle(),
-  ]);
-
-  const referrerExpiry = stackExpiry((referrerRow.data?.referral_expires_at as string | null) ?? null);
-  const referredExpiry = stackExpiry((referredRow.data?.referral_expires_at as string | null) ?? null);
-
-  await Promise.all([
-    sb().from('profiles').update({ plan: 'premium', referral_expires_at: referrerExpiry }).eq('id', referrer.id),
-    sb().from('profiles').update({ plan: 'premium', referral_expires_at: referredExpiry }).eq('id', uid),
-    sb().from('referrals').update({ reward_granted: true })
-      .eq('referrer_id', referrer.id).eq('referred_id', uid),
-  ]);
 }
 
 export async function getReferralStats(): Promise<{
