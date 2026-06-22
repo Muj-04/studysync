@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Bell, Check, X, Users, BookOpen } from 'lucide-react';
+import { Bell, Check, X, Users, BookOpen, MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useNotifications } from '@/hooks/useNotifications';
 import { respondFriendRequest } from '@/lib/supabase/db';
@@ -74,6 +74,16 @@ export default function NotificationBell() {
     await markRead(notifId);
     router.push(`/room/${roomId}`);
     setOpen(false);
+  }, [markRead, router]);
+
+  // direct_message: route to /friends?openChat=<senderId>. The friends
+  // page reads that param on mount and pre-opens ChatPanel for the
+  // matching friend, so this works regardless of which page the bell
+  // is being opened from (workspace / dashboard / room / friends).
+  const handleOpenChat = useCallback(async (notifId: string, senderId: string) => {
+    await markRead(notifId);
+    setOpen(false);
+    router.push(`/friends?openChat=${encodeURIComponent(senderId)}`);
   }, [markRead, router]);
 
   const handleDeclineInvite = useCallback(async (notifId: string) => {
@@ -162,8 +172,8 @@ export default function NotificationBell() {
               notifications.map((n) => {
                 const isPending = actionPending === n.id;
                 const d = n.data;
-                const senderName = (d.requester_name ?? d.accepter_name ?? d.inviter_name ?? 'Someone') as string;
-                const senderAvatar = (d.requester_avatar ?? d.accepter_avatar ?? d.inviter_avatar ?? null) as string | null;
+                const senderName = (d.requester_name ?? d.accepter_name ?? d.inviter_name ?? d.sender_name ?? 'Someone') as string;
+                const senderAvatar = (d.requester_avatar ?? d.accepter_avatar ?? d.inviter_avatar ?? d.sender_avatar ?? null) as string | null;
 
                 return (
                   <div
@@ -203,6 +213,9 @@ export default function NotificationBell() {
                           )}
                           {n.type === 'room_invite' && (
                             <><strong>{senderName}</strong> {t('notif_room_invite')} <strong>{String(d.room_name ?? 'a study room')}</strong></>
+                          )}
+                          {n.type === 'direct_message' && (
+                            <><strong>{senderName}</strong> sent you a message</>
                           )}
                         </p>
                         <p style={{ margin: '0 0 6px', fontSize: 11, color: 'var(--text-3)' }}>{timeAgo(n.createdAt)}</p>
@@ -267,6 +280,22 @@ export default function NotificationBell() {
                               }}
                             >
                               {t('notif_decline')}
+                            </button>
+                          </div>
+                        )}
+                        {n.type === 'direct_message' && !n.read && (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => handleOpenChat(n.id, String(d.sender_id))}
+                              style={{
+                                height: 26, padding: '0 10px', borderRadius: 4,
+                                background: '#ffffff', color: '#0f172a',
+                                border: 'none', fontSize: 11.5, fontWeight: 600,
+                                cursor: 'pointer', fontFamily: 'inherit',
+                                display: 'flex', alignItems: 'center', gap: 4,
+                              }}
+                            >
+                              <MessageSquare size={11} /> Open chat
                             </button>
                           </div>
                         )}

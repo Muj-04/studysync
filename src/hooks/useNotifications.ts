@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '@/lib/supabase/db';
 import type { AppNotification } from '@/lib/supabase/db';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { activeDmChatRef } from '@/lib/activeDmChat';
 
 export type { AppNotification };
 
@@ -32,6 +33,33 @@ export function useNotifications() {
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
           (payload) => {
             const raw = payload.new as { id: string; type: string; data: Record<string, unknown>; read: boolean; created_at: string };
+            // Direct-message notifications that target the currently-open
+            // ChatPanel: the user is already watching this conversation,
+            // so we don't want the bell badge to flash. Insert the row as
+            // already-read (server + local state), don't bump the count.
+            // Other types — and direct_messages from any OTHER friend —
+            // fall through to the normal "unread + bump" path.
+            const dmSenderId = raw.type === 'direct_message'
+              ? (raw.data?.sender_id as string | undefined)
+              : undefined;
+            const suppressBadge =
+              raw.type === 'direct_message'
+              && !!dmSenderId
+              && activeDmChatRef.current === dmSenderId;
+
+            if (suppressBadge) {
+              const notif: AppNotification = {
+                id: raw.id, type: raw.type, data: raw.data,
+                read: true, createdAt: raw.created_at,
+              };
+              setNotifications((prev) => [notif, ...prev]);
+              // Persist the read flip — fire-and-forget; if it fails the
+              // worst case is the badge increments the next time the user
+              // visits a page that calls getNotifications().
+              markNotificationRead(raw.id).catch(() => {});
+              return;
+            }
+
             const notif: AppNotification = {
               id: raw.id, type: raw.type, data: raw.data,
               read: raw.read, createdAt: raw.created_at,
