@@ -37,6 +37,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Identity mismatch' }, { status: 403 });
   }
 
+  // Membership check — voice tokens are only issued to users who have
+  // already joined the room. joinRoom() runs during RoomClient init
+  // (RoomClient.tsx:525) so by the time useVoiceChat.join() fires this
+  // request, room_members has the row. Without this check, any
+  // authenticated user could mint a livekit token for any roomId after
+  // enumerating study_rooms.
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+  const { data: membership } = await admin
+    .from('room_members')
+    .select('user_id')
+    .eq('room_id', roomId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!membership) {
+    return NextResponse.json({ error: 'Not a member of this room' }, { status: 403 });
+  }
+
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
     name: name ?? identity,
