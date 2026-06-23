@@ -1248,15 +1248,10 @@ export async function sendFriendRequest(receiverId: string): Promise<string | nu
     .insert({ requester_id: uid, receiver_id: receiverId })
     .select('id').single();
   if (error) { console.error('[DB] sendFriendRequest error:', error.message); return null; }
-  const { data: myProfile } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
-  await sb().from('notifications').insert({
-    user_id: receiverId, type: 'friend_request',
-    data: {
-      friendship_id: data.id, requester_id: uid,
-      requester_name: myProfile?.username ?? null,
-      requester_avatar: myProfile?.avatar_url ?? null,
-    },
-  });
+  // The recipient's friend_request notification is produced by the
+  // friendships_create_request_notification AFTER INSERT trigger — the
+  // trigger reads requester_id from NEW so the actor is verified by the
+  // friendships table's own RLS, not by a forgeable client claim.
   return data.id;
 }
 
@@ -1269,22 +1264,14 @@ export async function respondFriendRequest(
   status: 'accepted' | 'rejected',
 ): Promise<void> {
   const uid = await userId(); if (!uid) return;
-  const { data: friendship, error } = await sb()
+  const { error } = await sb()
     .from('friendships').update({ status })
-    .eq('id', friendshipId)
-    .select('requester_id').maybeSingle();
-  if (error || !friendship) return;
-  if (status === 'accepted') {
-    const { data: myProfile } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
-    await sb().from('notifications').insert({
-      user_id: friendship.requester_id, type: 'friend_accepted',
-      data: {
-        friendship_id: friendshipId, accepter_id: uid,
-        accepter_name: myProfile?.username ?? null,
-        accepter_avatar: myProfile?.avatar_url ?? null,
-      },
-    });
-  }
+    .eq('id', friendshipId);
+  if (error) return;
+  // The friend_accepted notification (for the original requester) is
+  // produced by the friendships_create_accepted_notification AFTER UPDATE
+  // trigger, which only fires on pending → accepted transitions and
+  // identifies the accepter via NEW.receiver_id (verified by RLS).
 }
 
 export async function removeFriend(friendshipId: string): Promise<void> {
@@ -1413,28 +1400,14 @@ export async function sendDirectMessage(
     .single();
   if (error || !data) { console.error('[DB] sendDirectMessage error:', error?.message); return null; }
 
-  // Fire-and-forget notification for the recipient — same client-side
-  // pattern used by sendFriendRequest / inviteToRoom / respondFriendRequest.
-  // Recipient-side suppression (when their ChatPanel is open) is handled
-  // in useNotifications via the activeDmChatRef singleton; we always
-  // insert here so the notification row survives across sessions.
-  (async () => {
-    const { data: myProfile } = await sb()
-      .from('profiles').select('username, avatar_url')
-      .eq('id', uid).maybeSingle();
-    await sb().from('notifications').insert({
-      user_id: recipientId,
-      type: 'direct_message',
-      data: {
-        sender_id:     uid,
-        sender_name:   myProfile?.username ?? null,
-        sender_avatar: myProfile?.avatar_url ?? null,
-        // Snippet so the bell text reads naturally even without the
-        // recipient opening the chat — capped short to keep the row tidy.
-        snippet: safe.slice(0, 80),
-      },
-    });
-  })().catch((e) => console.error('[DB] sendDirectMessage notif insert:', e));
+  // The recipient's direct_message notification is produced by the
+  // direct_messages_create_notification AFTER INSERT trigger — sender_id,
+  // recipient_id, and a snippet of NEW.content are read straight from the
+  // row that direct_messages's friendship-gated RLS just validated, so the
+  // notification is automatically trustworthy. Recipient-side bell
+  // suppression (when their ChatPanel is open) still works because
+  // useNotifications subscribes to postgres_changes regardless of whether
+  // the row was inserted by a trigger or a client.
 
   return mapDirectMessage(data as DirectMessageRow);
 }
