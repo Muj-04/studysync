@@ -124,19 +124,26 @@ export default function PricingPage() {
 
   const handleCheckout = useCallback(async (plan: 'premium' | 'pro') => {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { window.location.href = '/login?redirect=/pricing'; return; }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user || !session.access_token) {
+      window.location.href = '/login?redirect=/pricing';
+      return;
+    }
 
     setLoadingPlan(plan);
     try {
+      // userId/email no longer sent in the body — the route derives them
+      // from the Bearer token to prevent attackers from initiating a
+      // checkout that promotes someone else's account.
       const res = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
           plan,
           billing: yearly ? 'yearly' : 'monthly',
-          email:   user.email,
-          userId:  user.id,
         }),
       });
       const { url, error } = await res.json();

@@ -1,5 +1,10 @@
 import Stripe from 'stripe';
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
+
+export const runtime = 'nodejs';
 
 function getStripe() {
   return new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -18,16 +23,40 @@ const PLAN_CONFIG = {
   },
 } as const;
 
+// Resolve the caller from a Bearer access_token first, falling back to
+// the @supabase/ssr cookie session — same pattern as /api/room/leave
+// and /api/referral/process. Never trust user_id/email from the body:
+// before this gate, an attacker could open a checkout session whose
+// metadata pointed at any other user's account, and the webhook would
+// faithfully promote that account on payment success.
+async function resolveAuthUser(req: NextRequest): Promise<{ id: string; email: string | null } | null> {
+  const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  if (bearer) {
+    const anon = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    const { data: { user } } = await anon.auth.getUser(bearer);
+    if (user?.id) return { id: user.id, email: user.email ?? null };
+  }
+  const cookieStore = await cookies();
+  const sessionClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll() { return cookieStore.getAll(); }, setAll() {} } },
+  );
+  const { data: { user } } = await sessionClient.auth.getUser();
+  return user?.id ? { id: user.id, email: user.email ?? null } : null;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { plan, billing, email, userId } = await req.json() as {
+    const { plan, billing } = await req.json() as {
       plan: 'premium' | 'pro';
       billing: 'monthly' | 'yearly';
-      email: string;
-      userId: string;
     };
 
-    if (!plan || !billing || !email || !userId) {
+    if (!plan || !billing) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -35,6 +64,13 @@ export async function POST(req: NextRequest) {
     if (!config) {
       return NextResponse.json({ error: 'Invalid plan or billing cycle' }, { status: 400 });
     }
+
+    const authed = await resolveAuthUser(req);
+    if (!authed?.id || !authed.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const userId = authed.id;
+    const email  = authed.email;
 
     const origin = req.headers.get('origin')
       ?? process.env.NEXT_PUBLIC_APP_URL
