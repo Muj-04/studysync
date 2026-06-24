@@ -25,6 +25,10 @@ import PPTXViewer from '@/components/PPTXViewer';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
 import SidebarThumbnails from '@/components/SidebarThumbnails';
 import DocumentToolsPanel from '@/components/DocumentToolsPanel';
+import RightPanelTabs from '@/components/RightPanelTabs';
+import NotesTabContent from '@/components/NotesTabContent';
+import AIAssistantTabContent from '@/components/AIAssistantTabContent';
+import ChatTabContent from '@/components/ChatTabContent';
 import FloatingAnnotationToolbar from '@/components/FloatingAnnotationToolbar';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
@@ -2294,10 +2298,6 @@ export default function WorkspacePage() {
               onRemoveBookmark={handleRemoveBookmark}
               onNavigateToPdfPage={handleNavigateToPdfPage}
               isPPTX={isPPTX}
-              allTextNotes={pageTextNotes}
-              voiceNotes={voiceNotes}
-              onDeleteTextNote={handleDeleteTextNote}
-              onDeleteVoiceNote={deleteNote}
               onReorderDocuments={handleReorderDocuments}
             />
           </div>
@@ -2679,39 +2679,59 @@ export default function WorkspacePage() {
               flexShrink: 0,
             }}
           >
-            <DocumentToolsPanel
+            <RightPanelTabs
               isOpen={rightPanelOpen}
-              hasDocument={hasDocument}
-              isBlankPage={isBlankPage}
-              onInsertBlankPage={handleInsertBlankPage}
-              onInsertImage={isBlankPage ? handleInsertImage : undefined}
-              onDeleteBlankPage={
-                currentVP?.type === 'blank'
-                  ? () => handleDeleteBlankPage(currentVP.blankPage.id)
-                  : undefined
-              }
-              currentBgTheme={currentVP?.type === 'blank' ? (currentVP.blankPage.bgTheme ?? 'white') : undefined}
-              onChangeBgTheme={
-                currentVP?.type === 'blank'
-                  ? (theme) => updateBgTheme(currentVP.blankPage.id, theme)
-                  : undefined
-              }
-              onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
-              isRecording={isRecording}
-              documentUrl={activeDocument?.url}
-              currentPdfPage={currentPdfPage}
-              selectedText={selectedText}
-              activeDocumentId={activeDocumentId ?? undefined}
-              onInsertTextNote={hasDocument ? handleInsertTextNote : undefined}
-              onInsertBlankPageWithGrid={hasDocument ? handleInsertBlankPageWithGrid : undefined}
-              onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
-              onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
-              onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
-              onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
-              docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
-              currentPdfPageForImages={currentPdfPage}
-              onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
               onClose={() => setRightPanelOpen(false)}
+              notes={
+                <NotesTabContent
+                  activeDocumentId={activeDocumentId}
+                  activeDocument={activeDocument}
+                  virtualPages={virtualSequence}
+                  allTextNotes={pageTextNotes}
+                  voiceNotes={voiceNotes}
+                  onNavigate={setVirtualIndex}
+                  onDeleteTextNote={handleDeleteTextNote}
+                  onDeleteVoiceNote={deleteNote}
+                />
+              }
+              aiAssistant={
+                <AIAssistantTabContent
+                  hasDocument={hasDocument}
+                  isBlankPage={isBlankPage}
+                  documentUrl={activeDocument?.url}
+                  currentPdfPage={currentPdfPage}
+                  selectedText={selectedText}
+                />
+              }
+              chat={<ChatTabContent myUserId={userId} />}
+              tools={
+                <DocumentToolsPanel
+                  hasDocument={hasDocument}
+                  isBlankPage={isBlankPage}
+                  onInsertBlankPage={handleInsertBlankPage}
+                  onInsertImage={isBlankPage ? handleInsertImage : undefined}
+                  onDeleteBlankPage={
+                    currentVP?.type === 'blank'
+                      ? () => handleDeleteBlankPage(currentVP.blankPage.id)
+                      : undefined
+                  }
+                  currentBgTheme={currentVP?.type === 'blank' ? (currentVP.blankPage.bgTheme ?? 'white') : undefined}
+                  onChangeBgTheme={
+                    currentVP?.type === 'blank'
+                      ? (theme) => updateBgTheme(currentVP.blankPage.id, theme)
+                      : undefined
+                  }
+                  onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
+                  isRecording={isRecording}
+                  onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
+                  onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
+                  onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
+                  onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
+                  docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
+                  currentPdfPageForImages={currentPdfPage}
+                  onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
+                />
+              }
             />
           </div>
 
