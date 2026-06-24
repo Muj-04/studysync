@@ -24,6 +24,7 @@ import PDFScrollViewer from '@/components/PDFScrollViewer';
 import PPTXViewer from '@/components/PPTXViewer';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
 import SidebarThumbnails from '@/components/SidebarThumbnails';
+import DocTabsBar from '@/components/DocTabsBar';
 import DocumentToolsPanel from '@/components/DocumentToolsPanel';
 import RightPanelTabs from '@/components/RightPanelTabs';
 import NotesTabContent from '@/components/NotesTabContent';
@@ -2325,6 +2326,13 @@ export default function WorkspacePage() {
             className="flex-1 flex flex-col overflow-hidden"
             style={{ position: 'relative', minWidth: 0 }}
           >
+            <DocTabsBar
+              documents={documents}
+              activeDocumentId={activeDocumentId}
+              onSelect={setActiveDocument}
+              onRemove={handleRemoveDocument}
+              onReorder={handleReorderDocuments}
+            />
             {activeDocument && (
               <>
                 {/* ── Content area ── */}
