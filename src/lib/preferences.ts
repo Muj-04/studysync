@@ -65,20 +65,37 @@ export function applyPreferences(prefs: UserPreferences) {
 
   // ── Accent color ───────────────────────────────────────────────────────────
   if (prefs.accentColor) {
-    const preset = ACCENT_PRESETS[prefs.accentColor];
-    if (preset) {
-      r.style.setProperty('--accent', preset.base);
-      r.style.setProperty('--accent-hover', preset.hover);
-      r.style.setProperty('--accent-muted', preset.muted);
-      r.style.setProperty('--violet', preset.base);
-      r.style.setProperty('--violet-muted', preset.muted);
+    // 'Blue' was the historical brand default. The current brand is violet
+    // (defined in globals.css :root --accent: #7c3aed). To keep saved
+    // accent_color='Blue' rows from forcing legacy blue on top of the new
+    // default, treat 'Blue' as a no-op: clear any inline overrides so the
+    // CSS default takes effect. The 'Blue' entry remains in ACCENT_PRESETS
+    // and the picker so the option stays selectable, but applying it
+    // produces the default look. (Users who actually want blue can use the
+    // custom color picker with #2563eb.) — see also the anti-FOUC inline
+    // script in src/app/layout.tsx which mirrors this branch.
+    if (prefs.accentColor === 'Blue') {
+      r.style.removeProperty('--accent');
+      r.style.removeProperty('--accent-hover');
+      r.style.removeProperty('--accent-muted');
+      r.style.removeProperty('--violet');
+      r.style.removeProperty('--violet-muted');
     } else {
-      // custom hex
-      r.style.setProperty('--accent', prefs.accentColor);
-      r.style.setProperty('--accent-hover', lightenHex(prefs.accentColor));
-      r.style.setProperty('--accent-muted', mutedHex(prefs.accentColor));
-      r.style.setProperty('--violet', prefs.accentColor);
-      r.style.setProperty('--violet-muted', mutedHex(prefs.accentColor));
+      const preset = ACCENT_PRESETS[prefs.accentColor];
+      if (preset) {
+        r.style.setProperty('--accent', preset.base);
+        r.style.setProperty('--accent-hover', preset.hover);
+        r.style.setProperty('--accent-muted', preset.muted);
+        r.style.setProperty('--violet', preset.base);
+        r.style.setProperty('--violet-muted', preset.muted);
+      } else {
+        // custom hex
+        r.style.setProperty('--accent', prefs.accentColor);
+        r.style.setProperty('--accent-hover', lightenHex(prefs.accentColor));
+        r.style.setProperty('--accent-muted', mutedHex(prefs.accentColor));
+        r.style.setProperty('--violet', prefs.accentColor);
+        r.style.setProperty('--violet-muted', mutedHex(prefs.accentColor));
+      }
     }
   }
 
