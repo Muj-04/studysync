@@ -176,8 +176,8 @@ export default function FloatingAnnotationToolbar({
     el.id = 'fab-annotation-styles';
     el.textContent = `
       @keyframes fab-pulse {
-        0%, 100% { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 0 rgba(37,99,235,0.38); }
-        55%       { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 13px rgba(37,99,235,0); }
+        0%, 100% { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 0 color-mix(in srgb, var(--accent) 38%, transparent); }
+        55%       { box-shadow: 0 4px 20px rgba(0,0,0,0.45), 0 0 0 13px transparent; }
       }
       @keyframes fab-hint-in {
         from { opacity: 0; transform: translateY(-50%) translateX(10px); }
@@ -493,7 +493,7 @@ export default function FloatingAnnotationToolbar({
                     width: 20, height: 20, borderRadius: '50%', background: c,
                     border: 'none', cursor: 'pointer', flexShrink: 0,
                     outline: color === c && tool !== 'eraser'
-                      ? '2px solid #3b82f6' : '1.5px solid transparent',
+                      ? '2px solid var(--accent)' : '1.5px solid transparent',
                     outlineOffset: 2,
                     transform: color === c && tool !== 'eraser' ? 'scale(1.18)' : 'scale(1)',
                     transition: 'transform 0.12s',
@@ -730,9 +730,9 @@ export default function FloatingAnnotationToolbar({
           position: 'absolute',
           inset: 0,
           borderRadius: '50%',
-          border: `1.5px solid ${isOpen ? 'rgba(59,130,246,0.6)' : '#555555'}`,
-          background: isOpen ? '#1e3a5f' : '#222222',
-          color: isOpen ? '#60a5fa' : '#ffffff',
+          border: `1.5px solid ${isOpen ? 'var(--accent)' : '#555555'}`,
+          background: isOpen ? 'color-mix(in srgb, var(--accent) 22%, #1a1a1a)' : '#222222',
+          color: isOpen ? 'var(--accent-hover)' : '#ffffff',
           cursor: isDragging ? 'grabbing' : 'grab',
           touchAction: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center',

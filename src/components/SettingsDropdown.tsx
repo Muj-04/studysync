@@ -41,7 +41,7 @@ function OptionBtn({
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         borderRadius: 4,
         background: active ? 'var(--accent-muted)' : 'var(--bg-elevated)',
-        border: `1.5px solid ${active ? 'rgba(37,99,235,0.35)' : 'var(--border)'}`,
+        border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
         color: active ? 'var(--accent-hover)' : 'var(--text-2)',
         fontSize: 12, fontWeight: 500,
         cursor: 'pointer', fontFamily: 'inherit',

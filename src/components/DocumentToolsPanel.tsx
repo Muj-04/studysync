@@ -1012,7 +1012,7 @@ export default function DocumentToolsPanel({
                   transition: 'background 0.13s, border-color 0.13s',
                 }}
                 onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                  borderColor: 'rgba(37,99,235,0.4)', background: 'var(--bg-hover)',
+                  borderColor: 'var(--accent)', background: 'var(--bg-hover)',
                 })}
                 onMouseOut={(e) => Object.assign(e.currentTarget.style, {
                   borderColor: 'var(--border)', background: 'var(--bg-elevated)',
@@ -1465,7 +1465,7 @@ export default function DocumentToolsPanel({
                     cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'border-color 0.13s, background 0.13s',
                   }}
-                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)' })}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--accent)', background: 'var(--bg-hover)' })}
                   onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', background: 'var(--bg-elevated)' })}
                 >
                   <div style={{ width: 32, height: 32, borderRadius: 4, background: 'var(--accent-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1490,7 +1490,7 @@ export default function DocumentToolsPanel({
                     cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'border-color 0.13s, background 0.13s',
                   }}
-                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'rgba(37,99,235,0.45)', background: 'var(--bg-hover)' })}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--accent)', background: 'var(--bg-hover)' })}
                   onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--border)', background: 'var(--bg-elevated)' })}
                 >
                   <div style={{ width: 32, height: 32, borderRadius: 4, background: 'var(--bg-active)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1615,7 +1615,7 @@ export default function DocumentToolsPanel({
                           display: 'flex', alignItems: 'center', gap: 12,
                           padding: '10px 12px', borderRadius: 4,
                           background: isCurrentPage ? 'var(--accent-muted)' : 'var(--bg-elevated)',
-                          border: `1px solid ${isCurrentPage ? 'rgba(37,99,235,0.3)' : 'var(--border)'}`,
+                          border: `1px solid ${isCurrentPage ? 'var(--accent)' : 'var(--border)'}`,
                         }}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
