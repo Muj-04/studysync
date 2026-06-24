@@ -44,38 +44,78 @@
   --red-muted: rgba(239, 68, 68, 0.12);
   --green:     #22c55e;
 
+  /* Sticky-note card palette (used by the Notes feature). Dark-mode variants
+     here — soft tinted backgrounds at low alpha over the dark app, with the
+     same-hue light text for legibility. The matching light-mode values live
+     in the [data-theme="light"] block below. */
+  --note-purple-bg:   rgba(124, 58, 237, 0.15);
+  --note-purple-text: #c4b5fd;
+  --note-blue-bg:     rgba(37, 99, 235, 0.15);
+  --note-blue-text:   #93c5fd;
+  --note-yellow-bg:   rgba(202, 138, 4, 0.18);
+  --note-yellow-text: #fde047;
+
   /* System */
   --radius:    4px;
   --font-body: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 }
 
-/* ── Light theme — preserved for potential future use ───────────────────── */
+/* ── Light theme ─────────────────────────────────────────────────────────────
+   Real light values for every token defined in :root above. Activated when
+   <html data-theme="light"> is set (toggled in Settings → Appearance).
+   Default theme is still dark — :root values are unchanged.
+   Color scale uses Tailwind's slate palette for neutrals so contrast is
+   predictable and WCAG-AA-clean against the off-white background. */
 [data-theme="light"] {
-  --bg-app:      #0f1117;
-  --bg-sidebar:  rgba(255, 255, 255, 0.04);
-  --bg-panel:    rgba(255, 255, 255, 0.08);
-  --bg-elevated: rgba(255, 255, 255, 0.18);
-  --bg-input:    rgba(255, 255, 255, 0.15);
-  --bg-hover:    rgba(255, 255, 255, 0.1);
-  --bg-active:   rgba(255, 255, 255, 0.25);
+  /* Backgrounds — soft off-white app, light gray sidebar, white cards */
+  --bg-app:      #fafaf9;
+  --bg-sidebar:  #f3f4f6;
+  --bg-panel:    #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-input:    #ffffff;
+  --bg-hover:    rgba(15, 23, 42, 0.04);
+  --bg-active:   rgba(15, 23, 42, 0.08);
 
-  --border-subtle: rgba(255, 255, 255, 0.1);
-  --border:        rgba(255, 255, 255, 0.28);
-  --border-strong: rgba(255, 255, 255, 0.5);
+  /* Floating surfaces — opaque white with a soft slate edge + low-elevation shadow */
+  --bg-float:        #ffffff;
+  --bg-float-border: rgba(15, 23, 42, 0.08);
+  --shadow-float:    0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
 
-  --text-1: #ffffff;
-  --text-2: rgba(255, 255, 255, 0.75);
-  --text-3: rgba(255, 255, 255, 0.5);
+  /* Borders — slate tints at low alpha */
+  --border-subtle: rgba(15, 23, 42, 0.06);
+  --border:        rgba(15, 23, 42, 0.12);
+  --border-strong: rgba(15, 23, 42, 0.22);
 
-  --accent-muted: rgba(255, 255, 255, 0.15);
-  --violet-muted: rgba(255, 255, 255, 0.15);
-  --red-muted:    rgba(239, 68, 68, 0.12);
+  /* Text — slate-900 / slate-600 / slate-500. All ≥4.5:1 on --bg-app. */
+  --text-1: #0f172a;
+  --text-2: #475569;
+  --text-3: #64748b;
+
+  /* Accent — keep the same brand blue (works on white). Hover goes
+     SLIGHTLY DARKER on light backgrounds because the dark-mode hover
+     (#3b82f6) is brighter than the base and fades against white. */
+  --accent:       #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgba(37, 99, 235, 0.10);
+
+  /* Alias preserved */
+  --violet:       #2563eb;
+  --violet-muted: rgba(37, 99, 235, 0.10);
+
+  /* Functional — red/green-600 for AA contrast on white */
+  --red:       #dc2626;
+  --red-muted: rgba(220, 38, 38, 0.10);
+  --green:     #16a34a;
+
+  /* Sticky-note palette — soft pastels with same-hue dark text */
+  --note-purple-bg:   #f3eafe;
+  --note-purple-text: #5b21b6;
+  --note-blue-bg:     #e0f2fe;
+  --note-blue-text:   #0c4a6e;
+  --note-yellow-bg:   #fef9c3;
+  --note-yellow-text: #854d0e;
 }
-
-[data-theme="light"] ::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); }
-[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 4px; }
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.4); }
 
 /* Smooth theme transition */
 [data-transitioning] *,
@@ -105,14 +145,6 @@ textarea, select {
   border-radius: var(--radius) !important;
 }
 
-/* ══ Glassmorphism ════════════════════════════════════════════════════════ */
-.glass {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
 /* ══ Technical Sanctuary — Mono font (page numbers, timestamps, sizes) ═══ */
 .mono {
   font-family: var(--font-mono);
@@ -120,71 +152,41 @@ textarea, select {
   font-variant-numeric: tabular-nums;
 }
 
-/* ══ Button system ══════════════════════════════════════════════════════== */
-.btn-primary {
-  background: #ffffff;
-  color: #0f172a;
-  border: none;
-  border-radius: var(--radius);
-  font-family: var(--font-body);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.btn-primary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.88); }
-.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.btn-ghost {
-  background: transparent;
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: var(--radius);
-  font-family: var(--font-body);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.4); }
-
-/* ── Glass input — login page only ── */
-.glass-input::placeholder { color: rgba(255, 255, 255, 0.38); }
-.glass-input:focus {
-  outline: none;
-  border-color: rgba(255, 255, 255, 0.65) !important;
-}
-.glass-input[type="number"]::-webkit-inner-spin-button,
-.glass-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.glass-input:-webkit-autofill,
-.glass-input:-webkit-autofill:hover,
-.glass-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #fff;
-  -webkit-box-shadow: 0 0 0px 1000px transparent inset;
-  transition: background-color 5000s ease-in-out 0s;
-}
-
-/* ── App input ── */
+/* ── App input ──
+   Note: every caller also sets background/color/border via inline style,
+   which overrides the base rule. The token-backed properties below cover
+   the case where a future caller omits the inline style, and the pseudo-
+   element rules (:focus, ::placeholder, :-webkit-autofill) which cannot
+   be set via inline style. */
 .app-input {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  color: #ffffff;
+  color: var(--text-1);
   font-family: inherit;
   transition: border-color 0.15s;
 }
 .app-input:focus {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.65);
+  border-color: var(--border-strong);
 }
-.app-input::placeholder { color: rgba(255, 255, 255, 0.38); }
+.app-input::placeholder { color: var(--text-3); }
 .app-input[type="number"]::-webkit-inner-spin-button,
 .app-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .app-input[type="number"] { -moz-appearance: textfield; }
+.app-input:-webkit-autofill,
+.app-input:-webkit-autofill:hover,
+.app-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-1);
+  -webkit-box-shadow: 0 0 0px 1000px transparent inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
 
-/* ── Scrollbar ── */
+/* ── Scrollbar — token-backed so it adapts to both themes automatically ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.35); }
+::-webkit-scrollbar-track { background: var(--bg-active); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
 /* ── Animations ── */
 @keyframes vip-shimmer  { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
@@ -213,25 +215,6 @@ textarea, select {
 .spinner {
   animation: spin 0.8s linear infinite !important;
   animation-play-state: running !important;
-}
-
-/* ── Skeleton shimmer ── */
-@keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
-
-.skeleton {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius);
-  overflow: hidden;
-  position: relative;
-  flex-shrink: 0;
-}
-.skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }
 
 /* ── Nav bar responsive zoom section ── */
@@ -305,8 +288,8 @@ button:active:not(:disabled) {
   transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
 }
 .pdf-text-layer .markedContent { display: contents; }
-.pdf-text-layer ::selection { background: rgba(37, 99, 235, 0.35); color: transparent; }
-.pdf-text-layer ::-moz-selection { background: rgba(37, 99, 235, 0.35); color: transparent; }
+.pdf-text-layer ::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: transparent; }
+.pdf-text-layer ::-moz-selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -344,11 +327,6 @@ button:active:not(:disabled) {
 /* Nav zoom slider wrapper: keep internal flex order LTR */
 [dir="rtl"] .nav-zoom-slider-wrap {
   direction: ltr;
-}
-
-/* Skeleton shimmer: keep animation direction consistent */
-[dir="rtl"] .skeleton::after {
-  animation-direction: reverse;
 }
 
 /* Scrollbar thumb: no directional change needed, but ensure it shows on the correct side */
