@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
   ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
-  Timer, Download,
+  Timer, Download, Minimize2,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -2638,6 +2638,38 @@ export default function WorkspacePage() {
                   isFullscreen={isFullscreen}
                   onToggleFullscreen={toggleFullscreen}
                 />
+
+                {/* Persistent exit-fullscreen button — touch-reachable since
+                    the BottomPillBar (which contains the in-bar Fullscreen
+                    pill) is hidden when fullscreen is active. */}
+                {isFullscreen && (
+                  <button
+                    onClick={toggleFullscreen}
+                    title="Exit fullscreen"
+                    aria-label="Exit fullscreen"
+                    className="animate-scale-in"
+                    style={{
+                      position: 'absolute', bottom: 14, right: 14, zIndex: 30,
+                      width: 36, height: 36, borderRadius: 9999,
+                      background: 'var(--bg-float)',
+                      backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                      border: '1px solid var(--bg-float-border)',
+                      boxShadow: 'var(--shadow-float)',
+                      color: 'var(--text-1)',
+                      cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'background 0.15s, color 0.15s',
+                    }}
+                    onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'var(--bg-hover)',
+                    })}
+                    onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'var(--bg-float)',
+                    })}
+                  >
+                    <Minimize2 size={16} strokeWidth={1.8} />
+                  </button>
+                )}
 
                 {/* Restore bottom bar button */}
                 {!navBarVisible && (
