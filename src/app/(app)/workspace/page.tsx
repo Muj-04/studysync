@@ -1299,6 +1299,14 @@ export default function WorkspacePage() {
   const [annotationBarOpen, setAnnotationBarOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Tell the shared (app)/layout's LeftRail to collapse when entering
+  // workspace fullscreen — see CSS rule `body[data-fullscreen] .left-rail`.
+  useEffect(() => {
+    if (isFullscreen) document.body.dataset.fullscreen = 'true';
+    else delete document.body.dataset.fullscreen;
+    return () => { delete document.body.dataset.fullscreen; };
+  }, [isFullscreen]);
+
   const exitFullscreen = useCallback(() => {
     setIsFullscreen(false);
   }, []);
@@ -1991,18 +1999,17 @@ export default function WorkspacePage() {
         height: isFullscreen ? 0 : 56, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: isFullscreen ? '0' : '0 12px 0 8px',
-        background: 'rgba(0, 0, 0, 0.65)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: isFullscreen ? 'none' : '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--bg-app)',
+        borderBottom: isFullscreen ? 'none' : '1px solid var(--border-subtle)',
         position: 'relative', zIndex: 700,
         gap: 8,
         overflow: isFullscreen ? 'hidden' : 'visible',
         transition: 'height 0.3s ease, padding 0.3s ease',
       }}>
 
-        {/* Left: sidebar toggle + brand + nav */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {/* Left: sidebar toggle + breadcrumb. Brand + nav links moved to
+            the shared LeftRail in (app)/layout.tsx. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <HdrBtn
             onClick={() => setSidebarOpen((o) => !o)}
             title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -2011,66 +2018,32 @@ export default function WorkspacePage() {
             <PanelLeft size={18} />
           </HdrBtn>
 
-          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
-
-          {/* Brand */}
-          <span style={{
-            fontSize: 14, fontWeight: 700,
-            color: 'var(--text-1)', letterSpacing: '-0.02em', flexShrink: 0,
-          }}>
-            StudySync
-          </span>
-
-          {/* Nav links — hidden on small screens */}
-          <nav style={{
-            display: 'flex', gap: 2, marginLeft: 16,
-          }} className="hidden md:flex">
-            {[
-              { label: t('nav_dashboard'), active: false, href: '/dashboard' },
-              { label: t('nav_workspace'), active: true,  href: '#' },
-              { label: t('nav_library'),   active: false, href: '/library' },
-              { label: t('nav_community'), active: false, href: '/community' },
-              { label: 'Pricing',          active: false, href: '/pricing' },
-            ].map(({ label, active, href }) => (
-              <a
-                key={label}
-                href={href}
-                onClick={(e) => { if (href === '#') e.preventDefault(); }}
-                style={{
-                  fontSize: 13, fontWeight: 400,
-                  color: active ? 'var(--accent)' : 'var(--text-2)',
-                  textDecoration: 'none',
-                  padding: '4px 10px',
-                  borderRadius: 4,
-                  borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent',
-                  transition: 'color 0.15s',
-                  cursor: 'pointer',
-                }}
-                onMouseOver={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'; }}
-                onMouseOut={(e)  => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
-              >
-                {label}
-              </a>
-            ))}
+          <nav
+            aria-label="Breadcrumb"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 13, color: 'var(--text-2)',
+              marginLeft: 6, minWidth: 0,
+            }}
+          >
+            <span>Workspace</span>
+            {activeDocument && (
+              <>
+                <span style={{ color: 'var(--text-3)' }}>›</span>
+                <span
+                  key={activeDocument.id}
+                  className="animate-fade-in"
+                  style={{
+                    color: 'var(--text-1)', fontWeight: 500,
+                    maxWidth: 220, overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {activeDocument.name}
+                </span>
+              </>
+            )}
           </nav>
-
-          {/* Active document name */}
-          {activeDocument && (
-            <>
-              <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
-              <span
-                key={activeDocument.id}
-                className="animate-fade-in"
-                style={{
-                  fontSize: 11.5, color: 'var(--text-3)',
-                  maxWidth: 180, overflow: 'hidden',
-                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}
-              >
-                {activeDocument.name}
-              </span>
-            </>
-          )}
         </div>
 
         {/* Right: actions */}
@@ -2212,13 +2185,13 @@ export default function WorkspacePage() {
             <a
               href="/pricing"
               style={{
-                fontSize: 12, fontWeight: 600, color: '#0f172a',
-                background: '#ffffff', border: 'none', borderRadius: 4,
-                padding: '5px 12px', textDecoration: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, color: '#fff',
+                background: 'var(--accent)', border: 'none', borderRadius: 999,
+                padding: '6px 14px', textDecoration: 'none', cursor: 'pointer',
                 transition: 'background 0.15s', flexShrink: 0,
               }}
-              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
-              onMouseOut={(e)  => { e.currentTarget.style.background = '#ffffff'; }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-hover)'; }}
+              onMouseOut={(e)  => { e.currentTarget.style.background = 'var(--accent)'; }}
             >
               Upgrade
             </a>
