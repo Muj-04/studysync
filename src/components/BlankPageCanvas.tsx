@@ -95,11 +95,13 @@ interface Props {
   onNotesChange?: (notes: TextNote[]) => void;
   onActivateTextTool?: () => void;
   onExitTextTool?: () => void;
+  currentBgTheme?: 'white' | 'dark';
+  onChangeBgTheme?: (theme: 'white' | 'dark') => void;
 }
 
 const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
   function BlankPageCanvas(
-    { blankPage, onSaveData, onSaveImages, tool, penType, color, strokeSize, zoom, onZoomChange, notes, onNotesChange, onActivateTextTool, onExitTextTool },
+    { blankPage, onSaveData, onSaveImages, tool, penType, color, strokeSize, zoom, onZoomChange, notes, onNotesChange, onActivateTextTool, onExitTextTool, currentBgTheme, onChangeBgTheme },
     ref,
   ) {
     const canvasRef    = useRef<HTMLCanvasElement>(null);
@@ -555,6 +557,45 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden', position: 'relative',
       }}>
+        {onChangeBgTheme && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '8px 0 4px',
+            flexShrink: 0,
+          }}>
+            <span style={{
+              fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--text-3)',
+              marginRight: 4,
+            }}>
+              Background
+            </span>
+            {(['white', 'dark'] as const).map((theme) => {
+              const active = (currentBgTheme ?? blankPage.bgTheme ?? 'white') === theme;
+              const swBg     = theme === 'white' ? '#ffffff' : '#1e1e2e';
+              const swDot    = theme === 'white' ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.22)';
+              return (
+                <button
+                  key={theme}
+                  onClick={() => onChangeBgTheme(theme)}
+                  title={`${theme === 'white' ? 'White' : 'Dark'} background`}
+                  aria-label={`${theme === 'white' ? 'White' : 'Dark'} background`}
+                  aria-pressed={active}
+                  style={{
+                    width: 26, height: 22, borderRadius: 4,
+                    border: `1.5px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: swBg,
+                    backgroundImage: `radial-gradient(circle, ${swDot} 1px, transparent 1px)`,
+                    backgroundSize: '7px 7px',
+                    cursor: 'pointer', padding: 0,
+                    transition: 'border-color 0.13s, transform 0.13s',
+                    transform: active ? 'scale(1.08)' : 'scale(1)',
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
         <div
           ref={containerRef}
           style={{
