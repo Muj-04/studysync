@@ -79,7 +79,6 @@ interface Props {
 
 function PillButton({
   icon, label, active, onClick, danger, accent, amber, dropdown, disabled, badge,
-  innerRef,
 }: {
   icon:     React.ReactNode;
   label:    string;
@@ -91,7 +90,6 @@ function PillButton({
   dropdown?: boolean;
   disabled?: boolean;
   badge?:   React.ReactNode;
-  innerRef?: React.RefObject<HTMLButtonElement | null>;
 }) {
   const fgIdle =
     danger ? 'var(--red)' :
@@ -116,7 +114,6 @@ function PillButton({
 
   return (
     <button
-      ref={innerRef}
       onClick={onClick}
       title={label}
       aria-label={label}
@@ -266,10 +263,6 @@ export default function BottomPillBar({
   splitMode, activeSide, onSwitchSide,
   isFullscreen, onToggleFullscreen,
 }: Props) {
-  const drawBtnRef      = useRef<HTMLButtonElement>(null);
-  const highlightBtnRef = useRef<HTMLButtonElement>(null);
-  const imageBtnRef     = useRef<HTMLButtonElement>(null);
-
   const [drawOpen,      setDrawOpen]      = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
@@ -285,8 +278,10 @@ export default function BottomPillBar({
   useEffect(() => {
     if (!drawOpen && !highlightOpen && !imageMenuOpen) return;
     const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (drawBtnRef.current?.closest('[data-pill-root]')?.contains(t)) return;
+      const target = e.target as HTMLElement | null;
+      // Click anywhere inside the pill-bar root (pills or popovers) — let
+      // the pills' own click handlers manage open/close.
+      if (target?.closest?.('[data-pill-root]')) return;
       setDrawOpen(false); setHighlightOpen(false); setImageMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -320,13 +315,15 @@ export default function BottomPillBar({
     else if (canInsertOnPdf) pdfFileRef.current?.click();
   };
 
-  // Pop content: Draw + Highlight share the color/stroke section
+  // Pop content: Draw + Highlight share the color/stroke section.
+  // Each popover is anchored to its own position:relative parent wrapper,
+  // so left:0 places it directly above its pill — no ref reads needed.
   const Popover = ({
-    children, anchorRef,
-  }: { children: React.ReactNode; anchorRef: React.RefObject<HTMLButtonElement | null> }) => (
+    children,
+  }: { children: React.ReactNode }) => (
     <div
       style={{
-        position: 'absolute', left: anchorRef.current?.offsetLeft ?? 0,
+        position: 'absolute', left: 0,
         bottom: '100%', marginBottom: 8,
         minWidth: 220,
         background: 'var(--bg-float)',
@@ -382,7 +379,6 @@ export default function BottomPillBar({
         {/* Draw */}
         <div style={{ position: 'relative' }}>
           <PillButton
-            innerRef={drawBtnRef}
             label="Draw"
             icon={<Pencil size={15} strokeWidth={1.8} />}
             active={drawActive}
@@ -394,7 +390,7 @@ export default function BottomPillBar({
             }}
           />
           {drawOpen && (
-            <Popover anchorRef={drawBtnRef}>
+            <Popover>
               {splitMode && onSwitchSide && (
                 <>
                   <SectionLabel>Side</SectionLabel>
@@ -464,7 +460,6 @@ export default function BottomPillBar({
         {/* Highlight */}
         <div style={{ position: 'relative' }}>
           <PillButton
-            innerRef={highlightBtnRef}
             label="Highlight"
             icon={<Highlighter size={15} strokeWidth={1.8} />}
             active={highlightActive}
@@ -476,7 +471,7 @@ export default function BottomPillBar({
             }}
           />
           {highlightOpen && (
-            <Popover anchorRef={highlightBtnRef}>
+            <Popover>
               <SectionLabel>Highlighter color</SectionLabel>
               <ColorRow color={color} setColor={setColor} />
               <Hr />
@@ -497,7 +492,6 @@ export default function BottomPillBar({
         {/* Image */}
         <div style={{ position: 'relative' }}>
           <PillButton
-            innerRef={imageBtnRef}
             label="Insert image"
             icon={<ImagePlus size={15} strokeWidth={1.8} />}
             disabled={!canInsert && !canManage}
@@ -510,7 +504,7 @@ export default function BottomPillBar({
           {imageMenuOpen && (
             <div
               style={{
-                position: 'absolute', left: imageBtnRef.current?.offsetLeft ?? 0,
+                position: 'absolute', left: 0,
                 bottom: '100%', marginBottom: 8,
                 minWidth: 180,
                 background: 'var(--bg-float)',

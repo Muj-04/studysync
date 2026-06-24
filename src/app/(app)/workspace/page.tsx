@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
+  ChevronUp, FilePlus, Search, CheckCircle, Share2,
   Timer, Download, Minimize2,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
@@ -1212,7 +1212,6 @@ export default function WorkspacePage() {
   // step 3) — they're destructured below alongside the right-pane text-note
   // wiring once leftNotesKey / splitRightBlankPage / rightDocId are ready.
   const mainRef            = useRef<HTMLElement>(null);
-  const bottomBarRef       = useRef<HTMLDivElement>(null);
 
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -1933,15 +1932,7 @@ export default function WorkspacePage() {
   // leftNotesKey, rightBlankNotesKey, rightDocNotesKey, handleLeftNotesChange,
   // handleRightBlankNotesChange, handleRightDocNotesChange are now sourced
   // from useSinglePageMode (step 3, declared above near useUndoClear).
-  // handleInsertTextNote / handleDeleteTextNote stay here — they're used by
-  // PageNavigation and SidebarThumbnails (both modes), not strictly
-  // single-page rendering.
-
-  const handleInsertTextNote = useCallback((note: Omit<TextNote, 'id'>) => {
-    if (!leftNotesKey) return;
-    const newNote: TextNote = { ...note, id: `note_${Date.now()}_${Math.random().toString(36).slice(2)}` };
-    setPageTextNotes(prev => ({ ...prev, [leftNotesKey]: [...(prev[leftNotesKey] ?? []), newNote] }));
-  }, [leftNotesKey]);
+  // handleDeleteTextNote stays here — it's used by NotesTabContent.
 
   const handleDeleteTextNote = useCallback((pageKey: string, noteId: string) => {
     setPageTextNotes((prev) => ({
@@ -1949,42 +1940,6 @@ export default function WorkspacePage() {
       [pageKey]: (prev[pageKey] ?? []).filter((n) => n.id !== noteId),
     }));
   }, []);
-
-  const handleInsertBlankPageWithGrid = useCallback((rows: number, cols: number) => {
-    if (!activeDocument) return;
-    const afterPage = currentVP?.type === 'pdf'
-      ? currentVP.pdfPage
-      : currentVP?.type === 'blank'
-        ? currentVP.blankPage.insertAfterPage
-        : activeDocument.currentPage;
-    const newPage = insertBlankPage(activeDocument.id, afterPage, defaultBgTheme);
-
-    // Draw grid on offscreen canvas and pre-load it as canvasData
-    const W = 816, H = 1056;
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      const isDark = defaultBgTheme === 'dark';
-      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.28)';
-      ctx.lineWidth = 1.5;
-      const pad = 60, tableW = W - pad * 2, tableH = H - pad * 2;
-      const cellW = tableW / cols, cellH = tableH / rows;
-      for (let r = 0; r <= rows; r++) {
-        const y = pad + r * cellH;
-        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad + tableW, y); ctx.stroke();
-      }
-      for (let c = 0; c <= cols; c++) {
-        const x = pad + c * cellW;
-        ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, pad + tableH); ctx.stroke();
-      }
-      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-      ctx.fillRect(pad, pad, tableW, cellH);
-    }
-    updateCanvasData(newPage.id, canvas.toDataURL('image/png'));
-    setVirtualIndex((i) => i + 1);
-  }, [activeDocument, currentVP, insertBlankPage, updateCanvasData, defaultBgTheme]);
 
   // handleRightBlankNotesChange / handleRightDocNotesChange now come from
   // useSinglePageMode (step 3, declared above near useUndoClear).
@@ -2173,21 +2128,6 @@ export default function WorkspacePage() {
               <Share2 size={15} />
             </HdrBtn>
           )}
-
-          <a
-            href="/friends"
-            title={t('nav_friends')}
-            style={{
-              width: 34, height: 34, borderRadius: 4,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-2)', textDecoration: 'none',
-              transition: 'background 0.12s, color 0.12s',
-            }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
-          >
-            <Users size={16} />
-          </a>
 
           {userPlan === 'free' && (
             <a
@@ -2557,7 +2497,7 @@ export default function WorkspacePage() {
                 </div>
 
                 {/* ── Bottom panels (collapsible) ── */}
-                <div ref={bottomBarRef} style={{
+                <div style={{
                   flexShrink: 0, overflow: 'hidden',
                   maxHeight: isFullscreen ? 0 : navBarVisible ? 800 : 0,
                   transition: (isFullscreen || !navBarVisible)
