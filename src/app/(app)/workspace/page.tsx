@@ -25,12 +25,11 @@ import PPTXViewer from '@/components/PPTXViewer';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
 import SidebarThumbnails from '@/components/SidebarThumbnails';
 import DocTabsBar from '@/components/DocTabsBar';
-import DocumentToolsPanel from '@/components/DocumentToolsPanel';
 import RightPanelTabs from '@/components/RightPanelTabs';
 import NotesTabContent from '@/components/NotesTabContent';
 import AIAssistantTabContent from '@/components/AIAssistantTabContent';
 import ChatTabContent from '@/components/ChatTabContent';
-import FloatingAnnotationToolbar from '@/components/FloatingAnnotationToolbar';
+import BottomPillBar from '@/components/BottomPillBar';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
@@ -1301,7 +1300,6 @@ export default function WorkspacePage() {
   const isPPTXRef       = useRef(false);
   const voiceNoteListRef = useRef<import('@/components/VoiceNoteList').VoiceNoteListHandle>(null);
 
-  const [annotationBarOpen, setAnnotationBarOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Tell the shared (app)/layout's LeftRail to collapse when entering
@@ -1440,6 +1438,7 @@ export default function WorkspacePage() {
   // ── UI panels ─────────────────────────────────────────────────────────────
   const [sidebarOpen, setSidebarOpen]       = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelTab, setRightPanelTab]   = useState<'notes' | 'ai' | 'chat'>('ai');
   const [navBarVisible, setNavBarVisible]   = useState(true);
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
@@ -1647,9 +1646,13 @@ export default function WorkspacePage() {
       // Escape always works
       if (e.key === 'Escape') {
         if (isFullscreen) { exitFullscreen(); return; }
-        setAnnotationBarOpen(false);
         setShortcutsOpen(false);
         setSearchOpen(false);
+        // Drop back to cursor (replaces the dedicated cursor pill)
+        if (!inInput) {
+          const atSetTool = showSplitRef.current && activeSideRef.current === 'right' ? setRightTool : setLeftTool;
+          atSetTool('cursor');
+        }
         return;
       }
 
@@ -1998,7 +2001,7 @@ export default function WorkspacePage() {
           previously overflow:hidden was clipping NotificationBell /
           SettingsDropdown / AvatarDropdown the moment they extended past
           the 56px header. z-index 700 lifts the header above sibling fixed
-          floats (FloatingAnnotationToolbar z 200, PageNavigation z 100,
+          floats (BottomPillBar z 30, PageNavigation z 100,
           PomodoroWidget z 600) while staying below modals (z 800/1000). */}
       <header style={{
         height: isFullscreen ? 0 : 56, flexShrink: 0,
@@ -2300,6 +2303,7 @@ export default function WorkspacePage() {
               onNavigateToPdfPage={handleNavigateToPdfPage}
               isPPTX={isPPTX}
               onReorderDocuments={handleReorderDocuments}
+              onDeleteBlankPage={handleDeleteBlankPage}
             />
           </div>
 
@@ -2410,6 +2414,8 @@ export default function WorkspacePage() {
                         onNotesChange={handleLeftNotesChange}
                         onActivateTextTool={() => setLeftTool('text')}
                         onExitTextTool={() => setLeftTool('pen')}
+                        currentBgTheme={(currentVP!.blankPage.bgTheme ?? 'white')}
+                        onChangeBgTheme={(theme) => updateBgTheme(currentVP!.blankPage.id, theme)}
                       />
                     ) : isPPTX ? (
                       <PPTXViewer document={activeDocument} />
@@ -2518,6 +2524,8 @@ export default function WorkspacePage() {
                               onNotesChange={handleRightBlankNotesChange}
                               onActivateTextTool={() => setRightTool('text')}
                               onExitTextTool={() => setRightTool('pen')}
+                              currentBgTheme={(splitRightBlankPage.bgTheme ?? 'white')}
+                              onChangeBgTheme={(theme) => updateBgTheme(splitRightBlankPage.id, theme)}
                             />
                           ) : (
                             <BlankPaneEmpty onAdd={() => handleInsertSplitBlankPage()} />
@@ -2594,16 +2602,15 @@ export default function WorkspacePage() {
                     onHideBar={() => setNavBarVisible(false)}
                     viewMode={isPPTX ? undefined : viewMode}
                     onViewModeChange={isPPTX || showSplit ? undefined : setViewMode}
-                    onToggleBookmark={hasDocument ? handleToggleBookmark : undefined}
-                    isBookmarked={isCurrentPageBookmarked}
                   />
                 </div>
 
-                {/* Floating annotation toolbar */}
-                <FloatingAnnotationToolbar
-                  isOpen={annotationBarOpen}
-                  onOpen={() => setAnnotationBarOpen(true)}
-                  onClose={() => setAnnotationBarOpen(false)}
+                {/* Bottom pill bar */}
+                <BottomPillBar
+                  hasDocument={hasDocument}
+                  visible={navBarVisible && !isFullscreen}
+                  isBlankPage={isBlankPage}
+                  isPPTX={isPPTX}
                   tool={atTool}
                   setTool={atSetTool}
                   penType={atPenType}
@@ -2612,13 +2619,22 @@ export default function WorkspacePage() {
                   setColor={atSetColor}
                   strokeSize={atStrokeSize}
                   setStrokeSize={atSetStrokeSize}
-                  onClear={handleClear}
-                  onUndo={handleUndo}
+                  onActivateNotes={() => { setRightPanelOpen(true); setRightPanelTab('notes'); }}
+                  onInsertImageBlank={isBlankPage ? handleInsertImage : undefined}
+                  onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
+                  onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
+                  docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
+                  currentPdfPageForImages={currentPdfPage}
+                  onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
+                  onToggleBookmark={hasDocument ? handleToggleBookmark : undefined}
+                  isBookmarked={isCurrentPageBookmarked}
+                  onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
+                  isRecording={isRecording}
+                  onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
+                  onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
                   splitMode={showSplit}
                   activeSide={showSplit ? activeSide : undefined}
                   onSwitchSide={showSplit ? setActiveSide : undefined}
-                  containerRef={mainRef}
-                  bottomBarRef={bottomBarRef}
                   isFullscreen={isFullscreen}
                   onToggleFullscreen={toggleFullscreen}
                 />
@@ -2690,6 +2706,8 @@ export default function WorkspacePage() {
             <RightPanelTabs
               isOpen={rightPanelOpen}
               onClose={() => setRightPanelOpen(false)}
+              activeTab={rightPanelTab}
+              onTabChange={setRightPanelTab}
               notes={
                 <NotesTabContent
                   activeDocumentId={activeDocumentId}
@@ -2712,34 +2730,6 @@ export default function WorkspacePage() {
                 />
               }
               chat={<ChatTabContent myUserId={userId} />}
-              tools={
-                <DocumentToolsPanel
-                  hasDocument={hasDocument}
-                  isBlankPage={isBlankPage}
-                  onInsertBlankPage={handleInsertBlankPage}
-                  onInsertImage={isBlankPage ? handleInsertImage : undefined}
-                  onDeleteBlankPage={
-                    currentVP?.type === 'blank'
-                      ? () => handleDeleteBlankPage(currentVP.blankPage.id)
-                      : undefined
-                  }
-                  currentBgTheme={currentVP?.type === 'blank' ? (currentVP.blankPage.bgTheme ?? 'white') : undefined}
-                  onChangeBgTheme={
-                    currentVP?.type === 'blank'
-                      ? (theme) => updateBgTheme(currentVP.blankPage.id, theme)
-                      : undefined
-                  }
-                  onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
-                  isRecording={isRecording}
-                  onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
-                  onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
-                  onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
-                  onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
-                  docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
-                  currentPdfPageForImages={currentPdfPage}
-                  onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
-                />
-              }
             />
           </div>
 

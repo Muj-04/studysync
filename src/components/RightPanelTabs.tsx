@@ -1,47 +1,41 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 /**
- * Tab shell for the workspace right panel. Four tabs: Notes / AI
- * Assistant / Chat / Tools. The first three match the reference design;
- * "Tools" is a transitional holding place for the workspace-tool
- * sections (Insert Image, Add Blank Page, Voice Note record, Study
- * Room, Image list, Clear drawings) that currently live in
- * DocumentToolsPanel and will eventually move into the bottom floating
- * pill toolbar in a later turn.
+ * Tab shell for the workspace right panel. Three tabs: Notes / AI
+ * Assistant / Chat. Active tab is controlled by the parent so the
+ * BottomPillBar's Note pill can switch to the Notes tab.
  *
- * All four child contents stay mounted with display:none toggled on
- * inactives, so the AI chat conversation, selected chat friend, and
- * tool modal state survive tab switches.
+ * All three child contents stay mounted with display:none toggled on
+ * inactives, so the AI chat conversation and selected chat friend
+ * survive tab switches.
  *
  * Token-only styling — adapts to both light + dark themes.
  */
 
-type TabId = 'notes' | 'ai' | 'chat' | 'tools';
+type TabId = 'notes' | 'ai' | 'chat';
 
-const TABS: ReadonlyArray<{ id: TabId; label: string; transitional?: boolean }> = [
+const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'notes', label: 'Notes' },
   { id: 'ai',    label: 'AI Assistant' },
   { id: 'chat',  label: 'Chat' },
-  { id: 'tools', label: 'Tools', transitional: true },
 ];
 
 interface Props {
-  isOpen:      boolean;
-  notes:       ReactNode;
-  aiAssistant: ReactNode;
-  chat:        ReactNode;
-  tools:       ReactNode;
-  onClose?:    () => void;
+  isOpen:       boolean;
+  activeTab:    TabId;
+  onTabChange:  (id: TabId) => void;
+  notes:        ReactNode;
+  aiAssistant:  ReactNode;
+  chat:         ReactNode;
+  onClose?:     () => void;
 }
 
 export default function RightPanelTabs({
-  isOpen, notes, aiAssistant, chat, tools, onClose,
+  isOpen, activeTab, onTabChange, notes, aiAssistant, chat, onClose,
 }: Props) {
-  const [active, setActive] = useState<TabId>('ai');
-
   return (
     <aside style={{
       width: '100%', height: '100%',
@@ -59,13 +53,13 @@ export default function RightPanelTabs({
         flexShrink: 0,
         position: 'relative',
       }}>
-        {TABS.map(({ id, label, transitional }) => {
-          const isActive = active === id;
+        {TABS.map(({ id, label }) => {
+          const isActive = activeTab === id;
           return (
             <button
               key={id}
-              onClick={() => setActive(id)}
-              title={transitional ? `${label} (temporary tab — being relocated)` : label}
+              onClick={() => onTabChange(id)}
+              title={label}
               style={{
                 flex: 1, position: 'relative',
                 background: 'transparent', border: 'none',
@@ -79,12 +73,6 @@ export default function RightPanelTabs({
               onMouseOut={(e)  => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
             >
               {label}
-              {transitional && (
-                <span style={{
-                  marginLeft: 4, fontSize: 9, color: 'var(--text-3)',
-                  fontWeight: 500, letterSpacing: '0.04em',
-                }}>·</span>
-              )}
               <span
                 aria-hidden
                 style={{
@@ -120,10 +108,9 @@ export default function RightPanelTabs({
 
       {/* Tab content — all mounted, display:none on inactives to preserve state */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        <TabPane active={active === 'notes'}>{notes}</TabPane>
-        <TabPane active={active === 'ai'   }>{aiAssistant}</TabPane>
-        <TabPane active={active === 'chat' }>{chat}</TabPane>
-        <TabPane active={active === 'tools'}>{tools}</TabPane>
+        <TabPane active={activeTab === 'notes'}>{notes}</TabPane>
+        <TabPane active={activeTab === 'ai'   }>{aiAssistant}</TabPane>
+        <TabPane active={activeTab === 'chat' }>{chat}</TabPane>
       </div>
     </aside>
   );
