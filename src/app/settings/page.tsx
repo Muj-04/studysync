@@ -706,8 +706,8 @@ function AppearanceSection() {
       const ac = prefs?.accent_color ?? storageGet<string>(KEYS.ACCENT_COLOR) ?? 'Blue';
       setAccent(ac);
       if (ac.startsWith('#')) setCustomAccent(ac);
-      setBgColor(prefs?.bg_color ?? storageGet<string>(KEYS.BG_COLOR) ?? (dark ? '#000000' : '#f5f5f5'));
-      setSidebarColor(prefs?.sidebar_color ?? storageGet<string>(KEYS.SIDEBAR_COLOR) ?? (dark ? '#0a0a0a' : '#ffffff'));
+      setBgColor(prefs?.bg_color ?? storageGet<string>(KEYS.BG_COLOR) ?? (dark ? '#000000' : '#fafaf9'));
+      setSidebarColor(prefs?.sidebar_color ?? storageGet<string>(KEYS.SIDEBAR_COLOR) ?? (dark ? '#0a0a0a' : '#f3f4f6'));
       setLoading(false);
     });
   }, []);
