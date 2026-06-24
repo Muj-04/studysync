@@ -30,13 +30,14 @@
   --text-2: rgba(255, 255, 255, 0.65);
   --text-3: rgba(255, 255, 255, 0.4);
 
-  /* Accent */
-  --accent:       #2563eb;
-  --accent-hover: #3b82f6;
+  /* Accent — violet brand. The alias --violet is preserved for components
+     that reference it historically; both resolve to the same value. */
+  --accent:       #7c3aed;
+  --accent-hover: #8b5cf6;
   --accent-muted: rgba(255, 255, 255, 0.12);
 
   /* Alias */
-  --violet:       #2563eb;
+  --violet:       #7c3aed;
   --violet-muted: rgba(255, 255, 255, 0.12);
 
   /* Functional */
@@ -92,16 +93,16 @@
   --text-2: #475569;
   --text-3: #64748b;
 
-  /* Accent — keep the same brand blue (works on white). Hover goes
-     SLIGHTLY DARKER on light backgrounds because the dark-mode hover
-     (#3b82f6) is brighter than the base and fades against white. */
-  --accent:       #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-muted: rgba(37, 99, 235, 0.10);
+  /* Accent — violet brand. Hover goes SLIGHTLY DARKER on light backgrounds
+     because the dark-mode hover (#8b5cf6) is brighter than the base and
+     fades against white. */
+  --accent:       #7c3aed;
+  --accent-hover: #6d28d9;
+  --accent-muted: rgba(124, 58, 237, 0.10);
 
   /* Alias preserved */
-  --violet:       #2563eb;
-  --violet-muted: rgba(37, 99, 235, 0.10);
+  --violet:       #7c3aed;
+  --violet-muted: rgba(124, 58, 237, 0.10);
 
   /* Functional — red/green-600 for AA contrast on white */
   --red:       #dc2626;
@@ -115,6 +116,15 @@
   --note-blue-text:   #0c4a6e;
   --note-yellow-bg:   #fef9c3;
   --note-yellow-text: #854d0e;
+}
+
+/* When the workspace enters immersive fullscreen it sets
+   data-fullscreen on <body>; the shared (app)/layout rail collapses so
+   the PDF takes the whole viewport. */
+body[data-fullscreen] .left-rail {
+  width: 0 !important;
+  border-right: none !important;
+  overflow: hidden !important;
 }
 
 /* Smooth theme transition */
