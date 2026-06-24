@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
 import {
-  StickyNote, Pencil, Highlighter, Type, ImagePlus, Bookmark,
+  MousePointer, StickyNote, Pencil, Highlighter, Type, ImagePlus, Bookmark,
   Mic, Trash2, Users, Eraser, X, FilePlus,
   Maximize2, Minimize2, ChevronDown,
 } from 'lucide-react';
@@ -364,6 +364,14 @@ export default function BottomPillBar({
           flexWrap: 'nowrap',
         }}
       >
+        {/* Cursor / select — first so it reads as the default "exit any tool" */}
+        <PillButton
+          label="Select / cursor (Esc)"
+          icon={<MousePointer size={15} strokeWidth={1.8} />}
+          active={tool === 'cursor'}
+          onClick={() => setTool('cursor')}
+        />
+
         {/* Note */}
         <PillButton
           label="Open notes"
