@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Presentation, X, FileImage, Bookmark, ChevronRight, Loader2, GripVertical } from 'lucide-react';
+import { FileText, Presentation, X, FileImage, Bookmark, ChevronRight, Loader2, GripVertical, MoreHorizontal, Trash2 } from 'lucide-react';
 import {
   DndContext, closestCenter, DragOverlay,
   MouseSensor, TouchSensor, KeyboardSensor,
@@ -373,6 +373,7 @@ interface Props {
   onNavigateToPdfPage?: (page: number) => void;
   isPPTX?:              boolean;
   onReorderDocuments?:  (ids: string[]) => void;
+  onDeleteBlankPage?:   (id: string) => void;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -391,9 +392,31 @@ export default function SidebarThumbnails({
   bookmarks = [], onRemoveBookmark, onNavigateToPdfPage,
   isPPTX = false,
   onReorderDocuments,
+  onDeleteBlankPage,
 }: Props) {
   const thumbListRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<SidebarTab>('pages');
+  const [openBlankMenuId, setOpenBlankMenuId] = useState<string | null>(null);
+
+  // Close kebab menu on outside-click / Escape
+  useEffect(() => {
+    if (!openBlankMenuId) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.('[data-blank-menu]') && !target.closest?.('[data-blank-menu-trigger]')) {
+        setOpenBlankMenuId(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenBlankMenuId(null);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [openBlankMenuId]);
 
   // ── DnD (hooks must be unconditional) ─────────────────────────────────────
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -714,6 +737,7 @@ export default function SidebarThumbnails({
                         key={key}
                         data-active={isActive ? 'true' : undefined}
                         onClick={() => onNavigate(idx)}
+                        className="group"
                         style={{
                           width: '100%',
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -742,6 +766,72 @@ export default function SidebarThumbnails({
                             position: 'absolute', top: 5, right: 5, zIndex: 1,
                           }}>
                             <Bookmark size={9} fill="#f59e0b" style={{ color: '#f59e0b' }} />
+                          </div>
+                        )}
+
+                        {/* Blank-page kebab menu (hover-revealed) */}
+                        {vp.type === 'blank' && onDeleteBlankPage && (
+                          <div style={{ position: 'absolute', top: 4, left: 4, zIndex: 2 }}>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              data-blank-menu-trigger
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenBlankMenuId(openBlankMenuId === vp.blankPage.id ? null : vp.blankPage.id);
+                              }}
+                              className={openBlankMenuId === vp.blankPage.id ? '' : 'opacity-0 group-hover:opacity-100'}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: 18, height: 18, borderRadius: 4,
+                                background: 'var(--bg-float)', border: '1px solid var(--bg-float-border)',
+                                color: 'var(--text-2)', cursor: 'pointer',
+                                opacity: openBlankMenuId === vp.blankPage.id ? 1 : 0,
+                                transition: 'opacity 0.12s, color 0.12s',
+                              }}
+                              onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'; }}
+                              onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
+                            >
+                              <MoreHorizontal size={11} />
+                            </span>
+                            {openBlankMenuId === vp.blankPage.id && (
+                              <div
+                                data-blank-menu
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                                  minWidth: 150,
+                                  background: 'var(--bg-float)',
+                                  backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                                  border: '1px solid var(--bg-float-border)',
+                                  boxShadow: 'var(--shadow-float)',
+                                  borderRadius: 6, padding: 4,
+                                  zIndex: 100,
+                                }}
+                              >
+                                <button
+                                  onClick={() => {
+                                    onDeleteBlankPage(vp.blankPage.id);
+                                    setOpenBlankMenuId(null);
+                                  }}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    width: '100%', height: 28, padding: '0 10px',
+                                    borderRadius: 4,
+                                    background: 'transparent', border: 'none',
+                                    color: 'var(--red)', cursor: 'pointer',
+                                    fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                                    textAlign: 'left',
+                                    transition: 'background 0.12s',
+                                  }}
+                                  onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--red-muted)'; }}
+                                  onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                                >
+                                  <Trash2 size={12} />
+                                  Delete blank page
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
 
