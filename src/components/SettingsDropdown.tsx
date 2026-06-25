@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Settings, Sun, Moon, X, RotateCcw, ExternalLink } from 'lucide-react';
+import { SlidersHorizontal, Sun, Moon, X, RotateCcw, ExternalLink } from 'lucide-react';
 
 // ── Shared small icons ────────────────────────────────────────────────────────
 
@@ -134,11 +134,11 @@ export default function SettingsDropdown({
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
 
-      {/* ── Gear trigger ── */}
+      {/* ── Display-options trigger ── */}
       <button
         onClick={() => setOpen((o) => !o)}
-        title="Settings"
-        aria-label="Settings"
+        title="Display options"
+        aria-label="Display options"
         style={{
           width: 42, height: 42,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -160,13 +160,7 @@ export default function SettingsDropdown({
           });
         }}
       >
-        <Settings
-          size={17}
-          style={{
-            transform: open ? 'rotate(30deg)' : 'rotate(0deg)',
-            transition: 'transform 0.3s cubic-bezier(0.34,1.56,0.64,1)',
-          }}
-        />
+        <SlidersHorizontal size={17} />
       </button>
 
       {/* ── Panel ── */}
@@ -195,14 +189,14 @@ export default function SettingsDropdown({
             marginBottom: 12,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <Settings size={13} style={{ color: 'var(--text-3)' }} />
+              <SlidersHorizontal size={13} style={{ color: 'var(--text-3)' }} />
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>
-                Settings
+                Display options
               </span>
             </div>
             <button
               onClick={() => setOpen(false)}
-              aria-label="Close settings"
+              aria-label="Close display options"
               style={{
                 width: 22, height: 22, borderRadius: 4,
                 border: '1px solid transparent',
