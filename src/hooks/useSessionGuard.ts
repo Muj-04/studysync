@@ -6,6 +6,7 @@ import {
   registerSession,
   updateSessionLastSeen,
 } from '@/lib/supabase/db';
+import { clearLocalUserData } from '@/lib/clearLocalUserData';
 
 const LAST_SEEN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -41,7 +42,9 @@ export function useSessionGuard({ onKicked }: { onKicked?: () => void } = {}) {
             const newId = (payload.new as { session_id: string }).session_id;
             if (newId !== sessionIdRef.current && !kickedRef.current) {
               kickedRef.current = true;
-              supabase.auth.signOut().then(() => onKicked?.());
+              supabase.auth.signOut()
+                .then(() => clearLocalUserData())
+                .then(() => onKicked?.());
             }
           },
         )
