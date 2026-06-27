@@ -137,21 +137,51 @@ export async function POST(req: NextRequest) {
     return new Date(Math.max(currentMs, now) + SEVEN_DAYS_MS).toISOString();
   };
 
+  // Build the reward update payload. The referral reward must NEVER lower
+  // a user's tier — pre-fix the route always set plan='premium', silently
+  // downgrading Pro users (and overriding VIP) every time their friend
+  // signed up. New rule:
+  //   - Free user        → set plan='premium' AND extend the 7-day window
+  //   - Premium user     → only extend the window (already at the reward
+  //                        tier; stacking is the actual benefit)
+  //   - Pro / VIP user   → only extend the window (untouched plan field)
+  // The reward window itself stacks for everyone, so paid users still get
+  // value from referring without being demoted.
+  type PlanField = 'free' | 'premium' | 'pro' | null;
+  const buildReward = (
+    currentPlan: PlanField,
+    isVip:       boolean,
+    newExpiry:   string,
+  ): Record<string, unknown> => {
+    const payload: Record<string, unknown> = { referral_expires_at: newExpiry };
+    if (!isVip && (currentPlan ?? 'free') === 'free') {
+      payload.plan = 'premium';
+    }
+    return payload;
+  };
+
   const [referrerRow, referredRow] = await Promise.all([
-    admin.from('profiles').select('referral_expires_at').eq('id', referrer.id).maybeSingle(),
-    admin.from('profiles').select('referral_expires_at').eq('id', uid).maybeSingle(),
+    admin.from('profiles').select('plan, is_vip, referral_expires_at').eq('id', referrer.id).maybeSingle(),
+    admin.from('profiles').select('plan, is_vip, referral_expires_at').eq('id', uid).maybeSingle(),
   ]);
 
   const referrerExpiry = stackExpiry((referrerRow.data?.referral_expires_at as string | null) ?? null);
   const referredExpiry = stackExpiry((referredRow.data?.referral_expires_at as string | null) ?? null);
 
+  const referrerPayload = buildReward(
+    (referrerRow.data?.plan ?? null) as PlanField,
+    Boolean(referrerRow.data?.is_vip),
+    referrerExpiry,
+  );
+  const referredPayload = buildReward(
+    (referredRow.data?.plan ?? null) as PlanField,
+    Boolean(referredRow.data?.is_vip),
+    referredExpiry,
+  );
+
   await Promise.all([
-    admin.from('profiles')
-      .update({ plan: 'premium', referral_expires_at: referrerExpiry })
-      .eq('id', referrer.id),
-    admin.from('profiles')
-      .update({ plan: 'premium', referral_expires_at: referredExpiry })
-      .eq('id', uid),
+    admin.from('profiles').update(referrerPayload).eq('id', referrer.id),
+    admin.from('profiles').update(referredPayload).eq('id', uid),
     admin.from('referrals').update({ reward_granted: true })
       .eq('referrer_id', referrer.id).eq('referred_id', uid),
   ]);
