@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { FileText, Presentation, X } from 'lucide-react';
 import {
   DndContext, closestCenter, DragOverlay,
@@ -36,10 +36,17 @@ interface Props {
   onSelect:         (id: string) => void;
   onRemove:         (id: string) => void;
   onReorder?:       (ids: string[]) => void;
+  /**
+   * Optional right-side slot — sticky, sits to the right of the scrollable
+   * tab strip with a vertical divider between them. Used by the workspace
+   * page to host the per-document tool icons (split/panel/pomodoro/…)
+   * that used to clutter the top header.
+   */
+  rightSlot?:       ReactNode;
 }
 
 export default function DocTabsBar({
-  documents, activeDocumentId, onSelect, onRemove, onReorder,
+  documents, activeDocumentId, onSelect, onRemove, onReorder, rightSlot,
 }: Props) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -68,45 +75,73 @@ export default function DocTabsBar({
 
   return (
     <div
-      role="tablist"
-      aria-label="Open documents"
       style={{
-        display: 'flex', alignItems: 'flex-end', gap: 2,
-        height: 40, flexShrink: 0,
-        padding: '0 16px',
+        display: 'flex', alignItems: 'stretch',
+        // 44px (vs. tabs' own 40px) gives the 42px-tall HdrBtn icons in
+        // the optional right slot 1px of breathing room top + bottom. Tabs
+        // still anchor flex-end so the active-tab underline lines up with
+        // the borderBottom.
+        height: 44, flexShrink: 0,
         borderBottom: '1px solid var(--border-subtle)',
         background: 'var(--bg-app)',
-        overflowX: 'auto', overflowY: 'hidden',
       }}
     >
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
+      {/* Scrollable tab strip — takes all available width */}
+      <div
+        role="tablist"
+        aria-label="Open documents"
+        style={{
+          flex: 1, minWidth: 0,
+          display: 'flex', alignItems: 'flex-end', gap: 2,
+          padding: '0 16px',
+          overflowX: 'auto', overflowY: 'hidden',
+        }}
       >
-        <SortableContext
-          items={documents.map((d) => d.id)}
-          strategy={horizontalListSortingStrategy}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
         >
-          {documents.map((doc) => (
-            <SortableTab
-              key={doc.id}
-              doc={doc}
-              isActive={doc.id === activeDocumentId}
-              onSelect={onSelect}
-              onRemove={onRemove}
-            />
-          ))}
-        </SortableContext>
-        <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
-          {draggingDoc && (
-            <div style={{ opacity: 0.92 }}>
-              <TabVisual doc={draggingDoc} isActive={draggingDoc.id === activeDocumentId} />
-            </div>
-          )}
-        </DragOverlay>
-      </DndContext>
+          <SortableContext
+            items={documents.map((d) => d.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            {documents.map((doc) => (
+              <SortableTab
+                key={doc.id}
+                doc={doc}
+                isActive={doc.id === activeDocumentId}
+                onSelect={onSelect}
+                onRemove={onRemove}
+              />
+            ))}
+          </SortableContext>
+          <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+            {draggingDoc && (
+              <div style={{ opacity: 0.92 }}>
+                <TabVisual doc={draggingDoc} isActive={draggingDoc.id === activeDocumentId} />
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
+      </div>
+
+      {/* Optional right-side slot — sticky, sits outside the scroll
+          container so popovers (export menu, settings dropdown) can
+          escape the row downward without being clipped. */}
+      {rightSlot && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center',
+            gap: 2, padding: '0 10px',
+            borderLeft: '1px solid var(--border-subtle)',
+            flexShrink: 0,
+          }}
+        >
+          {rightSlot}
+        </div>
+      )}
     </div>
   );
 }
