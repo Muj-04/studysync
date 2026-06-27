@@ -11,6 +11,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
+import { clearLocalUserData } from '@/lib/clearLocalUserData';
 import {
   getUserStorageStats,
   getLimitUsageStats,
@@ -465,6 +466,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
     const { error } = await deleteUserAccount();
     if (error) { setDelLoading(false); alert('Failed to delete account: ' + error); return; }
     await sb.auth.signOut();
+    await clearLocalUserData();
     router.replace('/login');
   }, [router, sb]);
 
@@ -571,6 +573,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
         <GhostBtn
           onClick={async () => {
             await sb.auth.signOut();
+            await clearLocalUserData();
             router.replace('/login');
           }}
         >
