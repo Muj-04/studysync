@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
   ChevronUp, FilePlus, Search, CheckCircle, Share2,
-  Timer, Download, Minimize2,
+  Timer, Download, Minimize2, Users,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -1686,6 +1686,11 @@ export default function WorkspacePage() {
           if (!isPPTXRef.current && hasDocumentRef.current) setSearchOpen((o) => !o);
           return;
         }
+        if (e.key === 'k' || e.key === 'K') {
+          e.preventDefault();
+          setGlobalSearchOpen(true);
+          return;
+        }
         if (e.key === 'z' || e.key === 'Z') {
           e.preventDefault();
           handleUndo();
@@ -2009,126 +2014,56 @@ export default function WorkspacePage() {
           </nav>
         </div>
 
-        {/* Right: actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {documents.length > 0 && (
-            <PDFUploader onFilesAdded={handleFilesAdded} compact />
-          )}
+        {/* Centered global search — Figma centerpiece. Clickable button
+            styled as an input; click opens the existing GlobalSearch modal
+            (also Ctrl/Cmd+K). The per-document Find-in-PDF search lives
+            in the DocTabsBar tools row, not the header. */}
+        <button
+          onClick={() => setGlobalSearchOpen(true)}
+          aria-label="Search everything (Ctrl+K)"
+          title="Search everything (Ctrl+K)"
+          style={{
+            flex: 1, maxWidth: 560, minWidth: 240,
+            display: 'flex', alignItems: 'center', gap: 10,
+            height: 36, padding: '0 14px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 9999,
+            color: 'var(--text-3)',
+            cursor: 'pointer', fontFamily: 'inherit',
+            transition: 'background 0.13s, border-color 0.13s, color 0.13s',
+          }}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+            background: 'var(--bg-hover)', borderColor: 'var(--border-strong)', color: 'var(--text-2)',
+          })}
+          onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+            background: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)', color: 'var(--text-3)',
+          })}
+        >
+          <Search size={15} strokeWidth={2} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1, textAlign: 'left', fontSize: 13 }}>
+            Search anything…
+          </span>
+          <kbd
+            className="hidden md:inline-flex"
+            style={{
+              alignItems: 'center', gap: 2,
+              padding: '2px 6px',
+              fontSize: 10.5, fontWeight: 600, letterSpacing: '0.02em',
+              fontFamily: 'var(--font-mono), monospace',
+              color: 'var(--text-3)',
+              background: 'var(--bg-panel)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 4,
+              flexShrink: 0,
+            }}
+          >
+            Ctrl K
+          </kbd>
+        </button>
 
-          {documents.length > 0 && !isPPTX && (
-            <HdrBtn
-              onClick={() => setSearchOpen((o) => !o)}
-              title={searchOpen ? t('ws_close_search') : t('ws_open_search')}
-              active={searchOpen}
-            >
-              <Search size={17} />
-            </HdrBtn>
-          )}
-
-          {/* Global search */}
-          <HdrBtn onClick={() => setGlobalSearchOpen(true)} title={t('ws_global_search_title')}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              <line x1="8" y1="11" x2="14" y2="11" /><line x1="11" y1="8" x2="11" y2="14" />
-            </svg>
-          </HdrBtn>
-
-          {/* Pomodoro */}
-          <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title={t('ws_pomodoro_title')} active={pomodoroOpen}>
-            <Timer size={17} />
-          </HdrBtn>
-
-          {/* Export notes */}
-          {hasDocument && (
-            <div ref={exportMenuRef} style={{ position: 'relative' }}>
-              <HdrBtn onClick={() => setExportMenuOpen((o) => !o)} title={t('ws_export_notes_title')} active={exportMenuOpen}>
-                <Download size={17} />
-              </HdrBtn>
-              {exportMenuOpen && (
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                  background: 'var(--bg-float)', border: '1px solid var(--bg-float-border)',
-                  backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-                  borderRadius: 6, padding: '4px 0', minWidth: 160,
-                  boxShadow: 'var(--shadow-float)', zIndex: 200,
-                }}>
-                  {[
-                    { label: 'Export as PDF', ext: 'pdf' },
-                    { label: 'Export as Word (.docx)', ext: 'docx' },
-                  ].map(({ label, ext }) => (
-                    <button
-                      key={ext}
-                      onClick={async () => {
-                        setExportMenuOpen(false);
-                        if (!activeDocument) return;
-                        const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
-                        const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
-                        if (ext === 'pdf') exportAsPDF(data);
-                        else exportAsDocx(data);
-                      }}
-                      style={{
-                        display: 'flex', width: '100%', padding: '8px 14px',
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 12.5, color: 'var(--text-1)', fontFamily: 'inherit', textAlign: 'left',
-                        transition: 'background 0.1s',
-                      }}
-                      onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                      onMouseOut={(e)  => { e.currentTarget.style.background = 'none'; }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
-
-          {documents.length > 0 && !isPPTX && (
-            <HdrBtn
-              onClick={() => setSplitMode((m) => !m)}
-              title={splitMode ? t('ws_exit_split') : t('ws_enter_split')}
-              active={splitMode}
-            >
-              <SplitIcon />
-            </HdrBtn>
-          )}
-
-          {documents.length > 0 && (
-            <HdrBtn
-              onClick={() => setRightPanelOpen((o) => !o)}
-              title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
-              active={rightPanelOpen}
-            >
-              <PanelRight size={18} />
-            </HdrBtn>
-          )}
-
-          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
-
-          <SettingsDropdown
-            isDark={isDark}
-            onThemeChange={toggleTheme}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            defaultBgTheme={defaultBgTheme}
-            onDefaultBgThemeChange={handleDefaultBgThemeChange}
-            onZoomReset={() => handleLeftZoomChange(1.0)}
-            hasDocument={hasDocument}
-            isPPTX={isPPTX}
-          />
-
-          <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title={t('ws_shortcuts')}>
-            <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
-          </HdrBtn>
-
-          {hasDocument && (
-            <HdrBtn onClick={() => setShareOpen(true)} title={t('ws_share')}>
-              <Share2 size={15} />
-            </HdrBtn>
-          )}
-
+        {/* Right: notifications · collaborators · avatar (+ Upgrade for free) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           {userPlan === 'free' && (
             <a
               href="/pricing"
@@ -2146,6 +2081,24 @@ export default function WorkspacePage() {
           )}
 
           <NotificationBell />
+
+          {/* Collaborators / members — links to /friends per the Figma
+              right-cluster intent. Future: open a per-room members panel. */}
+          <a
+            href="/friends"
+            title="Collaborators"
+            aria-label="Collaborators"
+            style={{
+              width: 34, height: 34, borderRadius: 4,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-2)', textDecoration: 'none',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+            onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'transparent',     color: 'var(--text-2)' })}
+          >
+            <Users size={16} />
+          </a>
 
           <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
         </div>
@@ -2276,6 +2229,117 @@ export default function WorkspacePage() {
               onSelect={setActiveDocument}
               onRemove={handleRemoveDocument}
               onReorder={handleReorderDocuments}
+              rightSlot={
+                /* Per-document tool strip — relocated from the top header.
+                   Renders inside the DocTabsBar row so the only top chrome
+                   is the slim 56px header (breadcrumb + search + identity
+                   cluster). All handlers + popovers preserved verbatim. */
+                <>
+                  <PDFUploader onFilesAdded={handleFilesAdded} compact />
+
+                  {!isPPTX && (
+                    <HdrBtn
+                      onClick={() => setSearchOpen((o) => !o)}
+                      title={searchOpen ? t('ws_close_search') : t('ws_open_search')}
+                      active={searchOpen}
+                    >
+                      <Search size={17} />
+                    </HdrBtn>
+                  )}
+
+                  <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+                  {!isPPTX && (
+                    <HdrBtn
+                      onClick={() => setSplitMode((m) => !m)}
+                      title={splitMode ? t('ws_exit_split') : t('ws_enter_split')}
+                      active={splitMode}
+                    >
+                      <SplitIcon />
+                    </HdrBtn>
+                  )}
+
+                  <HdrBtn
+                    onClick={() => setRightPanelOpen((o) => !o)}
+                    title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
+                    active={rightPanelOpen}
+                  >
+                    <PanelRight size={18} />
+                  </HdrBtn>
+
+                  <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+                  <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title={t('ws_pomodoro_title')} active={pomodoroOpen}>
+                    <Timer size={17} />
+                  </HdrBtn>
+
+                  {hasDocument && (
+                    <div ref={exportMenuRef} style={{ position: 'relative' }}>
+                      <HdrBtn onClick={() => setExportMenuOpen((o) => !o)} title={t('ws_export_notes_title')} active={exportMenuOpen}>
+                        <Download size={17} />
+                      </HdrBtn>
+                      {exportMenuOpen && (
+                        <div style={{
+                          position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                          background: 'var(--bg-float)', border: '1px solid var(--bg-float-border)',
+                          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                          borderRadius: 6, padding: '4px 0', minWidth: 160,
+                          boxShadow: 'var(--shadow-float)', zIndex: 200,
+                        }}>
+                          {[
+                            { label: 'Export as PDF', ext: 'pdf' },
+                            { label: 'Export as Word (.docx)', ext: 'docx' },
+                          ].map(({ label, ext }) => (
+                            <button
+                              key={ext}
+                              onClick={async () => {
+                                setExportMenuOpen(false);
+                                if (!activeDocument) return;
+                                const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
+                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
+                                if (ext === 'pdf') exportAsPDF(data);
+                                else exportAsDocx(data);
+                              }}
+                              style={{
+                                display: 'flex', width: '100%', padding: '8px 14px',
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                fontSize: 12.5, color: 'var(--text-1)', fontFamily: 'inherit', textAlign: 'left',
+                                transition: 'background 0.1s',
+                              }}
+                              onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                              onMouseOut={(e)  => { e.currentTarget.style.background = 'none'; }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <SettingsDropdown
+                    isDark={isDark}
+                    onThemeChange={toggleTheme}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                    defaultBgTheme={defaultBgTheme}
+                    onDefaultBgThemeChange={handleDefaultBgThemeChange}
+                    onZoomReset={() => handleLeftZoomChange(1.0)}
+                    hasDocument={hasDocument}
+                    isPPTX={isPPTX}
+                  />
+
+                  {hasDocument && (
+                    <HdrBtn onClick={() => setShareOpen(true)} title={t('ws_share')}>
+                      <Share2 size={15} />
+                    </HdrBtn>
+                  )}
+
+                  <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title={t('ws_shortcuts')}>
+                    <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
+                  </HdrBtn>
+                </>
+              }
             />
             {activeDocument && (
               <>
