@@ -55,6 +55,8 @@
   --note-blue-text:   #93c5fd;
   --note-yellow-bg:   rgba(202, 138, 4, 0.18);
   --note-yellow-text: #fde047;
+  --note-red-bg:      rgba(239, 68, 68, 0.15);
+  --note-red-text:    #fca5a5;
 
   /* System */
   --radius:    4px;
@@ -116,6 +118,8 @@
   --note-blue-text:   #0c4a6e;
   --note-yellow-bg:   #fef9c3;
   --note-yellow-text: #854d0e;
+  --note-red-bg:      #fee2e2;
+  --note-red-text:    #991b1b;
 }
 
 /* When the workspace enters immersive fullscreen it sets

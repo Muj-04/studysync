@@ -1,27 +1,29 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Mic, FileText, Trash2 } from 'lucide-react';
-import type { TextNote, VoiceNote, PDFDocument, BlankPage } from '@/types';
+import {
+  StickyNote, Pencil, Bookmark as BookmarkIcon, Layers,
+  Plus, Mic, FileText, Trash2,
+} from 'lucide-react';
+import type { TextNote, VoiceNote, PDFDocument, BlankPage, NoteCategory } from '@/types';
 
 /**
- * Sticky-note card view for the right-panel Notes tab. Reads from the
- * existing text_notes + voice_notes state on the workspace page (no new
- * data layer). Cards cycle through three same-hue pastel colors from the
- * --note-{purple,blue,yellow}-{bg,text} tokens for visual variety.
+ * Right-panel Notes tab — Figma-matched layout:
  *
- * Click a card → navigate to that note's page.
- * Trash chip on hover → delete via the same handlers SidebarThumbnails
- * used previously (these have been moved here from there).
+ *   1. 2×2 quick-action grid  (Add Note / Add Drawing / Add Bookmark /
+ *      Add Flashcard)
+ *   2. "Your Notes" heading + "+" button (same handler as Add Note card)
+ *   3. Categorised note cards (IMPORTANT / TO REVIEW / IDEA / uncategorized)
+ *   4. "Voice Notes" heading + count pill + full-width record button +
+ *      playback list
+ *
+ * All handlers are passed from the workspace page — this component does
+ * no data fetching of its own.
  */
 
 type VirtualPage =
   | { type: 'pdf';   pdfPage: number }
   | { type: 'blank'; blankPage: BlankPage };
-
-type NoteEntry =
-  | { kind: 'text';  id: string; pageKey: string; pageLabel: string; virtualIdx: number; preview: string; }
-  | { kind: 'voice'; id: string;                  pageLabel: string; virtualIdx: number; preview: string; timestamp: Date; };
 
 interface Props {
   activeDocumentId:    string | null;
@@ -32,15 +34,34 @@ interface Props {
   onNavigate:          (virtualIdx: number) => void;
   onDeleteTextNote?:   (pageKey: string, noteId: string) => void;
   onDeleteVoiceNote?:  (id: string) => void;
+
+  // Quick-action wiring (all four cards)
+  onAddNote?:          () => void;
+  onAddDrawing?:       () => void;
+  onAddBookmark?:      () => void;
+  isBookmarked?:       boolean;
+  onAddFlashcard?:     () => void;
+
+  // Voice-record
+  onRecordVoiceNote?:  () => void;
+  isRecording?:        boolean;
 }
 
-// Three-color rotation for sticky-note cards. Tokens are defined in
-// globals.css and exist in BOTH light and dark theme blocks.
-const PALETTE = [
-  { bg: 'var(--note-purple-bg)', text: 'var(--note-purple-text)', icon: 'var(--note-purple-text)' },
-  { bg: 'var(--note-blue-bg)',   text: 'var(--note-blue-text)',   icon: 'var(--note-blue-text)'   },
-  { bg: 'var(--note-yellow-bg)', text: 'var(--note-yellow-text)', icon: 'var(--note-yellow-text)' },
-] as const;
+// ── Category presentation ─────────────────────────────────────────────────────
+
+interface CategoryStyle {
+  label: string;
+  bg:    string;
+  text:  string;
+}
+
+const CATEGORY_STYLES: Record<NoteCategory, CategoryStyle> = {
+  important: { label: 'IMPORTANT', bg: 'var(--note-red-bg)',    text: 'var(--note-red-text)'    },
+  review:    { label: 'TO REVIEW', bg: 'var(--note-yellow-bg)', text: 'var(--note-yellow-text)' },
+  idea:      { label: 'IDEA',      bg: 'var(--note-blue-bg)',   text: 'var(--note-blue-text)'   },
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDuration(s: number): string {
   const m = Math.floor(s / 60);
@@ -48,18 +69,72 @@ function formatDuration(s: number): string {
   return `${m}:${r.toString().padStart(2, '0')}`;
 }
 
+function timeAgo(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+/** First-line-as-title heuristic. Returns { title, body } where title is
+ *  the first non-empty line (≤ 60 chars) and body is the remainder. */
+function splitTitleBody(raw: string): { title: string; body: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { title: '', body: '' };
+  const newlineIdx = trimmed.indexOf('\n');
+  if (newlineIdx === -1) {
+    // Single line — use whole content as title, no body.
+    return { title: trimmed.slice(0, 60), body: trimmed.length > 60 ? trimmed.slice(60) : '' };
+  }
+  const firstLine = trimmed.slice(0, newlineIdx).trim();
+  const rest      = trimmed.slice(newlineIdx + 1).trim();
+  return { title: firstLine.slice(0, 60), body: rest };
+}
+
+// ── Note-entry types ──────────────────────────────────────────────────────────
+
+interface TextEntry {
+  kind: 'text';
+  id: string;
+  pageKey: string;
+  pageLabel: string;
+  virtualIdx: number;
+  title: string;
+  body: string;
+  category?: NoteCategory;
+}
+
+interface VoiceEntry {
+  kind: 'voice';
+  id: string;
+  pageLabel: string;
+  virtualIdx: number;
+  preview: string;
+  timestamp: Date;
+  duration: number;
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export default function NotesTabContent({
   activeDocumentId, activeDocument, virtualPages,
   allTextNotes, voiceNotes,
   onNavigate, onDeleteTextNote, onDeleteVoiceNote,
+  onAddNote, onAddDrawing, onAddBookmark, isBookmarked = false,
+  onAddFlashcard,
+  onRecordVoiceNote, isRecording = false,
 }: Props) {
-  // Merge text + voice notes for the active document into a single
-  // chronologically/positionally sorted list. Logic preserved verbatim
-  // from the prior SidebarThumbnails combinedNotes builder, then
-  // re-tagged with sticky-note rendering.
-  const entries = useMemo<NoteEntry[]>(() => {
-    if (!activeDocumentId) return [];
-    const out: NoteEntry[] = [];
+  // Merge text + voice notes for the active document.
+  const { textEntries, voiceEntries } = useMemo(() => {
+    const text:  TextEntry[]  = [];
+    const voice: VoiceEntry[] = [];
+    if (!activeDocumentId) return { textEntries: text, voiceEntries: voice };
+
     const prefix = `${activeDocumentId}:`;
 
     Object.entries(allTextNotes).forEach(([key, notes]) => {
@@ -74,174 +149,365 @@ export default function NotesTabContent({
       const pageLabel = isBlank ? 'Blank' : `Page ${pdfPage}`;
       notes.forEach((note) => {
         if (!note.content.trim()) return;
-        out.push({
-          kind: 'text', id: note.id, pageKey: key, pageLabel, virtualIdx,
-          preview: note.content.trim(),
+        const { title, body } = splitTitleBody(note.content);
+        text.push({
+          kind: 'text',
+          id: note.id, pageKey: key,
+          pageLabel, virtualIdx,
+          title: title || '(untitled)',
+          body,
+          category: note.category,
         });
       });
     });
 
-    voiceNotes.filter((n) => n.documentId === activeDocumentId).forEach((note) => {
-      const pn = note.pageNumber;
+    voiceNotes.filter((n) => n.documentId === activeDocumentId).forEach((n) => {
+      const pn = n.pageNumber;
       const isBlank = typeof pn === 'string';
       const virtualIdx = isBlank
         ? virtualPages.findIndex((vp) => vp.type === 'blank' && vp.blankPage.id === (pn as string))
         : virtualPages.findIndex((vp) => vp.type === 'pdf' && vp.pdfPage === (pn as number));
       if (virtualIdx < 0) return;
       const pageLabel = isBlank ? 'Blank' : `Page ${pn}`;
-      out.push({
-        kind: 'voice', id: note.id, pageLabel, virtualIdx,
-        preview: note.title ?? `Voice note · ${formatDuration(note.duration)}`,
-        timestamp: note.timestamp,
+      voice.push({
+        kind: 'voice',
+        id: n.id, pageLabel, virtualIdx,
+        preview: n.title ?? `Voice note · ${formatDuration(n.duration)}`,
+        timestamp: n.timestamp,
+        duration: n.duration,
       });
     });
 
-    return out.sort((a, b) =>
-      a.virtualIdx !== b.virtualIdx
-        ? a.virtualIdx - b.virtualIdx
-        : a.kind === 'text' ? -1 : 1,
-    );
+    text .sort((a, b) => a.virtualIdx - b.virtualIdx);
+    voice.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    return { textEntries: text, voiceEntries: voice };
   }, [activeDocumentId, allTextNotes, voiceNotes, virtualPages]);
 
-  // ── Empty states ────────────────────────────────────────────────────────────
-  if (!activeDocument) {
-    return (
-      <div style={{ padding: '40px 24px', textAlign: 'center' }}>
-        <FileText size={20} style={{ color: 'var(--text-3)', opacity: 0.4, marginBottom: 8 }} />
-        <p style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.5, margin: 0 }}>
-          Open a document to view its notes.
-        </p>
-      </div>
-    );
-  }
-
-  if (entries.length === 0) {
-    return (
-      <div style={{ padding: '40px 24px', textAlign: 'center' }}>
-        <FileText size={20} style={{ color: 'var(--text-3)', opacity: 0.4, marginBottom: 8 }} />
-        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)', margin: '0 0 4px' }}>
-          No notes yet
-        </p>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5, margin: 0 }}>
-          Add text or voice notes while studying.
-        </p>
-      </div>
-    );
-  }
-
-  // Split into text vs voice for the two-section layout from the reference
-  // (Your Notes / Voice Notes). Both sections cycle the same palette.
-  const textEntries  = entries.filter((e): e is Extract<NoteEntry, { kind: 'text' }>  => e.kind === 'text');
-  const voiceEntries = entries.filter((e): e is Extract<NoteEntry, { kind: 'voice' }> => e.kind === 'voice');
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '14px 14px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {textEntries.length > 0 && (
-        <Section title="Your Notes">
-          {textEntries.map((e, i) => (
-            <StickyNoteCard
-              key={`text-${e.id}`}
-              palette={PALETTE[i % PALETTE.length]}
-              icon={<FileText size={12} />}
-              pageLabel={e.pageLabel}
-              preview={e.preview}
-              onClick={() => onNavigate(e.virtualIdx)}
-              onDelete={onDeleteTextNote ? () => onDeleteTextNote(e.pageKey, e.id) : undefined}
-            />
-          ))}
-        </Section>
-      )}
+    <div style={{
+      flex: 1, minHeight: 0, overflowY: 'auto',
+      padding: '14px 14px 24px',
+      display: 'flex', flexDirection: 'column', gap: 20,
+    }}>
+      {/* 1. Quick-action grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
+      }}>
+        <QuickAction
+          icon={<StickyNote size={16} strokeWidth={1.8} />}
+          label="Add Note"
+          onClick={onAddNote}
+        />
+        <QuickAction
+          icon={<Pencil size={16} strokeWidth={1.8} />}
+          label="Add Drawing"
+          onClick={onAddDrawing}
+        />
+        <QuickAction
+          icon={<BookmarkIcon size={16} strokeWidth={1.8} fill={isBookmarked ? 'currentColor' : 'none'} />}
+          label={isBookmarked ? 'Bookmarked' : 'Add Bookmark'}
+          onClick={onAddBookmark}
+          active={isBookmarked}
+        />
+        <QuickAction
+          icon={<Layers size={16} strokeWidth={1.8} />}
+          label="Add Flashcard"
+          onClick={onAddFlashcard}
+        />
+      </div>
 
-      {voiceEntries.length > 0 && (
-        <Section title="Voice Notes">
-          {voiceEntries.map((e, i) => (
-            <StickyNoteCard
-              key={`voice-${e.id}`}
-              palette={PALETTE[(textEntries.length + i) % PALETTE.length]}
-              icon={<Mic size={12} />}
-              pageLabel={e.pageLabel}
-              preview={e.preview}
-              timestamp={e.timestamp}
-              onClick={() => onNavigate(e.virtualIdx)}
-              onDelete={onDeleteVoiceNote ? () => onDeleteVoiceNote(e.id) : undefined}
-            />
-          ))}
-        </Section>
-      )}
+      {/* 2. Your Notes heading + add button */}
+      <Section
+        title="Your Notes"
+        right={onAddNote && (
+          <button
+            onClick={onAddNote}
+            aria-label="Add note"
+            title="Add note (switches to text-note tool)"
+            style={{
+              width: 22, height: 22, borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-2)',
+              transition: 'background 0.12s, color 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
+            onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
+          >
+            <Plus size={14} />
+          </button>
+        )}
+      >
+        {!activeDocument ? (
+          <EmptyState
+            icon={<FileText size={18} />}
+            title="Open a document"
+            body="Open a PDF to see and add notes."
+          />
+        ) : textEntries.length === 0 ? (
+          <EmptyState
+            icon={<FileText size={18} />}
+            title="No notes yet"
+            body="Use the Add Note card or click anywhere on the page with the text-note tool."
+          />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {textEntries.map((e) => (
+              <NoteCard
+                key={`text-${e.id}`}
+                entry={e}
+                onClick={() => onNavigate(e.virtualIdx)}
+                onDelete={onDeleteTextNote ? () => onDeleteTextNote(e.pageKey, e.id) : undefined}
+              />
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* 4. Voice Notes */}
+      <Section
+        title="Voice Notes"
+        right={
+          voiceEntries.length > 0 ? (
+            <span style={{
+              padding: '2px 7px', borderRadius: 9999,
+              fontSize: 10.5, fontWeight: 700, letterSpacing: '0.04em',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-2)',
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {voiceEntries.length}
+            </span>
+          ) : null
+        }
+      >
+        {/* Record button — accent-tinted per spec, not red even while
+            recording. The red dot indicator does double-duty as the
+            recording cue. */}
+        <button
+          onClick={onRecordVoiceNote}
+          disabled={!onRecordVoiceNote}
+          style={{
+            width: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            height: 38, padding: '0 12px',
+            background: isRecording ? 'var(--accent)' : 'var(--accent-muted)',
+            border: `1px solid ${isRecording ? 'var(--accent)' : 'var(--accent)'}`,
+            borderRadius: 8,
+            color: isRecording ? '#fff' : 'var(--accent)',
+            cursor: onRecordVoiceNote ? 'pointer' : 'not-allowed',
+            opacity: onRecordVoiceNote ? 1 : 0.5,
+            fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+            transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+          }}
+        >
+          <Mic size={13} strokeWidth={2} />
+          {isRecording ? 'Stop Recording' : 'Record Voice Note'}
+          {isRecording && (
+            <span className="rec-dot" style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: 'var(--red)', marginLeft: 2, flexShrink: 0,
+            }} />
+          )}
+        </button>
+
+        {voiceEntries.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+            {voiceEntries.map((e) => (
+              <VoiceCard
+                key={`voice-${e.id}`}
+                entry={e}
+                onClick={() => onNavigate(e.virtualIdx)}
+                onDelete={onDeleteVoiceNote ? () => onDeleteVoiceNote(e.id) : undefined}
+              />
+            ))}
+          </div>
+        )}
+      </Section>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// ── Subcomponents ─────────────────────────────────────────────────────────────
+
+function QuickAction({
+  icon, label, onClick, active = false,
+}: {
+  icon:   React.ReactNode;
+  label:  string;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const disabled = !onClick;
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        gap: 6, padding: '14px 10px',
+        background: active ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+        border: `1px solid ${active ? 'var(--accent)' : 'var(--border-subtle)'}`,
+        borderRadius: 10,
+        color: active ? 'var(--accent)' : 'var(--text-1)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1,
+        fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
+        textAlign: 'center',
+        transition: 'background 0.13s, border-color 0.13s, color 0.13s',
+      }}
+      onMouseOver={(e) => {
+        if (disabled || active) return;
+        Object.assign(e.currentTarget.style, {
+          background: 'var(--bg-hover)', borderColor: 'var(--border)',
+        });
+      }}
+      onMouseOut={(e) => {
+        if (disabled || active) return;
+        Object.assign(e.currentTarget.style, {
+          background: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)',
+        });
+      }}
+    >
+      <span style={{
+        width: 30, height: 30, borderRadius: 8,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: active ? 'var(--accent)' : 'var(--bg-active)',
+        color: active ? '#fff' : 'var(--text-2)',
+        flexShrink: 0,
+        transition: 'background 0.13s, color 0.13s',
+      }}>
+        {icon}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function Section({
+  title, right, children,
+}: {
+  title:    string;
+  right?:   React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <p style={{
-        fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
-        textTransform: 'uppercase', color: 'var(--text-3)',
-        margin: '0 0 8px', paddingLeft: 2,
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 10,
       }}>
-        {title}
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {children}
+        <h3 style={{
+          margin: 0, fontSize: 11, fontWeight: 700,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+          color: 'var(--text-3)',
+        }}>
+          {title}
+        </h3>
+        {right}
       </div>
+      {children}
     </div>
   );
 }
 
-function StickyNoteCard({
-  palette, icon, pageLabel, preview, timestamp, onClick, onDelete,
+function EmptyState({
+  icon, title, body,
 }: {
-  palette: { bg: string; text: string; icon: string };
-  icon: React.ReactNode;
-  pageLabel: string;
-  preview: string;
-  timestamp?: Date;
+  icon:  React.ReactNode;
+  title: string;
+  body:  string;
+}) {
+  return (
+    <div style={{
+      padding: '24px 16px', textAlign: 'center',
+      background: 'var(--bg-elevated)',
+      border: '1px dashed var(--border-subtle)',
+      borderRadius: 10,
+    }}>
+      <div style={{ color: 'var(--text-3)', opacity: 0.5, marginBottom: 6 }}>{icon}</div>
+      <p style={{ margin: '0 0 3px', fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
+        {title}
+      </p>
+      <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
+        {body}
+      </p>
+    </div>
+  );
+}
+
+function NoteCard({
+  entry, onClick, onDelete,
+}: {
+  entry:   TextEntry;
   onClick: () => void;
   onDelete?: () => void;
 }) {
+  const cat = entry.category ? CATEGORY_STYLES[entry.category] : null;
+
   return (
     <div
       className="group"
       onClick={onClick}
       style={{
-        background: palette.bg,
-        borderRadius: 10,
-        padding: '10px 12px 11px',
-        cursor: 'pointer',
         position: 'relative',
-        transition: 'transform 0.12s ease, box-shadow 0.12s ease',
+        padding: '10px 12px 11px',
+        borderRadius: 10,
+        background: cat ? cat.bg : 'var(--bg-panel)',
+        border: `1px solid ${cat ? 'transparent' : 'var(--border-subtle)'}`,
+        cursor: 'pointer',
+        transition: 'transform 0.12s ease, border-color 0.12s ease',
       }}
       onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)'; }}
       onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.transform = 'translateY(0)'; }}
     >
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        fontSize: 10.5, fontWeight: 600, letterSpacing: '0.04em',
-        color: palette.icon, marginBottom: 6, opacity: 0.85,
-      }}>
-        <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>
-        <span style={{ textTransform: 'uppercase' }}>{pageLabel}</span>
-        {timestamp && (
-          <>
-            <span style={{ opacity: 0.5 }}>·</span>
-            <span style={{ fontWeight: 500, letterSpacing: 'normal', textTransform: 'none', opacity: 0.85 }}>
-              {timestamp.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-            </span>
-          </>
-        )}
-      </div>
+      {cat && (
+        <span style={{
+          display: 'inline-block',
+          padding: '2px 7px', borderRadius: 4,
+          fontSize: 9.5, fontWeight: 700, letterSpacing: '0.08em',
+          color: cat.text,
+          background: 'transparent',
+          border: `1px solid ${cat.text}`,
+          marginBottom: 6,
+        }}>
+          {cat.label}
+        </span>
+      )}
+
       <p style={{
-        fontSize: 12.5, lineHeight: 1.5,
-        color: palette.text,
-        margin: 0,
-        display: '-webkit-box',
-        WebkitLineClamp: 4,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
-        wordBreak: 'break-word',
+        margin: 0, fontSize: 13, fontWeight: 600,
+        color: cat ? cat.text : 'var(--text-1)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
-        {preview}
+        {entry.title}
+      </p>
+
+      {entry.body && (
+        <p style={{
+          margin: '3px 0 0', fontSize: 12, lineHeight: 1.45,
+          color: cat ? cat.text : 'var(--text-2)',
+          opacity: cat ? 0.78 : 1,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          wordBreak: 'break-word',
+        }}>
+          {entry.body}
+        </p>
+      )}
+
+      <p style={{
+        margin: '6px 0 0', fontSize: 10.5,
+        color: cat ? cat.text : 'var(--text-3)',
+        opacity: cat ? 0.7 : 1,
+        letterSpacing: '0.02em',
+      }}>
+        {entry.pageLabel}
       </p>
 
       {onDelete && (
@@ -254,11 +520,81 @@ function StickyNoteCard({
             width: 22, height: 22, borderRadius: 5,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'transparent', border: 'none', cursor: 'pointer',
-            color: palette.icon, opacity: 0,
+            color: cat ? cat.text : 'var(--text-3)',
+            opacity: 0,
             transition: 'opacity 0.12s, background 0.12s',
           }}
           onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.06)'; }}
           onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+        >
+          <Trash2 size={11} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function VoiceCard({
+  entry, onClick, onDelete,
+}: {
+  entry:   VoiceEntry;
+  onClick: () => void;
+  onDelete?: () => void;
+}) {
+  return (
+    <div
+      className="group"
+      onClick={onClick}
+      style={{
+        position: 'relative',
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 12px',
+        background: 'var(--bg-panel)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 8,
+        cursor: 'pointer',
+        transition: 'border-color 0.12s, background 0.12s',
+      }}
+      onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+        background: 'var(--bg-hover)', borderColor: 'var(--border)',
+      })}
+      onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+        background: 'var(--bg-panel)', borderColor: 'var(--border-subtle)',
+      })}
+    >
+      <span style={{
+        width: 28, height: 28, borderRadius: '50%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--accent-muted)', color: 'var(--accent)',
+        flexShrink: 0,
+      }}>
+        <Mic size={13} />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{
+          margin: 0, fontSize: 12.5, fontWeight: 500, color: 'var(--text-1)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {entry.preview}
+        </p>
+        <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--text-3)' }}>
+          {entry.pageLabel} · {timeAgo(entry.timestamp)} · {formatDuration(entry.duration)}
+        </p>
+      </div>
+      {onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          aria-label="Delete voice note"
+          className="opacity-0 group-hover:opacity-100"
+          style={{
+            width: 22, height: 22, borderRadius: 5,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'var(--text-3)', flexShrink: 0, opacity: 0,
+            transition: 'opacity 0.12s, color 0.12s, background 0.12s',
+          }}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)', background: 'var(--bg-hover)' })}
+          onMouseOut={(e)  => Object.assign(e.currentTarget.style, { color: 'var(--text-3)', background: 'transparent' })}
         >
           <Trash2 size={11} />
         </button>

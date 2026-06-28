@@ -438,6 +438,7 @@ export async function saveTextNotes(docId: string, pageKey: string, notes: TextN
     id: n.id, user_id: uid, document_id: docId, page_key: pageKey,
     x: n.x, y: n.y, width: n.width, height: n.height,
     content: n.content, font_size: n.fontSize, color: n.color,
+    category: n.category ?? null,
   })));
   if (insErr) console.error('[DB] saveTextNotes insert error:', insErr.message, 'docId:', docId, 'pageKey:', pageKey);
   else console.log('[DB] saveTextNotes OK — docId:', docId, 'pageKey:', pageKey, 'count:', notes.length);
@@ -451,7 +452,14 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
   console.log('[DB] fetchTextNotes rows:', data?.length ?? 0, 'error:', error?.message ?? null);
   const map: Record<string, TextNote[]> = {};
   for (const r of data ?? []) {
-    const note: TextNote = { id: r.id, x: r.x, y: r.y, width: r.width, height: r.height, content: r.content, fontSize: r.font_size, color: r.color };
+    const cat = r.category as string | null | undefined;
+    const note: TextNote = {
+      id: r.id, x: r.x, y: r.y, width: r.width, height: r.height,
+      content: r.content, fontSize: r.font_size, color: r.color,
+      ...(cat === 'important' || cat === 'review' || cat === 'idea'
+        ? { category: cat as TextNote['category'] }
+        : {}),
+    };
     (map[r.page_key] ??= []).push(note);
   }
   return map;
