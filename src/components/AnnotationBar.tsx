@@ -171,7 +171,7 @@ export default function AnnotationBar({
                 background: c, border: 'none',
                 cursor: 'pointer', flexShrink: 0,
                 outline: color === c && tool !== 'eraser'
-                  ? '2px solid #3b82f6'
+                  ? '2px solid var(--accent)'
                   : '1.5px solid transparent',
                 outlineOffset: 2,
                 transform: color === c && tool !== 'eraser' ? 'scale(1.2)' : 'scale(1)',

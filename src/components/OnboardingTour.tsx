@@ -132,8 +132,8 @@ export default function OnboardingTour({ onComplete }: Props) {
         {/* Step icon */}
         <div style={{
           width: 52, height: 52, borderRadius: 12,
-          background: 'rgba(37,99,235,0.18)',
-          border: '1px solid rgba(37,99,235,0.35)',
+          background: 'var(--accent-muted)',
+          border: '1px solid var(--accent)',
           color: 'var(--accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           marginBottom: 16,

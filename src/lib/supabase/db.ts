@@ -438,6 +438,7 @@ export async function saveTextNotes(docId: string, pageKey: string, notes: TextN
     id: n.id, user_id: uid, document_id: docId, page_key: pageKey,
     x: n.x, y: n.y, width: n.width, height: n.height,
     content: n.content, font_size: n.fontSize, color: n.color,
+    category: n.category ?? null,
   })));
   if (insErr) console.error('[DB] saveTextNotes insert error:', insErr.message, 'docId:', docId, 'pageKey:', pageKey);
   else console.log('[DB] saveTextNotes OK — docId:', docId, 'pageKey:', pageKey, 'count:', notes.length);
@@ -451,7 +452,14 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
   console.log('[DB] fetchTextNotes rows:', data?.length ?? 0, 'error:', error?.message ?? null);
   const map: Record<string, TextNote[]> = {};
   for (const r of data ?? []) {
-    const note: TextNote = { id: r.id, x: r.x, y: r.y, width: r.width, height: r.height, content: r.content, fontSize: r.font_size, color: r.color };
+    const cat = r.category as string | null | undefined;
+    const note: TextNote = {
+      id: r.id, x: r.x, y: r.y, width: r.width, height: r.height,
+      content: r.content, fontSize: r.font_size, color: r.color,
+      ...(cat === 'important' || cat === 'review' || cat === 'idea'
+        ? { category: cat as TextNote['category'] }
+        : {}),
+    };
     (map[r.page_key] ??= []).push(note);
   }
   return map;
@@ -1133,26 +1141,23 @@ export async function fetchRoom(roomId: string): Promise<{
 }
 
 export async function joinRoom(roomId: string): Promise<{ error?: string }> {
-  const uid = await userId(); if (!uid) return { error: 'unauthenticated' };
-
-  // Re-joining: allow existing members through without capacity check
-  const { data: existing } = await sb().from('room_members')
-    .select('user_id').eq('room_id', roomId).eq('user_id', uid).maybeSingle();
-
-  if (!existing) {
-    const [{ count }, { data: room }] = await Promise.all([
-      sb().from('room_members').select('user_id', { count: 'exact', head: true }).eq('room_id', roomId),
-      sb().from('study_rooms').select('max_members, status').eq('id', roomId).maybeSingle(),
-    ]);
-    if (room?.status === 'closed') return { error: 'closed' };
-    if ((count ?? 0) >= (room?.max_members ?? 10)) return { error: 'full' };
+  // Atomic join via SECURITY DEFINER RPC — locks study_rooms row, checks
+  // capacity under the lock, inserts on success. The previous JS body
+  // was read-then-write (audit C-5): two concurrent joiners both saw
+  // count<max and both inserted, exceeding the cap and bypassing the
+  // Premium/Pro room-size paywall.
+  //
+  // Migration: supabase/migrations/2026-06-27_join_room_atomic.sql
+  // RPC returns: 'joined' | 'rejoined' | 'full' | 'closed' |
+  //              'not_found' | 'unauthenticated'.
+  const { data, error } = await sb().rpc('join_room_atomic', { p_room_id: roomId });
+  if (error) {
+    console.error('[DB] joinRoom RPC error:', error.message);
+    return { error: error.message };
   }
-
-  await sb().from('room_members').upsert(
-    { room_id: roomId, user_id: uid },
-    { onConflict: 'room_id,user_id' },
-  );
-  return {};
+  const result = (data ?? '') as string;
+  if (result === 'joined' || result === 'rejoined') return {};
+  return { error: result };
 }
 
 export async function leaveRoom(roomId: string): Promise<{ wasLastMember: boolean }> {

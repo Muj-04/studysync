@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Settings, LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getInitials } from '@/lib/preferences';
+import { clearLocalUserData } from '@/lib/clearLocalUserData';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Props {
@@ -47,6 +48,7 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
 
   const handleLogout = async () => {
     await createClient().auth.signOut();
+    await clearLocalUserData();
     // Use replace (not assign) so the protected page is dropped from history —
     // pressing back after logout must not reveal the cached view.
     window.location.replace('/login');

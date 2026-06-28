@@ -9,6 +9,7 @@ import {
   ensureReferralCode,
   processReferral,
 } from '@/lib/supabase/db';
+import { clearLocalUserData } from '@/lib/clearLocalUserData';
 
 const OAUTH_REDIRECT = 'https://pdf-study-workspace.vercel.app/auth/callback';
 
@@ -190,6 +191,7 @@ export default function LoginPage() {
   const handleCancelConflict = async () => {
     setConflictLoading(true);
     await createClient().auth.signOut();
+    await clearLocalUserData();
     setShowConflict(false);
     setConflictLoading(false);
   };

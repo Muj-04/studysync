@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Minus, Pencil, ChevronDown, Bookmark } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, ChevronDown } from 'lucide-react';
 
 const BG_THEMES: Array<{ theme: 'white' | 'dark'; label: string; bg: string; dotColor: string }> = [
   { theme: 'white', label: 'White', bg: '#ffffff',  dotColor: 'rgba(0,0,0,0.15)' },
@@ -17,15 +17,9 @@ interface Props {
   onInsertBlankPage: (theme: 'white' | 'dark') => void;
   onToggleDraw?: () => void;
   isDrawing?: boolean;
-  zoom: number;
-  onZoomChange: (z: number) => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
   onHideBar: () => void;
   viewMode?: 'page' | 'scroll';
   onViewModeChange?: (mode: 'page' | 'scroll') => void;
-  onToggleBookmark?: () => void;
-  isBookmarked?: boolean;
 }
 
 function NavBtn({
@@ -108,9 +102,8 @@ export default function PageNavigation({
   currentPage, pageCount, isBlankPage = false,
   onPrev, onNext, onGoToPage, onInsertBlankPage,
   onToggleDraw, isDrawing = false,
-  zoom, onZoomChange, onZoomIn, onZoomOut, onHideBar,
+  onHideBar,
   viewMode = 'page', onViewModeChange,
-  onToggleBookmark, isBookmarked = false,
 }: Props) {
   const [inputValue, setInputValue] = useState(String(currentPage));
   const [showBgPicker, setShowBgPicker] = useState(false);
@@ -137,8 +130,6 @@ export default function PageNavigation({
 
   const canPrev    = currentPage > 1;
   const canNext    = currentPage < pageCount;
-  const canZoomOut = zoom > 0.5;
-  const canZoomIn  = zoom < 2;
 
   return (
     <div style={{
@@ -238,35 +229,6 @@ export default function PageNavigation({
           </div>
         )}
       </div>
-
-      {/* Divider */}
-      <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
-
-      {/* ── 1b. Bookmark toggle ── */}
-      {onToggleBookmark && (
-        <button
-          onClick={onToggleBookmark}
-          title={isBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
-          aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
-          style={{
-            width: 28, height: 28, flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 4, border: `1px solid ${isBookmarked ? 'rgba(251,191,36,0.5)' : 'transparent'}`,
-            background: isBookmarked ? 'rgba(251,191,36,0.12)' : 'transparent',
-            color: isBookmarked ? '#f59e0b' : 'var(--text-2)',
-            cursor: 'pointer',
-            transition: 'background 0.13s, color 0.13s, border-color 0.13s',
-          }}
-          onMouseOver={(e) => {
-            if (!isBookmarked) Object.assign(e.currentTarget.style, { background: 'rgba(251,191,36,0.1)', color: '#f59e0b', borderColor: 'rgba(251,191,36,0.3)' });
-          }}
-          onMouseOut={(e) => {
-            if (!isBookmarked) Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent' });
-          }}
-        >
-          <Bookmark size={14} fill={isBookmarked ? '#f59e0b' : 'none'} strokeWidth={1.8} />
-        </button>
-      )}
 
       {/* Divider */}
       <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 2px' }} />
@@ -379,35 +341,9 @@ export default function PageNavigation({
         </>
       )}
 
-      {/* ── 3. Zoom controls ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <SmBtn onClick={onZoomOut} disabled={!canZoomOut} aria-label="Zoom out">
-          <Minus size={12} />
-        </SmBtn>
-
-        {/* Slider + label: shown via CSS media query (.nav-zoom-slider-wrap in globals.css) */}
-        <div className="nav-zoom-slider-wrap">
-          <input
-            type="range"
-            min={50} max={200} step={5}
-            value={Math.round(zoom * 100)}
-            onChange={(e) => onZoomChange(Number(e.target.value) / 100)}
-            className="zoom-slider"
-            aria-label="Zoom level"
-            style={{ width: 80 }}
-          />
-          <span style={{
-            fontSize: 11, fontWeight: 500, minWidth: 30, textAlign: 'right',
-            color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
-          }}>
-            {`${Math.round(zoom * 100)}%`}
-          </span>
-        </div>
-
-        <SmBtn onClick={onZoomIn} disabled={!canZoomIn} aria-label="Zoom in">
-          <Plus size={12} />
-        </SmBtn>
-      </div>
+      {/* Zoom controls moved to PdfTopToolbar (above the document) per
+          the Figma redesign — single source of truth, matches the
+          voice-recorder de-duplication pattern. */}
 
       {/* ── 4. Draw toggle (PDF pages only) ── */}
       {!isBlankPage && onToggleDraw && (
