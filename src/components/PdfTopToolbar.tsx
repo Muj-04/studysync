@@ -93,6 +93,29 @@ function SplitIcon() {
   );
 }
 
+/**
+ * Pill container for a tool group. Consistent styling for left / center /
+ * right keeps the toolbar visually balanced — without this, a lone Cursor
+ * button on the left looked like a stray icon while the center had clear
+ * pill-chrome around the zoom trio.
+ */
+function GroupPill({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 2,
+        padding: 2,
+        borderRadius: 9999,
+        border: '1px solid var(--border)',
+        background: 'var(--bg-panel)',
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function PdfTopToolbar({
@@ -118,7 +141,7 @@ export default function PdfTopToolbar({
       }}
     >
       {/* LEFT — selection tool */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <GroupPill>
         <ToolbarBtn
           title="Select / cursor"
           active={toolIsCursor}
@@ -126,21 +149,10 @@ export default function PdfTopToolbar({
         >
           <MousePointer size={14} strokeWidth={1.8} />
         </ToolbarBtn>
-      </div>
+      </GroupPill>
 
-      {/* CENTER — zoom group, pill-grouped. Uses --bg-panel so it
-          stays visually distinct from the surrounding bar (which is
-          now --bg-elevated). */}
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', gap: 2,
-          padding: 2,
-          borderRadius: 9999,
-          border: '1px solid var(--border)',
-          background: 'var(--bg-panel)',
-          flexShrink: 0,
-        }}
-      >
+      {/* CENTER — zoom */}
+      <GroupPill>
         <ToolbarBtn
           title="Zoom out"
           disabled={!canZoomOut}
@@ -181,10 +193,10 @@ export default function PdfTopToolbar({
         >
           <Plus size={13} strokeWidth={2} />
         </ToolbarBtn>
-      </div>
+      </GroupPill>
 
       {/* RIGHT — fullscreen + split */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <GroupPill>
         <ToolbarBtn
           title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           active={isFullscreen}
@@ -202,7 +214,7 @@ export default function PdfTopToolbar({
             <SplitIcon />
           </ToolbarBtn>
         )}
-      </div>
+      </GroupPill>
     </div>
   );
 }
