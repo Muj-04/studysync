@@ -1444,6 +1444,111 @@ export async function markMessagesRead(friendId: string): Promise<void> {
     .eq('read', false);
 }
 
+// ── Study Rooms — listing ─────────────────────────────────────────────────────
+
+export interface ActiveRoomMember {
+  userId:    string;
+  username:  string | null;
+  avatarUrl: string | null;
+  isVip:     boolean;
+}
+
+export interface ActiveRoom {
+  id:           string;
+  hostUserId:   string;
+  documentName: string;
+  status:       'active' | 'closed';
+  maxMembers:   number;
+  expiresAt:    string | null;
+  createdAt:    string;
+  host:         ActiveRoomMember | null;
+  memberCount:  number;
+  /** Up to 6 sample members for the avatar stack. */
+  members:      ActiveRoomMember[];
+  /** Whether the caller is already a member (host or invitee). */
+  myMembership: boolean;
+}
+
+/**
+ * Returns all currently-active rooms with batched joins:
+ *   1) study_rooms (status=active)
+ *   2) room_members for those room IDs
+ *   3) profiles for all referenced user IDs (hosts + members)
+ *
+ * RLS: study_rooms SELECT is `using: true` and room_members SELECT is
+ * `using: true`, so this works without service-role bypass. Profiles
+ * SELECT is also open. Three round-trips total — does NOT scale per-
+ * room, which is the point.
+ */
+export async function getActiveRooms(): Promise<ActiveRoom[]> {
+  const uid = await userId();
+
+  const { data: rooms, error } = await sb()
+    .from('study_rooms')
+    .select('id, host_user_id, document_name, status, max_members, expires_at, created_at')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+  if (error) { console.error('[DB] getActiveRooms rooms error:', error.message); return []; }
+  if (!rooms?.length) return [];
+
+  const roomIds = rooms.map((r) => r.id as string);
+
+  const { data: memberships } = await sb()
+    .from('room_members')
+    .select('room_id, user_id')
+    .in('room_id', roomIds);
+
+  const userIds = new Set<string>();
+  for (const r of rooms) userIds.add(r.host_user_id as string);
+  for (const m of (memberships ?? []) as Array<{ room_id: string; user_id: string }>) {
+    userIds.add(m.user_id);
+  }
+
+  const { data: profiles } = userIds.size
+    ? await sb()
+        .from('profiles')
+        .select('id, username, avatar_url, is_vip')
+        .in('id', [...userIds])
+    : { data: [] as Array<{ id: string; username: string | null; avatar_url: string | null; is_vip: boolean }> };
+
+  const profileMap = new Map<string, ActiveRoomMember>(
+    (profiles ?? []).map((p) => [p.id as string, {
+      userId:    p.id as string,
+      username:  (p.username  as string | null) ?? null,
+      avatarUrl: (p.avatar_url as string | null) ?? null,
+      isVip:     !!p.is_vip,
+    }]),
+  );
+
+  // Group memberships by room id (preserve any natural ordering — first 6 = avatar stack).
+  const memberMap = new Map<string, string[]>();
+  for (const m of (memberships ?? []) as Array<{ room_id: string; user_id: string }>) {
+    const arr = memberMap.get(m.room_id) ?? [];
+    arr.push(m.user_id);
+    memberMap.set(m.room_id, arr);
+  }
+
+  return rooms.map((r) => {
+    const ids = memberMap.get(r.id as string) ?? [];
+    const members = ids.slice(0, 6)
+      .map((id) => profileMap.get(id))
+      .filter((m): m is ActiveRoomMember => !!m);
+    return {
+      id:           r.id as string,
+      hostUserId:   r.host_user_id as string,
+      documentName: r.document_name as string,
+      status:       ((r.status as string | null) ?? 'active') as 'active' | 'closed',
+      maxMembers:   (r.max_members as number | null) ?? 10,
+      expiresAt:    (r.expires_at as string | null) ?? null,
+      createdAt:    r.created_at as string,
+      host:         profileMap.get(r.host_user_id as string) ?? null,
+      memberCount:  ids.length,
+      members,
+      myMembership: uid ? ids.includes(uid) : false,
+    };
+  });
+}
+
 export async function getMutualFriendCounts(otherUserIds: string[]): Promise<Record<string, number>> {
   if (!otherUserIds.length) return {};
   // SECURITY DEFINER RPC — bypasses friendships RLS so we can read the
