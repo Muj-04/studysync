@@ -2586,6 +2586,7 @@ export default function WorkspacePage() {
                       onDelete={deleteNote}
                       onUpdateTitle={updateNoteTitle}
                       listRef={voiceNoteListRef}
+                      hideRecorder
                     />
                   )}
 
@@ -2632,7 +2633,15 @@ export default function WorkspacePage() {
                   onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
                   onToggleBookmark={hasDocument ? handleToggleBookmark : undefined}
                   isBookmarked={isCurrentPageBookmarked}
-                  onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
+                  onVoiceNote={activeDocument ? () => {
+                    // Toggle — both the pill and the Notes-tab Record button
+                    // share this handler shape. Without toggling, starting from
+                    // the pill would leave the user with no stop control (the
+                    // old VoiceNotesSheet recorder is now hidden in workspace).
+                    if (isRecording) { stopRecording(); return; }
+                    startRecording(activeDocument.id, pageIdentifier);
+                    setVoiceSheetOpen(true);
+                  } : undefined}
                   isRecording={isRecording}
                   onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
                   onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
@@ -2759,7 +2768,14 @@ export default function WorkspacePage() {
                   onAddBookmark={hasDocument ? handleToggleBookmark : undefined}
                   isBookmarked={isCurrentPageBookmarked}
                   onAddFlashcard={() => { setRightPanelOpen(true); setRightPanelTab('ai'); }}
-                  onRecordVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
+                  onRecordVoiceNote={activeDocument ? () => {
+                    // Same toggle as the Mic pill — the Notes-tab button's
+                    // label already swaps to "Stop Recording" when isRecording,
+                    // so clicking it must actually stop.
+                    if (isRecording) { stopRecording(); return; }
+                    startRecording(activeDocument.id, pageIdentifier);
+                    setVoiceSheetOpen(true);
+                  } : undefined}
                   isRecording={isRecording}
                 />
               }
