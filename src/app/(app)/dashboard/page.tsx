@@ -150,7 +150,7 @@ export default function DashboardPage() {
           </nav>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {userPlan === 'free' && (
+          {userPlan === 'free' && !isVip && (
             <a
               href="/pricing"
               style={{
