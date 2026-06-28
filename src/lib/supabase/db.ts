@@ -1444,6 +1444,20 @@ export async function markMessagesRead(friendId: string): Promise<void> {
     .eq('read', false);
 }
 
+export async function getMutualFriendCounts(otherUserIds: string[]): Promise<Record<string, number>> {
+  if (!otherUserIds.length) return {};
+  // SECURITY DEFINER RPC — bypasses friendships RLS so we can read the
+  // other user's friend list, but only ever returns aggregate counts
+  // (no IDs leak). See supabase/migrations/2026-06-28_mutual_friend_counts.sql.
+  const { data, error } = await sb().rpc('mutual_friend_counts', { p_other_ids: otherUserIds });
+  if (error) { console.error('[DB] getMutualFriendCounts error:', error.message); return {}; }
+  const map: Record<string, number> = {};
+  for (const row of (data ?? []) as Array<{ other_user_id: string; mutual_count: number }>) {
+    map[row.other_user_id] = row.mutual_count;
+  }
+  return map;
+}
+
 export async function getUnreadMessageCounts(): Promise<Record<string, number>> {
   const uid = await userId(); if (!uid) return {};
   const { data, error } = await sb()
