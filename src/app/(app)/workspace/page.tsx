@@ -2224,6 +2224,7 @@ export default function WorkspacePage() {
             className="flex-1 flex flex-col overflow-hidden"
             style={{ position: 'relative', minWidth: 0 }}
           >
+            {!isFullscreen && (
             <DocTabsBar
               documents={documents}
               activeDocumentId={activeDocumentId}
@@ -2335,31 +2336,30 @@ export default function WorkspacePage() {
                 </>
               }
             />
+            )}
             {activeDocument && (
               <>
                 {/* PDF top toolbar — Figma centerpiece for the doc area.
                     Owns cursor/select, zoom group, fullscreen and split.
-                    Hidden in fullscreen so it doesn't intrude on the
-                    immersive document view (matches the header at L2007
-                    which also collapses to height 0 in fullscreen). The
-                    fullscreen-exit affordance lives in the floating
-                    bottom-right Minimize2 button rendered further down. */}
-                {!isFullscreen && (
-                  <PdfTopToolbar
-                    toolIsCursor={atTool === 'cursor'}
-                    onSelectCursor={() => atSetTool('cursor')}
-                    zoom={leftZoom}
-                    onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
-                    onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
-                    onZoomReset={() => handleLeftZoomChange(1.0)}
-                    canZoomIn={leftZoom < 2}
-                    canZoomOut={leftZoom > 0.5}
-                    isFullscreen={isFullscreen}
-                    onToggleFullscreen={toggleFullscreen}
-                    splitMode={splitMode}
-                    onToggleSplit={!isPPTX ? () => setSplitMode((m) => !m) : undefined}
-                  />
-                )}
+                    In fullscreen, `compact` collapses the bar to just
+                    the zoom pill (transparent surface, no border, no
+                    cursor/fullscreen/split pills) so zoom stays
+                    reachable without intruding on the immersive view. */}
+                <PdfTopToolbar
+                  toolIsCursor={atTool === 'cursor'}
+                  onSelectCursor={() => atSetTool('cursor')}
+                  zoom={leftZoom}
+                  onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
+                  onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
+                  onZoomReset={() => handleLeftZoomChange(1.0)}
+                  canZoomIn={leftZoom < 2}
+                  canZoomOut={leftZoom > 0.5}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={toggleFullscreen}
+                  splitMode={splitMode}
+                  onToggleSplit={!isPPTX ? () => setSplitMode((m) => !m) : undefined}
+                  compact={isFullscreen}
+                />
 
                 {/* ── Content area ── */}
                 <div style={{
@@ -2624,10 +2624,12 @@ export default function WorkspacePage() {
                   />
                 </div>
 
-                {/* Bottom pill bar */}
+                {/* Bottom pill bar — stays visible in fullscreen so the
+                    user can still annotate. Only the hide-bar chevron
+                    (navBarVisible) gates its visibility now. */}
                 <BottomPillBar
                   hasDocument={hasDocument}
-                  visible={navBarVisible && !isFullscreen}
+                  visible={navBarVisible}
                   isBlankPage={isBlankPage}
                   isPPTX={isPPTX}
                   tool={atTool}
@@ -2666,35 +2668,58 @@ export default function WorkspacePage() {
                   onToggleFullscreen={toggleFullscreen}
                 />
 
-                {/* Persistent exit-fullscreen button — touch-reachable since
-                    the BottomPillBar (which contains the in-bar Fullscreen
-                    pill) is hidden when fullscreen is active. */}
+                {/* Persistent exit-fullscreen button — top-right, labelled
+                    + Esc-hinted so users can clearly find their way out.
+                    Moved from bottom-right to avoid clashing with the
+                    BottomPillBar (now visible in fullscreen too). */}
                 {isFullscreen && (
                   <button
                     onClick={toggleFullscreen}
-                    title="Exit fullscreen"
+                    title="Exit fullscreen (Esc)"
                     aria-label="Exit fullscreen"
                     className="animate-scale-in"
                     style={{
-                      position: 'absolute', bottom: 14, right: 14, zIndex: 30,
-                      width: 36, height: 36, borderRadius: 9999,
-                      background: 'var(--bg-float)',
-                      backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-                      border: '1px solid var(--bg-float-border)',
+                      position: 'absolute', top: 14, right: 14, zIndex: 31,
+                      height: 40, padding: '0 14px',
+                      borderRadius: 9999,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      background: 'var(--bg-panel)',
+                      border: '1px solid var(--border-strong)',
                       boxShadow: 'var(--shadow-float)',
                       color: 'var(--text-1)',
-                      cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'background 0.15s, color 0.15s',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 13, fontWeight: 600,
+                      transition: 'background 0.15s, border-color 0.15s, color 0.15s',
                     }}
                     onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                      background: 'var(--bg-hover)',
+                      background: 'var(--accent-muted)',
+                      borderColor: 'var(--accent)',
+                      color: 'var(--accent)',
                     })}
                     onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                      background: 'var(--bg-float)',
+                      background: 'var(--bg-panel)',
+                      borderColor: 'var(--border-strong)',
+                      color: 'var(--text-1)',
                     })}
                   >
                     <Minimize2 size={16} strokeWidth={1.8} />
+                    <span>Exit fullscreen</span>
+                    <kbd
+                      className="hidden md:inline-flex"
+                      style={{
+                        alignItems: 'center',
+                        padding: '2px 6px',
+                        fontSize: 10.5, fontWeight: 600, letterSpacing: '0.02em',
+                        fontFamily: 'var(--font-mono), monospace',
+                        color: 'var(--text-3)',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 4,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Esc
+                    </kbd>
                   </button>
                 )}
 
