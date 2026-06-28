@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Minus, Pencil, ChevronDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Pencil, ChevronDown } from 'lucide-react';
 
 const BG_THEMES: Array<{ theme: 'white' | 'dark'; label: string; bg: string; dotColor: string }> = [
   { theme: 'white', label: 'White', bg: '#ffffff',  dotColor: 'rgba(0,0,0,0.15)' },
@@ -17,10 +17,6 @@ interface Props {
   onInsertBlankPage: (theme: 'white' | 'dark') => void;
   onToggleDraw?: () => void;
   isDrawing?: boolean;
-  zoom: number;
-  onZoomChange: (z: number) => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
   onHideBar: () => void;
   viewMode?: 'page' | 'scroll';
   onViewModeChange?: (mode: 'page' | 'scroll') => void;
@@ -106,7 +102,7 @@ export default function PageNavigation({
   currentPage, pageCount, isBlankPage = false,
   onPrev, onNext, onGoToPage, onInsertBlankPage,
   onToggleDraw, isDrawing = false,
-  zoom, onZoomChange, onZoomIn, onZoomOut, onHideBar,
+  onHideBar,
   viewMode = 'page', onViewModeChange,
 }: Props) {
   const [inputValue, setInputValue] = useState(String(currentPage));
@@ -134,8 +130,6 @@ export default function PageNavigation({
 
   const canPrev    = currentPage > 1;
   const canNext    = currentPage < pageCount;
-  const canZoomOut = zoom > 0.5;
-  const canZoomIn  = zoom < 2;
 
   return (
     <div style={{
@@ -347,35 +341,9 @@ export default function PageNavigation({
         </>
       )}
 
-      {/* ── 3. Zoom controls ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <SmBtn onClick={onZoomOut} disabled={!canZoomOut} aria-label="Zoom out">
-          <Minus size={12} />
-        </SmBtn>
-
-        {/* Slider + label: shown via CSS media query (.nav-zoom-slider-wrap in globals.css) */}
-        <div className="nav-zoom-slider-wrap">
-          <input
-            type="range"
-            min={50} max={200} step={5}
-            value={Math.round(zoom * 100)}
-            onChange={(e) => onZoomChange(Number(e.target.value) / 100)}
-            className="zoom-slider"
-            aria-label="Zoom level"
-            style={{ width: 80 }}
-          />
-          <span style={{
-            fontSize: 11, fontWeight: 500, minWidth: 30, textAlign: 'right',
-            color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
-          }}>
-            {`${Math.round(zoom * 100)}%`}
-          </span>
-        </div>
-
-        <SmBtn onClick={onZoomIn} disabled={!canZoomIn} aria-label="Zoom in">
-          <Plus size={12} />
-        </SmBtn>
-      </div>
+      {/* Zoom controls moved to PdfTopToolbar (above the document) per
+          the Figma redesign — single source of truth, matches the
+          voice-recorder de-duplication pattern. */}
 
       {/* ── 4. Draw toggle (PDF pages only) ── */}
       {!isBlankPage && onToggleDraw && (
