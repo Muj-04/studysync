@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { PLAN_LIMITS, PLAN_LABELS, nextUpgradePlan, type Plan } from '@/lib/planLimits';
+import { PLAN_LIMITS, PLAN_LABELS, nextUpgradePlan, effectivePlanLimits, type Plan } from '@/lib/planLimits';
 
 export const runtime = 'nodejs';
 
@@ -73,8 +73,7 @@ export async function POST(req: NextRequest) {
 
   const isVip       = profile?.is_vip ?? false;
   const plan        = (profile?.plan ?? 'free') as Plan;
-  // VIP bypasses all limits; every other plan has a specific monthly cap
-  const monthlyLimit = isVip ? Infinity : PLAN_LIMITS[plan].aiRequestsPerMonth;
+  const monthlyLimit = effectivePlanLimits(plan, isVip).aiRequestsPerMonth;
 
   const { data: usageRow } = await admin
     .from('ai_usage')

@@ -1877,14 +1877,14 @@ export function getOrCreateSessionId(): string {
   return id;
 }
 
-// 'ok'        — safe to proceed (no active session, same session, free user, or session expired)
+// 'ok'        — safe to proceed (no active session, same session, free user, VIP, or session expired)
 // 'conflict'  — a different active session exists on another device
-// 'free_user' — user is on free plan, no enforcement needed
+// 'free_user' — user is on free plan (or VIP — VIP bypasses every limit), no enforcement needed
 export async function checkActiveSession(sessionId: string): Promise<'ok' | 'conflict' | 'free_user'> {
   const uid = await userId(); if (!uid) return 'free_user';
 
-  const { data: profile } = await sb().from('profiles').select('plan').eq('id', uid).maybeSingle();
-  if (!profile || profile.plan === 'free') return 'free_user';
+  const { data: profile } = await sb().from('profiles').select('plan, is_vip').eq('id', uid).maybeSingle();
+  if (!profile || profile.plan === 'free' || profile.is_vip) return 'free_user';
 
   const { data: existing } = await sb()
     .from('active_sessions').select('session_id, last_seen').eq('user_id', uid).maybeSingle();

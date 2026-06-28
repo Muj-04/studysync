@@ -1,5 +1,13 @@
 export type Plan = 'free' | 'premium' | 'pro';
 
+export interface PlanLimits {
+  documents:          number;
+  voiceStorageBytes:  number;
+  aiRequestsPerMonth: number;
+  canCreateRooms:     boolean;
+  maxRoomMembers:     number;
+}
+
 export const PLAN_LIMITS = {
   free: {
     documents:          3,
@@ -22,13 +30,22 @@ export const PLAN_LIMITS = {
     canCreateRooms:     true,
     maxRoomMembers:     20,
   },
-} as const satisfies Record<Plan, {
-  documents:          number;
-  voiceStorageBytes:  number;
-  aiRequestsPerMonth: number;
-  canCreateRooms:     boolean;
-  maxRoomMembers:     number;
-}>;
+} as const satisfies Record<Plan, PlanLimits>;
+
+// VIP bypasses every plan limit. Single source of truth so callsites can
+// just look up `effectivePlanLimits(plan, isVip).x` instead of repeating
+// `isVip ? Infinity : PLAN_LIMITS[plan].x` (which is easy to forget).
+const VIP_LIMITS: PlanLimits = {
+  documents:          Infinity,
+  voiceStorageBytes:  Infinity,
+  aiRequestsPerMonth: Infinity,
+  canCreateRooms:     true,
+  maxRoomMembers:     20,
+};
+
+export function effectivePlanLimits(plan: Plan, isVip: boolean): PlanLimits {
+  return isVip ? VIP_LIMITS : PLAN_LIMITS[plan];
+}
 
 // Human-readable labels used in UI messages
 export const PLAN_LABELS: Record<Plan, string> = {

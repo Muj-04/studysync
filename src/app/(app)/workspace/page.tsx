@@ -40,7 +40,7 @@ import GlobalSearch from '@/components/GlobalSearch';
 import OnboardingTour, { shouldShowTour } from '@/components/OnboardingTour';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
-import { PLAN_LIMITS, PLAN_LABELS, VOICE_STORAGE_LABELS, nextUpgradePlan } from '@/lib/planLimits';
+import { PLAN_LIMITS, PLAN_LABELS, VOICE_STORAGE_LABELS, nextUpgradePlan, effectivePlanLimits } from '@/lib/planLimits';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -1732,9 +1732,9 @@ export default function WorkspacePage() {
       isFullscreen, exitFullscreen]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
-    const bypass = isVip || userPlan !== 'free';
-    if (!bypass) {
-      const remaining = 3 - documents.length;
+    const docLimit = effectivePlanLimits(userPlan, isVip).documents;
+    if (docLimit !== Infinity) {
+      const remaining = docLimit - documents.length;
       if (remaining <= 0) {
         setLimitModal('documents');
         return;
@@ -1837,8 +1837,8 @@ export default function WorkspacePage() {
 
   const handleCreateRoom = useCallback(async () => {
     if (!activeDocument || activeDocument.type !== 'pdf') return;
-    const bypass = isVip || userPlan !== 'free';
-    if (!bypass) { setLimitModal('room'); return; }
+    const limits = effectivePlanLimits(userPlan, isVip);
+    if (!limits.canCreateRooms) { setLimitModal('room'); return; }
     setRoomModal('creating');
     try {
       const resp = await fetch(activeDocument.url);
@@ -1846,7 +1846,7 @@ export default function WorkspacePage() {
       const roomId = crypto.randomUUID();
       const pdfPath = await uploadRoomPdf(roomId, blob, activeDocument.name);
       if (!pdfPath) throw new Error('upload failed');
-      const created = await createRoom(roomId, activeDocument.name, pdfPath, isVip ? 20 : PLAN_LIMITS[userPlan].maxRoomMembers);
+      const created = await createRoom(roomId, activeDocument.name, pdfPath, limits.maxRoomMembers);
       if (!created) throw new Error('createRoom failed');
       setRoomUrl(`${window.location.origin}/room/${roomId}`);
       setRoomModal('done');
@@ -1854,7 +1854,7 @@ export default function WorkspacePage() {
       console.error('[Room] create error:', e);
       setRoomModal('idle');
     }
-  }, [activeDocument]);
+  }, [activeDocument, isVip, userPlan]);
 
   // ── Page image annotation handlers ───────────────────────────────────────
   const handleSavePageImages = useCallback((images: import('@/types').PDFPageImage[]) => {
@@ -2064,7 +2064,7 @@ export default function WorkspacePage() {
 
         {/* Right: notifications · collaborators · avatar (+ Upgrade for free) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-          {userPlan === 'free' && (
+          {userPlan === 'free' && !isVip && (
             <a
               href="/pricing"
               style={{
