@@ -1,28 +1,42 @@
 'use client';
-import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
+import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  ChevronLeft, Search, UserPlus, UserCheck, UserMinus,
-  Users, Clock, X, Check, MessageSquare,
+  Search, UserPlus, X, Check, MessageCircle,
+  MoreHorizontal, Users, Trash2,
 } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import {
   searchUsers, sendFriendRequest, cancelFriendRequest, respondFriendRequest,
   removeFriend, getFriends, getFriendRequests, getMyFriendships, inviteToRoom,
-  getProfile,
-  getUnreadMessageCounts,
+  getUnreadMessageCounts, getMutualFriendCounts,
 } from '@/lib/supabase/db';
 import ChatPanel from '@/components/ChatPanel';
 import type { UserResult, FriendEntry, FriendRequest, MyFriendship } from '@/lib/supabase/db';
-import AvatarDropdown from '@/components/AvatarDropdown';
-import NotificationBell from '@/components/NotificationBell';
-import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+/**
+ * Friends page — Figma-matched redesign.
+ *
+ *   ┌─ ACTIVE-ROOM BANNER (when in a study room) ──────────────────┐
+ *   │ ADD FRIEND card                                               │
+ *   │ ── FRIEND REQUESTS (when incoming/sent > 0) ──                │
+ *   │ ── ALL FRIENDS — N · [Search friends…] ──                     │
+ *   │ ┌──────────┐ ┌──────────┐                                     │
+ *   │ │ friend   │ │ friend   │ … responsive grid                   │
+ *   │ └──────────┘ └──────────┘                                     │
+ *   └───────────────────────────────────────────────────────────────┘
+ *
+ * Shared (app)/layout provides LeftRail + identity surface so this
+ * page drops the inline header it used to render.
+ */
 
-function UserAvatar({ name, url, size = 36, isVip = false }: { name?: string | null; url?: string | null; size?: number; isVip?: boolean }) {
+// ── UserAvatar (preserved) ───────────────────────────────────────────────────
+
+function UserAvatar({ name, url, size = 36, isVip = false }: {
+  name?: string | null; url?: string | null; size?: number; isVip?: boolean;
+}) {
   const initial = (name ?? '?')[0]?.toUpperCase() ?? '?';
   const inner = (
     <div style={{
@@ -30,9 +44,11 @@ function UserAvatar({ name, url, size = 36, isVip = false }: { name?: string | n
       background: url ? 'transparent' : 'var(--accent)', color: '#fff',
       fontSize: size * 0.38, fontWeight: 700,
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-      position: isVip ? 'relative' : undefined, zIndex: isVip ? 1 : undefined,
     }}>
-      {url ? <img src={url} alt={name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initial}
+      {url
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={url} alt={name ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : initial}
     </div>
   );
   if (!isVip) return <div style={{ flexShrink: 0 }}>{inner}</div>;
@@ -55,11 +71,24 @@ function UserAvatar({ name, url, size = 36, isVip = false }: { name?: string | n
   );
 }
 
-type Tab = 'friends' | 'requests';
+// ── Active room from localStorage (set by RoomClient) ────────────────────────
 
-// ── Friendship status in search results ───────────────────────────────────────
+function getActiveRoom(): { roomId: string; roomName: string } | null {
+  try {
+    const raw = localStorage.getItem('activeRoom');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { roomId: string; roomName: string; timestamp: number };
+    if (Date.now() - parsed.timestamp > 8 * 60 * 60 * 1000) {
+      localStorage.removeItem('activeRoom');
+      return null;
+    }
+    return { roomId: parsed.roomId, roomName: parsed.roomName };
+  } catch { return null; }
+}
+
+// ── Search-result friendship status helper ────────────────────────────────────
+
 type FsStatus = 'none' | 'pending_sent' | 'pending_received' | 'accepted';
-
 function getFsStatus(userId: string, friendships: MyFriendship[]): { status: FsStatus; friendshipId: string | null } {
   const fs = friendships.find((f) => f.otherUserId === userId);
   if (!fs) return { status: 'none', friendshipId: null };
@@ -67,51 +96,14 @@ function getFsStatus(userId: string, friendships: MyFriendship[]): { status: FsS
   return { status: fs.isSender ? 'pending_sent' : 'pending_received', friendshipId: fs.friendshipId };
 }
 
-// ── Active room from localStorage (set by RoomClient) ─────────────────────────
-function getActiveRoom(): { roomId: string; roomName: string } | null {
-  try {
-    const raw = localStorage.getItem('activeRoom');
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { roomId: string; roomName: string; timestamp: number };
-    if (Date.now() - parsed.timestamp > 8 * 60 * 60 * 1000) { localStorage.removeItem('activeRoom'); return null; }
-    return { roomId: parsed.roomId, roomName: parsed.roomName };
-  } catch { return null; }
-}
+// ── ?openChat=<userId> deep-link consumer (Suspense-isolated) ────────────────
 
-// ── Small shared UI ───────────────────────────────────────────────────────────
-
-function Spinner() {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-      <span className="spinner" style={{ width: 22, height: 22, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
-    </div>
-  );
-}
-
-function EmptyState({ icon: Icon, title, sub }: { icon: React.ElementType; title: string; sub: string }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--text-3)' }}>
-      <Icon size={32} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-      <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 600, color: 'var(--text-2)' }}>{title}</p>
-      <p style={{ margin: 0, fontSize: 13 }}>{sub}</p>
-    </div>
-  );
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
-
-// useSearchParams() requires a Suspense boundary above it under Next.js's
-// CSR-bailout rules — wrapping the whole FriendsPage would defeat the
-// point, so we isolate the only param-dependent logic (the
-// ?openChat=<friendUserId> deep-link from NotificationBell) into this
-// tiny child component and mount it under <Suspense fallback={null} />.
-// Renders nothing; pure side effect.
 function OpenChatParamWatcher({
   friends, authReady, onOpen,
 }: {
-  friends:    FriendEntry[];
-  authReady:  boolean;
-  onOpen:     (f: FriendEntry) => void;
+  friends:   FriendEntry[];
+  authReady: boolean;
+  onOpen:    (f: FriendEntry) => void;
 }) {
   const searchParams = useSearchParams();
   const router       = useRouter();
@@ -127,58 +119,563 @@ function OpenChatParamWatcher({
   return null;
 }
 
+// ── Card shell ───────────────────────────────────────────────────────────────
+
+function Card({ children, padding = 22 }: { children: React.ReactNode; padding?: number }) {
+  return (
+    <div style={{
+      background: 'var(--bg-panel)',
+      border: '1px solid var(--border-subtle)',
+      borderRadius: 12,
+      padding,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+// ── Add Friend card ──────────────────────────────────────────────────────────
+
+function AddFriendCard({
+  myFriendships, onSent,
+}: {
+  myFriendships: MyFriendship[];
+  onSent: (receiverId: string, friendshipId: string) => void;
+}) {
+  const [query, setQuery]     = useState('');
+  const [results, setResults] = useState<UserResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const [busyId, setBusyId]   = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced live search
+  useEffect(() => {
+    setError('');
+    if (!query.trim()) { setResults([]); return; }
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setLoading(true);
+    timerRef.current = setTimeout(async () => {
+      const r = await searchUsers(query);
+      setResults(r);
+      setLoading(false);
+    }, 350);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [query]);
+
+  const send = useCallback(async (receiverId: string) => {
+    setBusyId(receiverId);
+    const id = await sendFriendRequest(receiverId);
+    setBusyId(null);
+    if (id) {
+      onSent(receiverId, id);
+      setQuery('');
+      setResults([]);
+    } else {
+      setError('Could not send request. They may have blocked requests or you already have one in flight.');
+    }
+  }, [onSent]);
+
+  // "Add Friend" button = send-to-first-eligible-match
+  const firstEligible = results.find((u) => {
+    const fs = getFsStatus(u.id, myFriendships);
+    return fs.status === 'none';
+  });
+
+  return (
+    <Card>
+      <h2 style={{
+        margin: 0, fontSize: 18, fontWeight: 700,
+        color: 'var(--text-1)', letterSpacing: '-0.01em',
+      }}>
+        Friends
+      </h2>
+      <p style={{
+        margin: '4px 0 14px', fontSize: 13, color: 'var(--text-2)',
+        lineHeight: 1.5,
+      }}>
+        Connect with classmates to share notes and study rooms.
+      </p>
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          <UserPlus size={14} style={{
+            position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+            color: 'var(--text-3)', pointerEvents: 'none',
+          }} />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Enter username or invite code…"
+            aria-label="Search users to add"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && firstEligible) { e.preventDefault(); void send(firstEligible.id); }
+            }}
+            style={{
+              width: '100%', height: 40, paddingLeft: 36, paddingRight: 14,
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 8, fontSize: 13, color: 'var(--text-1)',
+              outline: 'none', fontFamily: 'inherit',
+            }}
+          />
+        </div>
+        <button
+          onClick={() => firstEligible && send(firstEligible.id)}
+          disabled={!firstEligible || !!busyId}
+          style={{
+            height: 40, padding: '0 18px', borderRadius: 8,
+            background: firstEligible ? 'var(--accent)' : 'var(--bg-active)',
+            color: firstEligible ? '#fff' : 'var(--text-3)',
+            border: 'none', fontSize: 13, fontWeight: 600,
+            cursor: firstEligible && !busyId ? 'pointer' : 'not-allowed',
+            fontFamily: 'inherit', flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: 7,
+            transition: 'background 0.13s',
+          }}
+          onMouseOver={(e) => { if (firstEligible) e.currentTarget.style.background = 'var(--accent-hover)'; }}
+          onMouseOut={(e)  => { if (firstEligible) e.currentTarget.style.background = 'var(--accent)'; }}
+        >
+          <UserPlus size={14} /> Add Friend
+        </button>
+      </div>
+
+      {/* Live search results dropdown */}
+      {query.trim() && (
+        <div style={{
+          marginTop: 8, padding: 4,
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 8,
+        }}>
+          {loading ? (
+            <p style={{ margin: 0, padding: '10px 12px', fontSize: 12, color: 'var(--text-3)' }}>
+              Searching…
+            </p>
+          ) : results.length === 0 ? (
+            <p style={{ margin: 0, padding: '10px 12px', fontSize: 12, color: 'var(--text-3)' }}>
+              No users match &quot;{query}&quot;.
+            </p>
+          ) : (
+            results.map((u) => {
+              const fs = getFsStatus(u.id, myFriendships);
+              const display = u.username || u.email.split('@')[0] || 'User';
+              return (
+                <div key={u.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 10px', borderRadius: 6,
+                }}>
+                  <UserAvatar name={display} url={u.avatarUrl} size={30} />
+                  <span style={{
+                    flex: 1, minWidth: 0,
+                    fontSize: 13, fontWeight: 500, color: 'var(--text-1)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {display}
+                  </span>
+                  {fs.status === 'accepted' && (
+                    <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500 }}>Already friends</span>
+                  )}
+                  {fs.status === 'pending_sent' && (
+                    <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500 }}>Request sent</span>
+                  )}
+                  {fs.status === 'pending_received' && (
+                    <span style={{ fontSize: 11.5, color: 'var(--accent)', fontWeight: 600 }}>Sent you a request</span>
+                  )}
+                  {fs.status === 'none' && (
+                    <button
+                      onClick={() => send(u.id)}
+                      disabled={busyId === u.id}
+                      style={{
+                        height: 28, padding: '0 12px', borderRadius: 6,
+                        background: 'var(--accent)', color: '#fff', border: 'none',
+                        fontSize: 12, fontWeight: 600,
+                        cursor: busyId === u.id ? 'not-allowed' : 'pointer',
+                        opacity: busyId === u.id ? 0.6 : 1,
+                        fontFamily: 'inherit', flexShrink: 0,
+                      }}
+                    >
+                      Add
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {error && (
+        <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--red)' }}>{error}</p>
+      )}
+    </Card>
+  );
+}
+
+// ── Friend Requests section ──────────────────────────────────────────────────
+
+function RequestsSection({
+  incoming, outgoing, mutualMap, busyId,
+  onAccept, onReject, onCancel,
+}: {
+  incoming: FriendRequest[];
+  outgoing: FriendRequest[];
+  mutualMap: Record<string, number>;
+  busyId: string | null;
+  onAccept: (friendshipId: string, otherUserId: string) => void;
+  onReject: (friendshipId: string, otherUserId: string) => void;
+  onCancel: (friendshipId: string, otherUserId: string) => void;
+}) {
+  if (incoming.length === 0 && outgoing.length === 0) return null;
+  return (
+    <div>
+      <SectionHeader>
+        <span>Friend Requests</span>
+        <span style={{
+          padding: '1px 8px', borderRadius: 9999,
+          background: 'var(--accent)', color: '#fff',
+          fontSize: 10.5, fontWeight: 700,
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {incoming.length + outgoing.length}
+        </span>
+      </SectionHeader>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {incoming.map((r) => {
+          const display = r.username || 'Unknown user';
+          const pending = busyId === r.userId;
+          const mutuals = mutualMap[r.userId] ?? 0;
+          return (
+            <Card key={r.friendshipId} padding={14}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <UserAvatar name={display} url={r.avatarUrl} size={40} isVip={r.isVip} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{
+                    margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {display}
+                  </p>
+                  <p style={{
+                    margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-3)',
+                  }}>
+                    {mutuals > 0
+                      ? `${mutuals} mutual friend${mutuals === 1 ? '' : 's'}`
+                      : 'Wants to be friends'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onAccept(r.friendshipId, r.userId)}
+                  disabled={pending}
+                  title="Accept"
+                  aria-label="Accept request"
+                  style={{
+                    width: 34, height: 34, borderRadius: 8,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--accent-muted)',
+                    border: '1px solid var(--accent)',
+                    color: 'var(--accent)',
+                    cursor: pending ? 'not-allowed' : 'pointer',
+                    opacity: pending ? 0.6 : 1,
+                    transition: 'background 0.12s',
+                  }}
+                  onMouseOver={(e) => { if (!pending) e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 24%, transparent)'; }}
+                  onMouseOut={(e)  => { if (!pending) e.currentTarget.style.background = 'var(--accent-muted)'; }}
+                >
+                  <Check size={16} strokeWidth={2.2} />
+                </button>
+                <button
+                  onClick={() => onReject(r.friendshipId, r.userId)}
+                  disabled={pending}
+                  title="Reject"
+                  aria-label="Reject request"
+                  style={{
+                    width: 34, height: 34, borderRadius: 8,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-2)',
+                    cursor: pending ? 'not-allowed' : 'pointer',
+                    opacity: pending ? 0.6 : 1,
+                    transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                  }}
+                  onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'var(--red)' })}
+                  onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'transparent',     color: 'var(--text-2)', borderColor: 'var(--border)' })}
+                >
+                  <X size={16} strokeWidth={2.2} />
+                </button>
+              </div>
+            </Card>
+          );
+        })}
+
+        {outgoing.length > 0 && (
+          <div style={{
+            padding: '10px 14px',
+            background: 'var(--bg-elevated)',
+            border: '1px dashed var(--border-subtle)',
+            borderRadius: 10,
+          }}>
+            <p style={{
+              margin: '0 0 8px', fontSize: 10.5, fontWeight: 700,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
+              color: 'var(--text-3)',
+            }}>
+              Sent · {outgoing.length}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {outgoing.map((r) => {
+                const display = r.username || 'Unknown user';
+                const pending = busyId === r.userId;
+                return (
+                  <div key={r.friendshipId} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                  }}>
+                    <UserAvatar name={display} url={r.avatarUrl} size={26} />
+                    <span style={{
+                      flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-2)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {display}
+                    </span>
+                    <button
+                      onClick={() => onCancel(r.friendshipId, r.userId)}
+                      disabled={pending}
+                      style={{
+                        height: 26, padding: '0 10px', borderRadius: 6,
+                        background: 'transparent', border: '1px solid var(--border)',
+                        color: 'var(--text-3)',
+                        fontSize: 11.5, fontWeight: 500, cursor: pending ? 'not-allowed' : 'pointer',
+                        fontFamily: 'inherit', flexShrink: 0,
+                        transition: 'color 0.12s, border-color 0.12s',
+                      }}
+                      onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)', borderColor: 'var(--red)' })}
+                      onMouseOut={(e)  => Object.assign(e.currentTarget.style, { color: 'var(--text-3)', borderColor: 'var(--border)' })}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Section header ───────────────────────────────────────────────────────────
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      margin: '0 0 12px', fontSize: 11, fontWeight: 700,
+      letterSpacing: '0.08em', textTransform: 'uppercase',
+      color: 'var(--text-3)',
+    }}>
+      {children}
+    </h3>
+  );
+}
+
+// ── Friend card ──────────────────────────────────────────────────────────────
+
+function FriendCard({
+  f, unread, mutuals, activeRoom, inviteSent,
+  onChat, onRemove, onInvite,
+}: {
+  f: FriendEntry;
+  unread: number;
+  mutuals: number;
+  activeRoom: { roomId: string; roomName: string } | null;
+  inviteSent: boolean;
+  onChat: (f: FriendEntry) => void;
+  onRemove: (friendshipId: string, otherUserId: string) => void;
+  onInvite: (friendUserId: string) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const display = f.username || 'Unknown user';
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [menuOpen]);
+
+  return (
+    <Card padding={14}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <UserAvatar name={display} url={f.avatarUrl} size={42} isVip={f.isVip} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{
+            margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {display}
+          </p>
+          {mutuals > 0 && (
+            <p style={{
+              margin: '2px 0 0', fontSize: 11.5, color: 'var(--text-3)',
+            }}>
+              {mutuals} mutual friend{mutuals === 1 ? '' : 's'}
+            </p>
+          )}
+        </div>
+
+        {/* Chat button + unread badge */}
+        <button
+          onClick={() => onChat(f)}
+          title="Open chat"
+          aria-label={`Chat with ${display}${unread > 0 ? `, ${unread} unread` : ''}`}
+          style={{
+            position: 'relative',
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            height: 32, padding: '0 12px',
+            background: 'var(--accent-muted)',
+            border: '1px solid var(--accent)',
+            borderRadius: 8,
+            color: 'var(--accent)',
+            cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 12, fontWeight: 600,
+            transition: 'background 0.12s',
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 22%, transparent)'; }}
+          onMouseOut={(e)  => { e.currentTarget.style.background = 'var(--accent-muted)'; }}
+        >
+          <MessageCircle size={13} />
+          Chat
+          {unread > 0 && (
+            <span style={{
+              position: 'absolute', top: -6, right: -6,
+              minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
+              background: 'var(--red)', color: '#fff',
+              fontSize: 10, fontWeight: 700, lineHeight: '18px',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
+        </button>
+
+        {/* … menu */}
+        <div ref={menuRef} style={{ position: 'relative' }}>
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            title="More"
+            aria-label="More actions"
+            style={{
+              width: 32, height: 32, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: menuOpen ? 'var(--bg-hover)' : 'transparent',
+              border: `1px solid ${menuOpen ? 'var(--border)' : 'var(--border-subtle)'}`,
+              color: 'var(--text-2)', cursor: 'pointer',
+              transition: 'background 0.12s, border-color 0.12s, color 0.12s',
+            }}
+            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)' })}
+            onMouseOut={(e)  => { if (!menuOpen) Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)', borderColor: 'var(--border-subtle)' }); }}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+          {menuOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 30,
+              minWidth: 180,
+              background: 'var(--bg-float)',
+              backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+              border: '1px solid var(--bg-float-border)',
+              boxShadow: 'var(--shadow-float)',
+              borderRadius: 8, padding: 4,
+            }}>
+              {activeRoom && (
+                <button
+                  onClick={() => { setMenuOpen(false); onInvite(f.userId); }}
+                  disabled={inviteSent}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    height: 32, padding: '0 10px', borderRadius: 6,
+                    background: 'transparent', border: 'none',
+                    color: inviteSent ? 'var(--text-3)' : 'var(--text-1)',
+                    cursor: inviteSent ? 'not-allowed' : 'pointer',
+                    opacity: inviteSent ? 0.55 : 1,
+                    fontSize: 12.5, fontWeight: 500, textAlign: 'left', fontFamily: 'inherit',
+                    transition: 'background 0.12s',
+                  }}
+                  onMouseOver={(e) => { if (!inviteSent) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
+                  onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                >
+                  <Users size={13} />
+                  {inviteSent ? 'Invite sent' : `Invite to ${activeRoom.roomName}`}
+                </button>
+              )}
+              <button
+                onClick={() => { setMenuOpen(false); onRemove(f.friendshipId, f.userId); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  height: 32, padding: '0 10px', borderRadius: 6,
+                  background: 'transparent', border: 'none',
+                  color: 'var(--red)', cursor: 'pointer',
+                  fontSize: 12.5, fontWeight: 500, textAlign: 'left', fontFamily: 'inherit',
+                  transition: 'background 0.12s',
+                }}
+                onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--red-muted)'; }}
+                onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              >
+                <Trash2 size={13} />
+                Remove friend
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
+
 export default function FriendsPage() {
   useAuthGuard();
   const router = useRouter();
-  const { t } = useLanguage();
-  const [userEmail, setUserEmail]     = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [avatarUrl, setAvatarUrl]     = useState<string | null>(null);
-  const [isVip, setIsVip]             = useState(false);
-  const [authReady, setAuthReady]     = useState(false);
 
-  const [tab, setTab]             = useState<Tab>('friends');
-  const [query, setQuery]         = useState('');
-  const [searchResults, setSearchResults] = useState<UserResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [myUserId,  setMyUserId]  = useState<string | null>(null);
 
-  const [friends, setFriends]         = useState<FriendEntry[]>([]);
-  const [incoming, setIncoming]       = useState<FriendRequest[]>([]);
-  const [outgoing, setOutgoing]       = useState<FriendRequest[]>([]);
-  const [myFriendships, setMyFriendships] = useState<MyFriendship[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [friends,        setFriends]        = useState<FriendEntry[]>([]);
+  const [incoming,       setIncoming]       = useState<FriendRequest[]>([]);
+  const [outgoing,       setOutgoing]       = useState<FriendRequest[]>([]);
+  const [myFriendships,  setMyFriendships]  = useState<MyFriendship[]>([]);
+  const [mutualMap,      setMutualMap]      = useState<Record<string, number>>({});
+  const [dataLoading,    setDataLoading]    = useState(true);
 
-  const [actionPending, setActionPending] = useState<string | null>(null);
-  const [inviteSent, setInviteSent]   = useState<Set<string>>(new Set());
-  const [activeRoom, setActiveRoom]   = useState<{ roomId: string; roomName: string } | null>(null);
-
-  // ── Direct-message state ──────────────────────────────────────────────────
-  // myUserId is captured separately from auth so the chat subscription can
-  // filter postgres_changes by recipient_id without re-querying getUser().
-  const [myUserId, setMyUserId]         = useState<string | null>(null);
-  const [openChat, setOpenChat]         = useState<FriendEntry | null>(null);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const [openChat,     setOpenChat]     = useState<FriendEntry | null>(null);
 
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [busyId,    setBusyId]    = useState<string | null>(null);
+  const [inviteSent, setInviteSent] = useState<Set<string>>(new Set());
+  const [activeRoom, setActiveRoom] = useState<{ roomId: string; roomName: string } | null>(null);
 
-  // Auth + initial data load
+  const [friendSearch, setFriendSearch] = useState('');
+
+  // Auth
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    const sb = createClient();
+    sb.auth.getUser().then(({ data: { user } }) => {
       if (!user) { router.replace('/login'); return; }
       setMyUserId(user.id);
-      setUserEmail(user.email ?? '');
-      const profile = await getProfile();
-      setDisplayName(profile?.username ?? user.email?.split('@')[0] ?? '');
-      setAvatarUrl(profile?.avatarUrl ?? null);
-      if (profile?.isVip) setIsVip(true);
       setAuthReady(true);
     });
-
     setActiveRoom(getActiveRoom());
   }, [router]);
 
-  // Load friends data
+  // Initial data load (+ mutuals)
   const loadData = useCallback(async () => {
     setDataLoading(true);
     const [friendsList, requests, friendships] = await Promise.all([
@@ -191,22 +688,23 @@ export default function FriendsPage() {
     setOutgoing(requests.outgoing);
     setMyFriendships(friendships);
     setDataLoading(false);
+
+    // Mutual counts — one batch for all friends + incoming-request users.
+    const ids = [
+      ...friendsList.map((f) => f.userId),
+      ...requests.incoming.map((r) => r.userId),
+    ];
+    if (ids.length) {
+      const counts = await getMutualFriendCounts(ids);
+      setMutualMap(counts);
+    } else {
+      setMutualMap({});
+    }
   }, []);
 
   useEffect(() => { if (authReady) loadData(); }, [authReady, loadData]);
 
-  // ?openChat=<friendUserId> deep-link is consumed by
-  // <OpenChatParamWatcher /> below, wrapped in <Suspense> so Next.js's
-  // CSR-bailout rule on useSearchParams() doesn't break the build.
-
-  // ── Direct-message unread counts + realtime inbox subscription ─────────────
-  // Initial counts come from getUnreadMessageCounts(). After that, a single
-  // postgres_changes subscription on direct_messages INSERT filtered to
-  // `recipient_id = me` increments the count for each new message's sender.
-  // The open ChatPanel calls back into onConversationRead to clear that
-  // friend's count when its messages are marked read. Pattern mirrors the
-  // postgres_changes subscription in useStudyRoom (room_members DELETE) —
-  // separate channel, no shared state with the study-room flow.
+  // Unread DM counts + realtime inbox
   useEffect(() => {
     if (!authReady || !myUserId) return;
     let cancelled = false;
@@ -214,8 +712,8 @@ export default function FriendsPage() {
       if (!cancelled) setUnreadCounts(counts);
     });
 
-    const supabase = createClient();
-    const channel: RealtimeChannel = supabase
+    const sb = createClient();
+    const channel: RealtimeChannel = sb
       .channel(`dm_inbox:${myUserId}`)
       .on(
         'postgres_changes',
@@ -235,79 +733,68 @@ export default function FriendsPage() {
       )
       .subscribe();
 
-    return () => {
-      cancelled = true;
-      channel.unsubscribe();
-    };
+    return () => { cancelled = true; channel.unsubscribe(); };
   }, [authReady, myUserId]);
 
   const handleConversationRead = useCallback((friendId: string) => {
     setUnreadCounts((prev) => {
       if (!prev[friendId]) return prev;
-      const next = { ...prev };
-      delete next[friendId];
-      return next;
+      const next = { ...prev }; delete next[friendId]; return next;
     });
   }, []);
 
-  // Debounced search
-  useEffect(() => {
-    if (!query.trim()) { setSearchResults([]); return; }
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    setSearchLoading(true);
-    searchTimerRef.current = setTimeout(async () => {
-      const results = await searchUsers(query);
-      setSearchResults(results);
-      setSearchLoading(false);
-    }, 350);
-    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
-  }, [query]);
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
-  // ── Actions ───────────────────────────────────────────────────────────────
-
-  const handleSendRequest = useCallback(async (receiverId: string) => {
-    setActionPending(receiverId);
-    const id = await sendFriendRequest(receiverId);
-    if (id) {
-      setMyFriendships((prev) => [...prev, { friendshipId: id, otherUserId: receiverId, status: 'pending', isSender: true }]);
-    }
-    setActionPending(null);
-  }, []);
-
-  const handleCancelRequest = useCallback(async (friendshipId: string, otherUserId: string) => {
-    setActionPending(otherUserId);
-    await cancelFriendRequest(friendshipId);
-    setMyFriendships((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
-    setOutgoing((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
-    setActionPending(null);
+  const handleSent = useCallback((receiverId: string, friendshipId: string) => {
+    setMyFriendships((prev) => [...prev, {
+      friendshipId, otherUserId: receiverId, status: 'pending', isSender: true,
+    }]);
+    // Re-fetch outgoing requests so it shows in the SENT subsection
+    void getFriendRequests().then((r) => setOutgoing(r.outgoing));
   }, []);
 
   const handleAccept = useCallback(async (friendshipId: string, otherUserId: string) => {
-    setActionPending(otherUserId);
+    setBusyId(otherUserId);
     await respondFriendRequest(friendshipId, 'accepted');
     const accepted = incoming.find((r) => r.friendshipId === friendshipId);
     setIncoming((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
     if (accepted) {
-      setFriends((prev) => [...prev, { friendshipId, userId: accepted.userId, username: accepted.username, avatarUrl: accepted.avatarUrl, isVip: accepted.isVip }]);
+      const newFriend: FriendEntry = {
+        friendshipId, userId: accepted.userId,
+        username: accepted.username, avatarUrl: accepted.avatarUrl, isVip: accepted.isVip,
+      };
+      setFriends((prev) => [...prev, newFriend]);
       setMyFriendships((prev) => prev.map((f) => f.friendshipId === friendshipId ? { ...f, status: 'accepted' } : f));
+      // Refresh mutuals for the new friend
+      void getMutualFriendCounts([accepted.userId]).then((c) =>
+        setMutualMap((prev) => ({ ...prev, ...c })),
+      );
     }
-    setActionPending(null);
+    setBusyId(null);
   }, [incoming]);
 
   const handleReject = useCallback(async (friendshipId: string, otherUserId: string) => {
-    setActionPending(otherUserId);
+    setBusyId(otherUserId);
     await respondFriendRequest(friendshipId, 'rejected');
     setIncoming((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
     setMyFriendships((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
-    setActionPending(null);
+    setBusyId(null);
+  }, []);
+
+  const handleCancel = useCallback(async (friendshipId: string, otherUserId: string) => {
+    setBusyId(otherUserId);
+    await cancelFriendRequest(friendshipId);
+    setMyFriendships((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
+    setOutgoing((prev) => prev.filter((r) => r.friendshipId !== friendshipId));
+    setBusyId(null);
   }, []);
 
   const handleRemoveFriend = useCallback(async (friendshipId: string, otherUserId: string) => {
-    setActionPending(otherUserId);
+    setBusyId(otherUserId);
     await removeFriend(friendshipId);
     setFriends((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
     setMyFriendships((prev) => prev.filter((f) => f.friendshipId !== friendshipId));
-    setActionPending(null);
+    setBusyId(null);
   }, []);
 
   const handleInvite = useCallback(async (friendUserId: string) => {
@@ -316,345 +803,166 @@ export default function FriendsPage() {
     setInviteSent((prev) => new Set([...prev, friendUserId]));
   }, [activeRoom]);
 
-  // ── Shared button styles ──────────────────────────────────────────────────
-
-  const primaryBtnStyle: React.CSSProperties = {
-    height: 30, padding: '0 12px', borderRadius: 4, border: 'none',
-    background: '#ffffff', color: '#0f172a', fontSize: 12, fontWeight: 600,
-    cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5,
-    transition: 'background 0.12s', whiteSpace: 'nowrap', flexShrink: 0,
-  };
-  const ghostBtnStyle: React.CSSProperties = {
-    height: 30, padding: '0 12px', borderRadius: 4, border: '1px solid var(--border)',
-    background: 'var(--bg-elevated)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500,
-    cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5,
-    transition: 'background 0.12s, color 0.12s', whiteSpace: 'nowrap', flexShrink: 0,
-  };
-  const dangerBtnStyle: React.CSSProperties = {
-    ...ghostBtnStyle,
-    color: '#ef4444', border: '1px solid rgba(239,68,68,0.35)',
-  };
-
-  // ── User card for search results ──────────────────────────────────────────
-
-  function SearchCard({ u }: { u: UserResult }) {
-    const { status, friendshipId } = getFsStatus(u.id, myFriendships);
-    const isPending = actionPending === u.id;
-    const displayN = u.username || u.email.split('@')[0];
-
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)',
-      }}>
-        <UserAvatar name={u.username ?? u.email} url={u.avatarUrl} size={38} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {displayN}
-          </p>
-        </div>
-        {status === 'none' && (
-          <button onClick={() => handleSendRequest(u.id)} disabled={isPending} style={{ ...primaryBtnStyle, opacity: isPending ? 0.6 : 1, cursor: isPending ? 'not-allowed' : 'pointer' }}>
-            <UserPlus size={12} /> {t('fr_add_friend')}
-          </button>
-        )}
-        {status === 'pending_sent' && (
-          <span style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Clock size={12} /> {t('fr_pending')}
-          </span>
-        )}
-        {status === 'pending_received' && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => handleAccept(friendshipId!, u.id)} disabled={isPending} style={{ ...primaryBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <Check size={12} /> {t('fr_accept')}
-            </button>
-            <button onClick={() => handleReject(friendshipId!, u.id)} disabled={isPending} style={{ ...ghostBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <X size={12} /> {t('fr_reject')}
-            </button>
-          </div>
-        )}
-        {status === 'accepted' && (
-          <span style={{ fontSize: 12, color: 'var(--accent)', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <UserCheck size={12} /> {t('fr_is_friend')}
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  // ── Friend card ───────────────────────────────────────────────────────────
-
-  function FriendCard({ f }: { f: FriendEntry }) {
-    const isPending = actionPending === f.userId;
-    const sent = inviteSent.has(f.userId);
-    const displayN = f.username || 'Unknown user';
-    const unread = unreadCounts[f.userId] ?? 0;
-
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)',
-      }}>
-        <UserAvatar name={f.username} url={f.avatarUrl} size={38} isVip={f.isVip} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {displayN}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={() => setOpenChat(f)}
-            title="Chat"
-            aria-label={`Chat with ${displayN}${unread > 0 ? `, ${unread} unread` : ''}`}
-            style={{
-              ...ghostBtnStyle,
-              position: 'relative',
-              paddingRight: unread > 0 ? 22 : 12,
-            }}
-          >
-            <MessageSquare size={12} /> Chat
-            {unread > 0 && (
-              <span style={{
-                position: 'absolute', top: -5, right: -5,
-                minWidth: 16, height: 16, padding: '0 4px',
-                borderRadius: 9999,
-                background: '#ef4444', color: '#fff',
-                fontSize: 9.5, fontWeight: 700, lineHeight: '16px',
-                textAlign: 'center',
-                boxShadow: '0 0 0 2px var(--bg-app)',
-              }}>
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </button>
-          {activeRoom && (
-            <button
-              onClick={() => handleInvite(f.userId)}
-              disabled={sent}
-              title={sent ? t('fr_invite_sent') : `${t('fr_invite_to')} ${activeRoom.roomName}`}
-              style={{
-                ...ghostBtnStyle,
-                color: sent ? 'var(--accent)' : 'var(--text-2)',
-                opacity: sent ? 0.7 : 1,
-                cursor: sent ? 'default' : 'pointer',
-              }}
-            >
-              {sent ? <><UserCheck size={12} /> {t('fr_invited')}</> : <><Users size={12} /> {t('fr_invite_room')}</>}
-            </button>
-          )}
-          <button
-            onClick={() => handleRemoveFriend(f.friendshipId, f.userId)}
-            disabled={isPending}
-            style={{ ...dangerBtnStyle, opacity: isPending ? 0.6 : 1 }}
-          >
-            <UserMinus size={12} /> {t('fr_remove')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Request card ──────────────────────────────────────────────────────────
-
-  function RequestCard({ r, direction }: { r: FriendRequest; direction: 'incoming' | 'outgoing' }) {
-    const isPending = actionPending === r.userId;
-    const displayN = r.username || 'Unknown user';
-
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 16px', borderBottom: '1px solid var(--border-subtle)',
-      }}>
-        <UserAvatar name={r.username} url={r.avatarUrl} size={38} isVip={r.isVip} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)' }}>{displayN}</p>
-          <p style={{ margin: '1px 0 0', fontSize: 11.5, color: 'var(--text-3)' }}>
-            {direction === 'incoming' ? t('fr_sent_request') : t('fr_request_pending')}
-          </p>
-        </div>
-        {direction === 'incoming' ? (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={() => handleAccept(r.friendshipId, r.userId)} disabled={isPending} style={{ ...primaryBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <Check size={12} /> {t('fr_accept')}
-            </button>
-            <button onClick={() => handleReject(r.friendshipId, r.userId)} disabled={isPending} style={{ ...ghostBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-              <X size={12} /> {t('fr_reject')}
-            </button>
-          </div>
-        ) : (
-          <button onClick={() => handleCancelRequest(r.friendshipId, r.userId)} disabled={isPending} style={{ ...dangerBtnStyle, opacity: isPending ? 0.6 : 1 }}>
-            {t('fr_cancel')}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  // Client-side filter for "All Friends" search
+  const filteredFriends = useMemo(() => {
+    const q = friendSearch.trim().toLowerCase();
+    if (!q) return friends;
+    return friends.filter((f) => (f.username ?? '').toLowerCase().includes(q));
+  }, [friends, friendSearch]);
 
   if (!authReady) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100dvh', background: 'var(--bg-app)' }}>
-        <span className="spinner" style={{ width: 24, height: 24, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)', display: 'block' }} />
+      <div style={{
+        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--bg-app)', minHeight: '100vh',
+      }}>
+        <span className="spinner" style={{
+          width: 24, height: 24, borderRadius: '50%',
+          border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)',
+          display: 'block',
+        }} />
       </div>
     );
   }
 
-  const requestCount = incoming.length + outgoing.length;
-
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit' }}>
-      {/* ── Header ── */}
-      <div style={{
-        height: 52, borderBottom: '1px solid var(--border-subtle)',
-        display: 'flex', alignItems: 'center', padding: '0 20px', gap: 14,
-        background: 'var(--bg-panel)',
+    <div style={{
+      flex: 1, minHeight: '100vh',
+      background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit',
+    }}>
+      <main style={{
+        maxWidth: 760, margin: '0 auto',
+        padding: '28px 24px 60px',
+        display: 'flex', flexDirection: 'column', gap: 20,
       }}>
-        <a
-          href="/workspace"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            fontSize: 12.5, fontWeight: 500, color: 'var(--text-3)',
-            textDecoration: 'none', transition: 'color 0.13s', flexShrink: 0,
-          }}
-          onMouseOver={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
-          onMouseOut={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-3)'; }}
-        >
-          <ChevronLeft size={14} /> {t('fr_back_workspace')}
-        </a>
-        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.02em', flex: 1 }}>
-          {t('fr_title')}
-        </span>
-        <NotificationBell />
-        <AvatarDropdown email={userEmail} displayName={displayName} avatarUrl={avatarUrl} isVip={isVip} />
-      </div>
 
-      {/* ── Active room banner ── */}
-      {activeRoom && (
-        <div style={{
-          background: 'var(--accent-muted)', borderBottom: '1px solid rgba(37,99,235,0.2)',
-          padding: '8px 24px', display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: 12.5, color: 'var(--accent)',
-        }}>
-          <Users size={13} />
-          <span>{t('fr_in_room')} <strong>{activeRoom.roomName}</strong> {t('fr_active_room_hint')}</span>
-        </div>
-      )}
-
-      {/* ── Content ── */}
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '28px 24px' }}>
-
-        {/* Search */}
-        <div style={{ position: 'relative', marginBottom: 24 }}>
-          <Search size={14} style={{
-            position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-            color: 'var(--text-3)', pointerEvents: 'none',
-          }} />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('fr_search_placeholder')}
-            className="app-input"
-            style={{
-              width: '100%', height: 40, padding: '0 36px',
-              borderRadius: 4, border: '1px solid var(--border)',
-              background: 'var(--bg-elevated)', color: 'var(--text-1)',
-              fontSize: 13.5, fontFamily: 'inherit', boxSizing: 'border-box',
-            }}
-          />
-          {query && (
-            <button
-              onClick={() => setQuery('')}
-              style={{
-                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', padding: 4,
-                display: 'flex', alignItems: 'center',
-              }}
-            >
-              <X size={13} />
-            </button>
-          )}
-        </div>
-
-        {/* Content area */}
-        {query.trim() ? (
-          /* ── Search results ── */
-          <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden' }}>
-            <p style={{ margin: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-              {t('fr_search_results')}
-            </p>
-            {searchLoading ? <Spinner /> : searchResults.length === 0
-              ? <EmptyState icon={Search} title={t('fr_no_results_title')} sub={t('fr_no_results_sub')} />
-              : searchResults.map((u) => <SearchCard key={u.id} u={u} />)
-            }
+        {/* Active-room banner (slim) */}
+        {activeRoom && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 14px',
+            background: 'var(--accent-muted)',
+            border: '1px solid var(--accent)',
+            borderRadius: 10,
+            fontSize: 12.5, color: 'var(--accent)',
+          }}>
+            <Users size={13} style={{ flexShrink: 0 }} />
+            <span>
+              You&apos;re in <strong>{activeRoom.roomName}</strong> — invite friends from the … menu.
+            </span>
           </div>
-        ) : (
-          /* ── Tabs ── */
-          <>
-            {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 0 }}>
-              {(['friends', 'requests'] as const).map((tabId) => (
-                <button
-                  key={tabId}
-                  onClick={() => setTab(tabId)}
+        )}
+
+        {/* Add Friend card */}
+        <AddFriendCard
+          myFriendships={myFriendships}
+          onSent={handleSent}
+        />
+
+        {/* Friend Requests */}
+        {!dataLoading && (
+          <RequestsSection
+            incoming={incoming}
+            outgoing={outgoing}
+            mutualMap={mutualMap}
+            busyId={busyId}
+            onAccept={handleAccept}
+            onReject={handleReject}
+            onCancel={handleCancel}
+          />
+        )}
+
+        {/* All Friends */}
+        <div>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 12, marginBottom: 12, flexWrap: 'wrap',
+          }}>
+            <SectionHeader>
+              <span>All Friends</span>
+              <span style={{ color: 'var(--text-2)' }}>·</span>
+              <span style={{ color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums' }}>
+                {friends.length}
+              </span>
+            </SectionHeader>
+            {friends.length > 0 && (
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <Search size={12} style={{
+                  position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                  color: 'var(--text-3)', pointerEvents: 'none',
+                }} />
+                <input
+                  value={friendSearch}
+                  onChange={(e) => setFriendSearch(e.target.value)}
+                  placeholder="Search friends…"
+                  aria-label="Search your friends"
                   style={{
-                    height: 36, padding: '0 14px', borderRadius: '8px 8px 0 0',
-                    background: tab === tabId ? 'var(--bg-panel)' : 'transparent',
-                    border: tab === tabId ? '1px solid var(--border-subtle)' : '1px solid transparent',
-                    borderBottom: tab === tabId ? '1px solid var(--bg-panel)' : '1px solid transparent',
-                    marginBottom: tab === tabId ? -1 : 0,
-                    color: tab === tabId ? 'var(--text-1)' : 'var(--text-3)',
-                    fontSize: 13, fontWeight: tab === tabId ? 600 : 400,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                    display: 'flex', alignItems: 'center', gap: 6,
+                    height: 30, paddingLeft: 28, paddingRight: 10,
+                    background: 'var(--bg-panel)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 6, fontSize: 12, color: 'var(--text-1)',
+                    outline: 'none', fontFamily: 'inherit',
+                    width: 180,
                   }}
-                >
-                  {tabId === 'friends' ? (
-                    <><Users size={13} /> {t('fr_tab_friends')} {friends.length > 0 && <span style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{friends.length}</span>}</>
-                  ) : (
-                    <><Clock size={13} /> {t('fr_tab_requests')} {requestCount > 0 && <span style={{ background: 'var(--accent)', color: '#fff', borderRadius: 4, padding: '0 6px', fontSize: 11, fontWeight: 700 }}>{requestCount}</span>}</>
-                  )}
-                </button>
+                />
+              </div>
+            )}
+          </div>
+
+          {dataLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+              <span className="spinner" style={{
+                width: 20, height: 20, borderRadius: '50%',
+                border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--accent)',
+              }} />
+            </div>
+          ) : friends.length === 0 ? (
+            <div style={{
+              textAlign: 'center', padding: '40px 24px',
+              background: 'var(--bg-panel)',
+              border: '1px dashed var(--border-subtle)',
+              borderRadius: 12,
+            }}>
+              <Users size={28} style={{ color: 'var(--text-3)', opacity: 0.45, marginBottom: 10 }} />
+              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
+                No friends yet
+              </p>
+              <p style={{ margin: 0, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                Use the Add Friend field above to search by username.
+              </p>
+            </div>
+          ) : filteredFriends.length === 0 ? (
+            <p style={{
+              textAlign: 'center', padding: '24px 0',
+              fontSize: 12.5, color: 'var(--text-3)',
+            }}>
+              No friends match &quot;{friendSearch}&quot;.
+            </p>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: 10,
+            }}>
+              {filteredFriends.map((f) => (
+                <FriendCard
+                  key={f.friendshipId}
+                  f={f}
+                  unread={unreadCounts[f.userId] ?? 0}
+                  mutuals={mutualMap[f.userId] ?? 0}
+                  activeRoom={activeRoom}
+                  inviteSent={inviteSent.has(f.userId)}
+                  onChat={setOpenChat}
+                  onRemove={handleRemoveFriend}
+                  onInvite={handleInvite}
+                />
               ))}
             </div>
+          )}
+        </div>
+      </main>
 
-            <div style={{ background: 'var(--bg-panel)', border: '1px solid var(--border)', borderRadius: '0 12px 12px 12px', overflow: 'hidden' }}>
-              {dataLoading ? <Spinner /> : tab === 'friends' ? (
-                friends.length === 0
-                  ? <EmptyState icon={Users} title={t('fr_no_friends_title')} sub={t('fr_no_friends_sub')} />
-                  : friends.map((f) => <FriendCard key={f.friendshipId} f={f} />)
-              ) : (
-                <>
-                  {incoming.length === 0 && outgoing.length === 0 && (
-                    <EmptyState icon={Clock} title={t('fr_no_requests_title')} sub={t('fr_no_requests_sub')} />
-                  )}
-                  {incoming.length > 0 && (
-                    <>
-                      <p style={{ margin: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-                        {t('fr_incoming')} ({incoming.length})
-                      </p>
-                      {incoming.map((r) => <RequestCard key={r.friendshipId} r={r} direction="incoming" />)}
-                    </>
-                  )}
-                  {outgoing.length > 0 && (
-                    <>
-                      <p style={{ margin: 0, padding: '10px 16px', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', borderBottom: '1px solid var(--border-subtle)' }}>
-                        {t('fr_outgoing')} ({outgoing.length})
-                      </p>
-                      {outgoing.map((r) => <RequestCard key={r.friendshipId} r={r} direction="outgoing" />)}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ?openChat=<userId> deep-link watcher — Suspense-isolated so
-          useSearchParams() doesn't trigger Next.js's CSR-bailout. */}
+      {/* ?openChat=<userId> deep-link */}
       <Suspense fallback={null}>
         <OpenChatParamWatcher
           friends={friends}
@@ -663,7 +971,6 @@ export default function FriendsPage() {
         />
       </Suspense>
 
-      {/* Direct-message chat panel (slides in from the right) */}
       {openChat && myUserId && (
         <ChatPanel
           friendId={openChat.userId}
