@@ -35,6 +35,13 @@ interface Props {
   // Split view
   splitMode: boolean;
   onToggleSplit?: () => void;   // undefined hides the button (e.g. PPTX)
+
+  /**
+   * Fullscreen-friendly variant: hides the bar surface + left/right
+   * groups so only the zoom pill floats centred above the document.
+   * Preserves zoom reachability without intruding on the immersive view.
+   */
+  compact?: boolean;
 }
 
 // ── Local building blocks ─────────────────────────────────────────────────────
@@ -123,35 +130,48 @@ export default function PdfTopToolbar({
   zoom, onZoomIn, onZoomOut, onZoomReset, canZoomIn, canZoomOut,
   isFullscreen, onToggleFullscreen,
   splitMode, onToggleSplit,
+  compact = false,
 }: Props) {
   return (
     <div
       role="toolbar"
       aria-label="Document view controls"
       style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center',
+        // Compact: lone zoom pill floats centred over the doc; full:
+        // three groups evenly distributed across the bar.
+        justifyContent: compact ? 'center' : 'space-between',
         height: 36, flexShrink: 0,
         padding: '0 12px',
         // bg-elevated (not bg-app) so the bar reads as a subtle lifted
         // surface against the workspace background. Without this the
         // bar is invisible and the lone Cursor button on the left looks
-        // like it's floating in empty space.
-        background: 'var(--bg-elevated)',
-        borderBottom: '1px solid var(--border-subtle)',
+        // like it's floating in empty space. Compact mode (fullscreen)
+        // drops the bar surface entirely so only the zoom pill is
+        // visible above the document.
+        background: compact ? 'transparent' : 'var(--bg-elevated)',
+        borderBottom: compact ? 'none' : '1px solid var(--border-subtle)',
+        // Sit above the doc + don't block pointer events outside the pill
+        // when bar is transparent (compact mode).
+        ...(compact ? { pointerEvents: 'none' as const } : null),
       }}
     >
-      {/* LEFT — selection tool */}
-      <GroupPill>
-        <ToolbarBtn
-          title="Select / cursor"
-          active={toolIsCursor}
-          onClick={onSelectCursor}
-        >
-          <MousePointer size={14} strokeWidth={1.8} />
-        </ToolbarBtn>
-      </GroupPill>
+      {/* LEFT — selection tool. Hidden in compact (fullscreen) mode. */}
+      {!compact && (
+        <GroupPill>
+          <ToolbarBtn
+            title="Select / cursor"
+            active={toolIsCursor}
+            onClick={onSelectCursor}
+          >
+            <MousePointer size={14} strokeWidth={1.8} />
+          </ToolbarBtn>
+        </GroupPill>
+      )}
 
-      {/* CENTER — zoom */}
+      {/* CENTER — zoom. Always visible. Re-enable pointer events on the
+          pill itself when in compact mode (parent disables them). */}
+      <div style={compact ? { pointerEvents: 'auto' } : undefined}>
       <GroupPill>
         <ToolbarBtn
           title="Zoom out"
@@ -194,27 +214,32 @@ export default function PdfTopToolbar({
           <Plus size={13} strokeWidth={2} />
         </ToolbarBtn>
       </GroupPill>
+      </div>
 
-      {/* RIGHT — fullscreen + split */}
-      <GroupPill>
-        <ToolbarBtn
-          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-          active={isFullscreen}
-          onClick={onToggleFullscreen}
-        >
-          {isFullscreen ? <Minimize2 size={14} strokeWidth={1.8} /> : <Maximize2 size={14} strokeWidth={1.8} />}
-        </ToolbarBtn>
-
-        {onToggleSplit && (
+      {/* RIGHT — fullscreen + split. Hidden in compact (fullscreen)
+          mode; the big top-right Exit Fullscreen button handles exit
+          and Split is doc-chrome rather than immersive-essential. */}
+      {!compact && (
+        <GroupPill>
           <ToolbarBtn
-            title={splitMode ? 'Exit split view' : 'Split view'}
-            active={splitMode}
-            onClick={onToggleSplit}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            active={isFullscreen}
+            onClick={onToggleFullscreen}
           >
-            <SplitIcon />
+            {isFullscreen ? <Minimize2 size={14} strokeWidth={1.8} /> : <Maximize2 size={14} strokeWidth={1.8} />}
           </ToolbarBtn>
-        )}
-      </GroupPill>
+
+          {onToggleSplit && (
+            <ToolbarBtn
+              title={splitMode ? 'Exit split view' : 'Split view'}
+              active={splitMode}
+              onClick={onToggleSplit}
+            >
+              <SplitIcon />
+            </ToolbarBtn>
+          )}
+        </GroupPill>
+      )}
     </div>
   );
 }
