@@ -1117,7 +1117,7 @@ export async function uploadRoomPdf(roomId: string, blob: Blob, docName: string)
 
 export async function createRoom(roomId: string, docName: string, pdfPath: string, maxMembers: number = 5): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
   const { error } = await sb().from('study_rooms').insert({
     id: roomId, host_user_id: uid, document_name: docName, pdf_path: pdfPath,
     status: 'active', max_members: maxMembers, expires_at: expiresAt,
