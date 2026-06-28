@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Link2, Check, ChevronLeft, ChevronRight,
-  MousePointer, Pencil, Eraser, Minus, Plus,
+  MousePointer, Pencil, Eraser, Highlighter, Minus, Plus,
   ChevronDown, FilePlus, UserPlus, UserCheck, X as XIcon,
   Mic, MicOff, Upload,
 } from 'lucide-react';
@@ -131,70 +131,187 @@ function VoiceWaveform({ speaking, size = 10 }: { speaking: boolean; size?: numb
 }
 
 // ── Toolbar primitives ────────────────────────────────────────────────────────
+// Visual contract mirrors src/components/BottomPillBar.tsx so the room toolbar
+// reads the same as the workspace — same pill geometry, same popover chrome,
+// same hover/active treatment. Tokenized so light/dark mode both work.
 
-function Divider() {
-  return <div style={{ width: 1, height: 22, background: '#333333', flexShrink: 0 }} />;
-}
-
-function ToolBtn({
-  active, onClick, title, children,
+function RoomPill({
+  icon, label, active, onClick, danger, accent, dropdown, disabled, badge,
 }: {
-  active?: boolean;
-  onClick: () => void;
-  title?: string;
-  children: React.ReactNode;
+  icon:     React.ReactNode;
+  label:    string;
+  active?:  boolean;
+  onClick?: () => void;
+  danger?:  boolean;
+  accent?:  boolean;
+  dropdown?: boolean;
+  disabled?: boolean;
+  badge?:   React.ReactNode;
 }) {
+  const fgIdle   = danger ? 'var(--red)' : accent ? 'var(--accent)' : 'var(--text-2)';
+  const fgActive = danger ? 'var(--red)' : 'var(--accent)';
+  const bgActive = danger ? 'var(--red-muted)' : 'var(--accent-muted)';
+  const borderActive = danger ? 'var(--red)' : 'var(--accent)';
   return (
     <button
       onClick={onClick}
-      title={title}
+      title={label}
+      aria-label={label}
+      aria-pressed={active}
+      disabled={disabled}
       style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: 30, padding: '0 9px', gap: 5,
-        borderRadius: 4, fontSize: 12, fontWeight: 500,
-        background: active ? '#3a3a3a' : '#222222',
-        color: '#ffffff',
-        border: `1px solid ${active ? '#555555' : '#333333'}`,
-        cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-        transition: 'background 0.12s, border-color 0.12s',
-        whiteSpace: 'nowrap',
+        position: 'relative',
+        display: 'flex', alignItems: 'center', gap: 4,
+        height: 34, padding: dropdown ? '0 9px 0 12px' : '0 12px',
+        borderRadius: 9999,
+        border: `1px solid ${active ? borderActive : 'transparent'}`,
+        background: active ? bgActive : 'transparent',
+        color: active ? fgActive : fgIdle,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontFamily: 'inherit',
+        flexShrink: 0,
+        opacity: disabled ? 0.4 : 1,
+        transition: 'background 0.13s, color 0.13s, border-color 0.13s',
       }}
-      onMouseOver={(e) => { if (!active) Object.assign(e.currentTarget.style, { background: '#2a2a2a', borderColor: '#444444' }); }}
-      onMouseOut={(e)  => { if (!active) Object.assign(e.currentTarget.style, { background: '#222222', borderColor: '#333333' }); }}
+      onMouseOver={(e) => {
+        if (disabled || active) return;
+        (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
+        (e.currentTarget as HTMLElement).style.color = 'var(--text-1)';
+      }}
+      onMouseOut={(e) => {
+        if (disabled || active) return;
+        (e.currentTarget as HTMLElement).style.background = 'transparent';
+        (e.currentTarget as HTMLElement).style.color = fgIdle;
+      }}
+    >
+      {icon}
+      {badge}
+      {dropdown && (
+        <ChevronDown size={10} strokeWidth={2.5} style={{ opacity: 0.6, marginLeft: 1 }} />
+      )}
+    </button>
+  );
+}
+
+// Slim second-row icon button (zoom / blank / voice / change PDF).
+function MiniBtn({
+  onClick, title, disabled, active, danger, accent, children,
+}: {
+  onClick:    () => void;
+  title?:     string;
+  disabled?:  boolean;
+  active?:    boolean;
+  danger?:    boolean;
+  accent?:    boolean;
+  children:   React.ReactNode;
+}) {
+  const fg = danger ? 'var(--red)' : accent ? '#22c55e' : active ? 'var(--text-1)' : 'var(--text-2)';
+  const bg = danger ? 'rgba(239,68,68,0.12)' : accent ? 'rgba(34,197,94,0.12)' : 'var(--bg-elevated)';
+  const bd = danger ? 'rgba(239,68,68,0.4)' : accent ? 'rgba(34,197,94,0.4)' : 'var(--border)';
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={title}
+      aria-label={title}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+        height: 28, padding: '0 10px',
+        borderRadius: 4, fontSize: 12, fontWeight: 500,
+        background: bg, color: fg,
+        border: `1px solid ${bd}`,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.45 : 1, flexShrink: 0,
+        fontFamily: 'inherit',
+        transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+      }}
+      onMouseOver={(e) => {
+        if (disabled || danger || accent) return;
+        (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
+        (e.currentTarget as HTMLElement).style.color = 'var(--text-1)';
+      }}
+      onMouseOut={(e) => {
+        if (disabled || danger || accent) return;
+        (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)';
+        (e.currentTarget as HTMLElement).style.color = active ? 'var(--text-1)' : 'var(--text-2)';
+      }}
     >
       {children}
     </button>
   );
 }
 
-function IconBtn({
-  onClick, title, disabled, children,
-}: {
-  onClick: () => void;
-  title?: string;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
+function RoomPopover({ children }: { children: React.ReactNode }) {
   return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={title}
+    <div
       style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        width: 30, height: 30, borderRadius: 4,
-        background: '#222222',
-        border: '1px solid #333333',
-        color: disabled ? '#555555' : '#ffffff',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.45 : 1, flexShrink: 0,
-        transition: 'background 0.12s',
+        position: 'absolute', left: 0,
+        bottom: '100%', marginBottom: 8,
+        minWidth: 220,
+        background: 'var(--bg-float)',
+        backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+        border: '1px solid var(--bg-float-border)',
+        boxShadow: 'var(--shadow-float)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        zIndex: 60,
       }}
-      onMouseOver={(e) => { if (!disabled) Object.assign(e.currentTarget.style, { background: '#2a2a2a' }); }}
-      onMouseOut={(e)  => { if (!disabled) Object.assign(e.currentTarget.style, { background: '#222222' }); }}
+      onClick={(e) => e.stopPropagation()}
     >
       {children}
-    </button>
+    </div>
+  );
+}
+
+function PopoverLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{
+      fontSize: 9.5, fontWeight: 700,
+      textTransform: 'uppercase', letterSpacing: '0.08em',
+      color: 'var(--text-3)', display: 'block', marginBottom: 6,
+    }}>
+      {children}
+    </span>
+  );
+}
+
+function PopoverHr() {
+  return <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 0' }} />;
+}
+
+function RoomColorRow({
+  color, setColor,
+}: { color: string; setColor: (c: string) => void }) {
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+      {PRESET_COLORS.map((c) => (
+        <button
+          key={c}
+          onClick={() => setColor(c)}
+          title={c}
+          style={{
+            width: 20, height: 20, borderRadius: '50%', background: c,
+            border: 'none', cursor: 'pointer', flexShrink: 0,
+            outline: color === c ? '2px solid var(--accent)' : '1.5px solid transparent',
+            outlineOffset: 2,
+            transform: color === c ? 'scale(1.18)' : 'scale(1)',
+            transition: 'transform 0.12s',
+          }}
+        />
+      ))}
+      <input
+        type="color"
+        value={color}
+        onChange={(e) => setColor(e.target.value)}
+        title="Custom color"
+        style={{
+          width: 20, height: 20,
+          border: '1px solid var(--border-strong)',
+          borderRadius: 4, background: 'var(--bg-elevated)',
+          padding: 0, cursor: 'pointer',
+        }}
+      />
+    </div>
   );
 }
 
@@ -244,6 +361,8 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [blankDrawings, setBlankDrawings] = useState<Record<string, string>>({});
   const [virtualIndex, setVirtualIndex]   = useState(0);
   const [blankMenuOpen, setBlankMenuOpen] = useState(false);
+  const [drawOpen, setDrawOpen]           = useState(false);
+  const [highlightOpen, setHighlightOpen] = useState(false);
   const [docChangePrompt, setDocChangePrompt] = useState<{ uploaderName: string; fileName: string } | null>(null);
   const pendingBlankIdRef = useRef<string | null>(null);
   const changePdfInputRef = useRef<HTMLInputElement>(null);
@@ -759,6 +878,27 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [blankMenuOpen]);
 
+  // Close drawing-pill popovers on outside click / Escape — same UX as the
+  // workspace BottomPillBar. The pills and their popovers share data-pill-root
+  // so taps inside don't dismiss; everything else does.
+  useEffect(() => {
+    if (!drawOpen && !highlightOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('[data-pill-root]')) return;
+      setDrawOpen(false); setHighlightOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setDrawOpen(false); setHighlightOpen(false); }
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [drawOpen, highlightOpen]);
+
   // Open invite modal — lazy-load friends on first open
   const handleOpenInvite = useCallback(async () => {
     setInviteOpen(true);
@@ -1000,156 +1140,55 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         </button>
       </div>
 
-      {/* ── Drawing toolbar ── */}
-      {/* Sits above the PDF area so the blank-page menu (and any future
-          toolbar popovers) can overflow downward without being clipped by
-          the next sibling's stacking context. */}
+      {/* ── Utility row: zoom · blank · voice · change PDF ── */}
+      {/* Sits between the room header and the PDF. Drawing tools moved to
+          the floating bottom pill bar (see further down) so this row stays
+          casual and uncluttered. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 14px', borderBottom: '1px solid #333333',
-        background: '#1a1a1a',
-        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.6)',
-        flexShrink: 0, flexWrap: 'wrap',
-        rowGap: 6,
+        padding: '8px 14px',
+        borderBottom: '1px solid var(--border-subtle)',
+        background: 'var(--bg-panel)',
+        flexShrink: 0, flexWrap: 'wrap', rowGap: 6,
         position: 'relative', zIndex: 90,
       }}>
-
-        {/* ── Tools ── */}
-        <div style={{ display: 'flex', gap: 3 }}>
-          <ToolBtn active={tool === 'cursor'} onClick={() => selectTool('cursor')} title={t('room_cursor')}>
-            <MousePointer size={13} />
-            <span>{t('room_cursor')}</span>
-          </ToolBtn>
-          <ToolBtn
-            active={tool === 'pen' && penType === 'normal'}
-            onClick={() => selectTool('pen', 'normal')}
-            title={t('room_pen')}
-          >
-            <Pencil size={13} />
-            <span>{t('room_pen')}</span>
-          </ToolBtn>
-          <ToolBtn
-            active={tool === 'pen' && penType === 'marker'}
-            onClick={() => selectTool('pen', 'marker')}
-            title={t('room_marker')}
-          >
-            <div style={{ width: 13, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.75 }} />
-            <span>{t('room_marker')}</span>
-          </ToolBtn>
-          <ToolBtn
-            active={tool === 'pen' && penType === 'highlighter'}
-            onClick={() => selectTool('pen', 'highlighter')}
-            title={t('room_highlight')}
-          >
-            <div style={{ width: 13, height: 8, borderRadius: 2, background: 'currentColor', opacity: 0.4 }} />
-            <span>{t('room_highlight')}</span>
-          </ToolBtn>
-          <ToolBtn active={tool === 'eraser'} onClick={() => selectTool('eraser')} title={t('room_eraser')}>
-            <Eraser size={13} />
-            <span>{t('room_eraser')}</span>
-          </ToolBtn>
-        </div>
-
-        <Divider />
-
-        {/* ── Color ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {PRESET_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                setColor(c);
-                if (tool === 'eraser' || tool === 'cursor') setTool('pen');
-              }}
-              title={c}
-              style={{
-                width: 20, height: 20, borderRadius: '50%', background: c,
-                border: 'none', cursor: 'pointer', flexShrink: 0,
-                outline: color === c && tool !== 'eraser' ? '2px solid var(--accent-hover)' : '1.5px solid transparent',
-                outlineOffset: 2,
-                transform: color === c && tool !== 'eraser' ? 'scale(1.2)' : 'scale(1)',
-                transition: 'transform 0.12s',
-              }}
-            />
-          ))}
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => {
-              setColor(e.target.value);
-              if (tool === 'eraser' || tool === 'cursor') setTool('pen');
-            }}
-            title="Custom color"
-            style={{
-              width: 20, height: 20,
-              border: '1px solid var(--border-strong)',
-              borderRadius: 4, background: 'var(--bg-input)',
-              padding: 0, cursor: 'pointer', flexShrink: 0,
-            }}
-          />
-        </div>
-
-        <Divider />
-
-        {/* ── Stroke size ── */}
-        <DragScrubber value={strokeSize} onChange={setStrokeSize} label="Size" width={110} />
-
-        <Divider />
-
-        {/* ── Zoom ── */}
+        {/* Zoom */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <IconBtn onClick={handleZoomOut} title={t('room_zoom_out')} disabled={zoom <= 0.5}>
+          <MiniBtn onClick={handleZoomOut} title={t('room_zoom_out')} disabled={zoom <= 0.5}>
             <Minus size={12} />
-          </IconBtn>
+          </MiniBtn>
           <span style={{
-            fontSize: 11.5, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
+            fontSize: 11.5, color: 'var(--text-3)',
+            fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
             minWidth: 36, textAlign: 'center', flexShrink: 0,
           }}>
             {Math.round(zoom * 100)}%
           </span>
-          <IconBtn onClick={handleZoomIn} title={t('room_zoom_in')} disabled={zoom >= 2.0}>
+          <MiniBtn onClick={handleZoomIn} title={t('room_zoom_in')} disabled={zoom >= 2.0}>
             <Plus size={12} />
-          </IconBtn>
+          </MiniBtn>
         </div>
 
-        <Divider />
-
-        {/* ── Add Blank Page ── */}
+        {/* Blank page (with theme dropdown) */}
         <div style={{ position: 'relative' }} data-blank-menu>
-          <button
-            onClick={() => setBlankMenuOpen((o) => !o)}
-            title={t('room_add_blank')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              height: 30, padding: '0 9px',
-              borderRadius: 4, fontSize: 12, fontWeight: 500,
-              background: blankMenuOpen ? 'var(--bg-hover)' : 'var(--bg-elevated)',
-              color: 'var(--text-2)',
-              border: '1px solid var(--border)',
-              cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-              transition: 'background 0.12s',
-            }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-            onMouseOut={(e) => { if (!blankMenuOpen) Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' }); }}
-          >
+          <MiniBtn onClick={() => setBlankMenuOpen((o) => !o)} title={t('room_add_blank')} active={blankMenuOpen}>
             <FilePlus size={13} />
             <span>{t('room_blank')}</span>
             <ChevronDown size={9} strokeWidth={2.5} style={{ opacity: 0.6 }} />
-          </button>
-
+          </MiniBtn>
           {blankMenuOpen && (
             <div style={{
               position: 'absolute', top: '100%', left: 0, marginTop: 4,
-              background: 'var(--bg-panel)',
+              background: 'var(--bg-float)',
               backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 4, padding: 10,
+              border: '1px solid var(--bg-float-border)',
+              boxShadow: 'var(--shadow-float)',
+              borderRadius: 8, padding: 10,
               zIndex: 9999,
             }}>
               <p style={{
                 fontSize: 9.5, fontWeight: 700, letterSpacing: '0.1em',
-                textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 8, margin: '0 0 8px',
+                textTransform: 'uppercase', color: 'var(--text-3)', margin: '0 0 8px',
               }}>
                 {t('room_background')}
               </p>
@@ -1189,75 +1228,36 @@ export default function RoomClient({ roomId }: { roomId: string }) {
           )}
         </div>
 
-        <Divider />
-
-        {/* ── Voice chat ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button
-            onClick={voiceConnected ? voiceLeave : voiceJoin}
-            disabled={voiceConnecting}
-            title={voiceConnected ? t('room_voice_in') : t('room_voice_chat')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              height: 30, padding: '0 9px',
-              borderRadius: 4, fontSize: 12, fontWeight: 500,
-              background: voiceConnected ? 'rgba(34,197,94,0.15)' : 'var(--bg-elevated)',
-              color: voiceConnected ? '#22c55e' : 'var(--text-2)',
-              border: `1px solid ${voiceConnected ? 'rgba(34,197,94,0.4)' : 'var(--border)'}`,
-              cursor: voiceConnecting ? 'wait' : 'pointer',
-              fontFamily: 'inherit', flexShrink: 0,
-              transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-              opacity: voiceConnecting ? 0.7 : 1,
-            }}
-          >
-            {voiceConnecting
-              ? <span className="spinner" style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block' }} />
-              : <Mic size={12} />
-            }
-            <span>{voiceConnected ? t('room_voice_in') : voiceConnecting ? t('room_voice_joining') : t('room_voice_chat')}</span>
-            {voiceConnected && <VoiceWaveform speaking={speakingIds.size > 0} size={10} />}
-          </button>
-
-          {voiceConnected && (
-            <button
-              onClick={voiceToggleMute}
-              title={voiceMuted ? t('room_unmute') : t('room_mute')}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: 30, height: 30, borderRadius: 4,
-                background: voiceMuted ? 'rgba(239,68,68,0.15)' : 'var(--bg-elevated)',
-                color: voiceMuted ? '#ef4444' : 'var(--text-2)',
-                border: `1px solid ${voiceMuted ? 'rgba(239,68,68,0.4)' : 'var(--border)'}`,
-                cursor: 'pointer', flexShrink: 0,
-                transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-              }}
-            >
-              {voiceMuted ? <MicOff size={13} /> : <Mic size={13} />}
-            </button>
-          )}
-        </div>
-
-        <Divider />
-
-        {/* ── Change PDF ── */}
-        <button
-          onClick={() => changePdfInputRef.current?.click()}
-          title="Upload a different PDF"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            height: 30, padding: '0 9px',
-            borderRadius: 4, fontSize: 12, fontWeight: 500,
-            background: 'var(--bg-elevated)', color: 'var(--text-2)',
-            border: '1px solid var(--border)', cursor: 'pointer',
-            fontFamily: 'inherit', flexShrink: 0,
-            transition: 'background 0.12s, color 0.12s',
-          }}
-          onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-          onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-elevated)', color: 'var(--text-2)' })}
+        {/* Voice chat connect + mute */}
+        <MiniBtn
+          onClick={voiceConnected ? voiceLeave : voiceJoin}
+          disabled={voiceConnecting}
+          title={voiceConnected ? t('room_voice_in') : t('room_voice_chat')}
+          accent={voiceConnected}
         >
+          {voiceConnecting
+            ? <span className="spinner" style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block' }} />
+            : <Mic size={12} />
+          }
+          <span>{voiceConnected ? t('room_voice_in') : voiceConnecting ? t('room_voice_joining') : t('room_voice_chat')}</span>
+          {voiceConnected && <VoiceWaveform speaking={speakingIds.size > 0} size={10} />}
+        </MiniBtn>
+
+        {voiceConnected && (
+          <MiniBtn
+            onClick={voiceToggleMute}
+            title={voiceMuted ? t('room_unmute') : t('room_mute')}
+            danger={voiceMuted}
+          >
+            {voiceMuted ? <MicOff size={13} /> : <Mic size={13} />}
+          </MiniBtn>
+        )}
+
+        {/* Change PDF */}
+        <MiniBtn onClick={() => changePdfInputRef.current?.click()} title="Upload a different PDF">
           <Upload size={13} />
           <span>Change PDF</span>
-        </button>
+        </MiniBtn>
         <input
           ref={changePdfInputRef}
           type="file"
@@ -1335,6 +1335,98 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             saveBlankDrawing={handleSaveBlankDrawing}
           />
         )}
+
+        {/* ── Floating drawing-tools pill bar ── */}
+        {/* Same shape as workspace BottomPillBar — Cursor · Pen · Marker
+            · Highlight · Eraser. Pen + Highlight open color/size popovers
+            above; Marker and Eraser activate immediately. */}
+        <div
+          data-pill-root
+          role="toolbar"
+          aria-label="Drawing tools"
+          style={{
+            position: 'absolute', left: '50%', bottom: 18,
+            transform: 'translateX(-50%)',
+            zIndex: 30,
+            display: 'flex', alignItems: 'center', gap: 2,
+            padding: '5px 6px',
+            background: 'var(--bg-float)',
+            backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid var(--bg-float-border)',
+            boxShadow: 'var(--shadow-float)',
+            borderRadius: 9999,
+            maxWidth: 'calc(100% - 32px)',
+          }}
+        >
+          <RoomPill
+            label={t('room_cursor')}
+            icon={<MousePointer size={15} strokeWidth={1.8} />}
+            active={tool === 'cursor'}
+            onClick={() => { selectTool('cursor'); setDrawOpen(false); setHighlightOpen(false); }}
+          />
+
+          {/* Pen — popover with color + size */}
+          <div style={{ position: 'relative' }}>
+            <RoomPill
+              label={t('room_pen')}
+              icon={<Pencil size={15} strokeWidth={1.8} />}
+              active={tool === 'pen' && penType === 'normal'}
+              dropdown
+              onClick={() => {
+                selectTool('pen', 'normal');
+                setHighlightOpen(false);
+                setDrawOpen((o) => !o);
+              }}
+            />
+            {drawOpen && (
+              <RoomPopover>
+                <PopoverLabel>Color</PopoverLabel>
+                <RoomColorRow color={color} setColor={(c) => { setColor(c); if (tool === 'eraser' || tool === 'cursor') selectTool('pen', 'normal'); }} />
+                <PopoverHr />
+                <PopoverLabel>Size</PopoverLabel>
+                <DragScrubber value={strokeSize} onChange={setStrokeSize} />
+              </RoomPopover>
+            )}
+          </div>
+
+          <RoomPill
+            label={t('room_marker')}
+            icon={<div style={{ width: 14, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.75 }} />}
+            active={tool === 'pen' && penType === 'marker'}
+            onClick={() => { selectTool('pen', 'marker'); setDrawOpen(false); setHighlightOpen(false); }}
+          />
+
+          {/* Highlight — popover with color + size */}
+          <div style={{ position: 'relative' }}>
+            <RoomPill
+              label={t('room_highlight')}
+              icon={<Highlighter size={15} strokeWidth={1.8} />}
+              active={tool === 'pen' && penType === 'highlighter'}
+              dropdown
+              onClick={() => {
+                selectTool('pen', 'highlighter');
+                setDrawOpen(false);
+                setHighlightOpen((o) => !o);
+              }}
+            />
+            {highlightOpen && (
+              <RoomPopover>
+                <PopoverLabel>Highlighter color</PopoverLabel>
+                <RoomColorRow color={color} setColor={setColor} />
+                <PopoverHr />
+                <PopoverLabel>Size</PopoverLabel>
+                <DragScrubber value={strokeSize} onChange={setStrokeSize} />
+              </RoomPopover>
+            )}
+          </div>
+
+          <RoomPill
+            label={t('room_eraser')}
+            icon={<Eraser size={15} strokeWidth={1.8} />}
+            active={tool === 'eraser'}
+            onClick={() => { selectTool('eraser'); setDrawOpen(false); setHighlightOpen(false); }}
+          />
+        </div>
       </div>
 
       {/* ── Voice Notes ── */}
