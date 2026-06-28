@@ -6,7 +6,7 @@ import {
   BookOpen, Files, Layers, Video, Users, MessageCircle, Settings, Sparkles, Clock,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { PLAN_LIMITS, type Plan } from '@/lib/planLimits';
+import { effectivePlanLimits, type Plan } from '@/lib/planLimits';
 
 /**
  * Shared left navigation rail used by the (app) route group. Replaces
@@ -208,7 +208,7 @@ function UsageWidget({ kind }: { kind: 'ai' | 'study' }) {
         if (cancelled) return;
         const plan = (profileRes.data?.plan ?? 'free') as Plan;
         const isVip = !!profileRes.data?.is_vip;
-        const max = isVip ? Infinity : PLAN_LIMITS[plan].aiRequestsPerMonth;
+        const max = effectivePlanLimits(plan, isVip).aiRequestsPerMonth;
         setData({ value: (usageRes.data?.count as number | undefined) ?? 0, max });
       } else {
         const weekStart = new Date();
