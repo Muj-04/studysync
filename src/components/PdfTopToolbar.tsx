@@ -109,7 +109,11 @@ export default function PdfTopToolbar({
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         height: 36, flexShrink: 0,
         padding: '0 12px',
-        background: 'var(--bg-app)',
+        // bg-elevated (not bg-app) so the bar reads as a subtle lifted
+        // surface against the workspace background. Without this the
+        // bar is invisible and the lone Cursor button on the left looks
+        // like it's floating in empty space.
+        background: 'var(--bg-elevated)',
         borderBottom: '1px solid var(--border-subtle)',
       }}
     >
@@ -124,14 +128,16 @@ export default function PdfTopToolbar({
         </ToolbarBtn>
       </div>
 
-      {/* CENTER — zoom group, pill-grouped */}
+      {/* CENTER — zoom group, pill-grouped. Uses --bg-panel so it
+          stays visually distinct from the surrounding bar (which is
+          now --bg-elevated). */}
       <div
         style={{
           display: 'flex', alignItems: 'center', gap: 2,
           padding: 2,
           borderRadius: 9999,
-          border: '1px solid var(--border-subtle)',
-          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-panel)',
           flexShrink: 0,
         }}
       >

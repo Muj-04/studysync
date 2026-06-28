@@ -2339,22 +2339,27 @@ export default function WorkspacePage() {
               <>
                 {/* PDF top toolbar — Figma centerpiece for the doc area.
                     Owns cursor/select, zoom group, fullscreen and split.
-                    Zoom moved here from PageNavigation; split moved here
-                    from the DocTabsBar tool strip. */}
-                <PdfTopToolbar
-                  toolIsCursor={atTool === 'cursor'}
-                  onSelectCursor={() => atSetTool('cursor')}
-                  zoom={leftZoom}
-                  onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
-                  onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
-                  onZoomReset={() => handleLeftZoomChange(1.0)}
-                  canZoomIn={leftZoom < 2}
-                  canZoomOut={leftZoom > 0.5}
-                  isFullscreen={isFullscreen}
-                  onToggleFullscreen={toggleFullscreen}
-                  splitMode={splitMode}
-                  onToggleSplit={!isPPTX ? () => setSplitMode((m) => !m) : undefined}
-                />
+                    Hidden in fullscreen so it doesn't intrude on the
+                    immersive document view (matches the header at L2007
+                    which also collapses to height 0 in fullscreen). The
+                    fullscreen-exit affordance lives in the floating
+                    bottom-right Minimize2 button rendered further down. */}
+                {!isFullscreen && (
+                  <PdfTopToolbar
+                    toolIsCursor={atTool === 'cursor'}
+                    onSelectCursor={() => atSetTool('cursor')}
+                    zoom={leftZoom}
+                    onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
+                    onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
+                    onZoomReset={() => handleLeftZoomChange(1.0)}
+                    canZoomIn={leftZoom < 2}
+                    canZoomOut={leftZoom > 0.5}
+                    isFullscreen={isFullscreen}
+                    onToggleFullscreen={toggleFullscreen}
+                    splitMode={splitMode}
+                    onToggleSplit={!isPPTX ? () => setSplitMode((m) => !m) : undefined}
+                  />
+                )}
 
                 {/* ── Content area ── */}
                 <div style={{
