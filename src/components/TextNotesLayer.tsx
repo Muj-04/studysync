@@ -1,7 +1,15 @@
 'use client';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
-import type { TextNote } from '@/types';
+import type { TextNote, NoteCategory } from '@/types';
+
+// Category-picker dots. Mirrors the Notes-tab token mapping
+// (NotesTabContent.tsx). Order = display order in the toolbar.
+const CATEGORY_DOTS: ReadonlyArray<{ id: NoteCategory; label: string; color: string }> = [
+  { id: 'important', label: 'Important',  color: 'var(--note-red-text)'    },
+  { id: 'review',    label: 'To review',  color: 'var(--note-yellow-text)' },
+  { id: 'idea',      label: 'Idea',       color: 'var(--note-blue-text)'   },
+];
 
 const DRAG_THRESHOLD = 4;
 const HANDLE_H = 14; // px height of the top drag-handle strip
@@ -184,6 +192,47 @@ function NoteItem({
             }}
             title="Text color"
           />
+          <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 1px' }} />
+          {/* Category dots — click sets/toggles the note's category. Active
+              dot gets a filled background + ring. Clicking the active dot
+              again clears it (uncategorized). */}
+          {CATEGORY_DOTS.map(({ id, label, color }) => {
+            const active = note.category === id;
+            return (
+              <button
+                key={id}
+                title={active ? `Clear ${label}` : label}
+                aria-label={active ? `Clear ${label} category` : `Set ${label} category`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange({
+                    ...note,
+                    category: active ? undefined : id,
+                  });
+                }}
+                style={{
+                  width: 18, height: 18,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  borderRadius: 4,
+                  background: 'transparent',
+                  border: `1px solid ${active ? color : 'transparent'}`,
+                  cursor: 'pointer', padding: 0, fontFamily: 'inherit',
+                  transition: 'background 0.12s, border-color 0.12s',
+                }}
+                onMouseOver={(e) => {
+                  if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)';
+                }}
+                onMouseOut={(e) => {
+                  if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent';
+                }}
+              >
+                <span style={{
+                  width: 9, height: 9, borderRadius: '50%',
+                  background: color, display: 'block',
+                }} />
+              </button>
+            );
+          })}
           <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 1px' }} />
           <ToolBtn
             title="Delete note"

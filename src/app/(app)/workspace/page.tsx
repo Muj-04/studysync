@@ -2754,6 +2754,13 @@ export default function WorkspacePage() {
                   onNavigate={setVirtualIndex}
                   onDeleteTextNote={handleDeleteTextNote}
                   onDeleteVoiceNote={deleteNote}
+                  onAddNote={hasDocument ? () => atSetTool('text') : undefined}
+                  onAddDrawing={hasDocument ? () => { atSetTool('pen'); atSetPenType('normal'); } : undefined}
+                  onAddBookmark={hasDocument ? handleToggleBookmark : undefined}
+                  isBookmarked={isCurrentPageBookmarked}
+                  onAddFlashcard={() => { setRightPanelOpen(true); setRightPanelTab('ai'); }}
+                  onRecordVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
+                  isRecording={isRecording}
                 />
               }
               aiAssistant={
