@@ -52,6 +52,9 @@ interface Props {
   docPageImages?:         Record<number, PDFPageImage[]>;
   currentPdfPageForImages?: number | null;
   onDeletePageImage?:     (pageNumber: number, imageId: string) => void;
+  /** Relocated from PageNavigation as part of the bottom-area cleanup —
+   *  the white/dark picker lives inside the Image submenu now. */
+  onInsertBlankPage?:     (theme: 'white' | 'dark') => void;
 
   // Bookmark pill
   onToggleBookmark?: () => void;
@@ -257,6 +260,7 @@ export default function BottomPillBar({
   onActivateNotes,
   onInsertImageBlank, onAddImageToPage, onAddImageAsNewPage,
   docPageImages, currentPdfPageForImages, onDeletePageImage,
+  onInsertBlankPage,
   onToggleBookmark, isBookmarked = false,
   onVoiceNote, isRecording = false,
   onClearAllDrawings, onCreateRoom,
@@ -492,9 +496,9 @@ export default function BottomPillBar({
         {/* Image */}
         <div style={{ position: 'relative' }}>
           <PillButton
-            label="Insert image"
+            label="Add to document"
             icon={<ImagePlus size={15} strokeWidth={1.8} />}
-            disabled={!canInsert && !canManage}
+            disabled={!canInsert && !canManage && !onInsertBlankPage}
             dropdown
             onClick={() => {
               setDrawOpen(false); setHighlightOpen(false);
@@ -555,6 +559,58 @@ export default function BottomPillBar({
                 <Trash2 size={13} />
                 Manage page images
               </button>
+
+              {/* Relocated from PageNavigation as part of the bottom-area
+                  cleanup — the white/dark blank-page picker now lives
+                  here alongside the image actions. */}
+              {onInsertBlankPage && (
+                <>
+                  <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 6px' }} />
+                  <div style={{ padding: '6px 10px 4px' }}>
+                    <p style={{
+                      margin: '0 0 6px', fontSize: 9.5, fontWeight: 700,
+                      letterSpacing: '0.1em', textTransform: 'uppercase',
+                      color: 'var(--text-3)',
+                    }}>
+                      Add blank page
+                    </p>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {([
+                        { theme: 'white', label: 'White', bg: '#ffffff', dot: 'rgba(0,0,0,0.18)' },
+                        { theme: 'dark',  label: 'Dark',  bg: '#1e1e2e', dot: 'rgba(255,255,255,0.22)' },
+                      ] as const).map(({ theme, label, bg, dot }) => (
+                        <button
+                          key={theme}
+                          onClick={() => { onInsertBlankPage(theme); setImageMenuOpen(false); }}
+                          title={`Add ${label.toLowerCase()} blank page after current`}
+                          style={{
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                            flex: 1, padding: '6px 4px',
+                            border: '1px solid var(--border)', borderRadius: 6,
+                            background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+                            transition: 'background 0.12s, border-color 0.12s',
+                          }}
+                          onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                            background: 'var(--bg-hover)', borderColor: 'var(--border-strong)',
+                          })}
+                          onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                            background: 'transparent', borderColor: 'var(--border)',
+                          })}
+                        >
+                          <div style={{
+                            width: '100%', height: 26, borderRadius: 4,
+                            backgroundColor: bg,
+                            backgroundImage: `radial-gradient(circle, ${dot} 1.1px, transparent 1.1px)`,
+                            backgroundSize: '7px 7px',
+                            border: '1px solid rgba(128,128,128,0.2)',
+                          }} />
+                          <span style={{ fontSize: 10.5, color: 'var(--text-2)' }}>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
