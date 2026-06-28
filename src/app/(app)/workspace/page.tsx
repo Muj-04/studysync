@@ -31,7 +31,6 @@ import AIAssistantTabContent from '@/components/AIAssistantTabContent';
 import ChatTabContent from '@/components/ChatTabContent';
 import BottomPillBar from '@/components/BottomPillBar';
 import PdfTopToolbar from '@/components/PdfTopToolbar';
-import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
 import AvatarDropdown from '@/components/AvatarDropdown';
@@ -2587,27 +2586,6 @@ export default function WorkspacePage() {
                     : 'max-height 0.3s cubic-bezier(0,0,0.2,1)',
                 }}>
 
-                  {/* Voice notes panel: hidden in scroll mode (shown per-page there) */}
-                  {viewMode !== 'scroll' && (
-                    <VoiceNotesSheet
-                      isOpen={voiceSheetOpen}
-                      onToggle={() => setVoiceSheetOpen((o) => !o)}
-                      notes={pageNotes}
-                      pageKey={pageKey}
-                      documentId={activeDocument.id}
-                      pageNumber={pageIdentifier}
-                      isRecording={isRecording}
-                      recordingDuration={recordingDuration}
-                      recordingContext={recordingContext}
-                      onStart={() => startRecording(activeDocument.id, pageIdentifier)}
-                      onStop={stopRecording}
-                      onDelete={deleteNote}
-                      onUpdateTitle={updateNoteTitle}
-                      listRef={voiceNoteListRef}
-                      hideRecorder
-                    />
-                  )}
-
                   <PageNavigation
                     currentPage={virtualIndex + 1}
                     pageCount={virtualSequence.length}
@@ -2615,12 +2593,6 @@ export default function WorkspacePage() {
                     onPrev={goVirtualPrev}
                     onNext={goVirtualNext}
                     onGoToPage={goVirtualToPage}
-                    onInsertBlankPage={handleInsertBlankPage}
-                    onToggleDraw={undefined}
-                    isDrawing={false}
-                    onHideBar={() => setNavBarVisible(false)}
-                    viewMode={isPPTX ? undefined : viewMode}
-                    onViewModeChange={isPPTX || showSplit ? undefined : setViewMode}
                   />
                 </div>
 
@@ -2644,6 +2616,7 @@ export default function WorkspacePage() {
                   onInsertImageBlank={isBlankPage ? handleInsertImage : undefined}
                   onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
                   onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
+                  onInsertBlankPage={hasDocument ? handleInsertBlankPage : undefined}
                   docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
                   currentPdfPageForImages={currentPdfPage}
                   onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
