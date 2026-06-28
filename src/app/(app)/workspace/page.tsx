@@ -30,6 +30,7 @@ import NotesTabContent from '@/components/NotesTabContent';
 import AIAssistantTabContent from '@/components/AIAssistantTabContent';
 import ChatTabContent from '@/components/ChatTabContent';
 import BottomPillBar from '@/components/BottomPillBar';
+import PdfTopToolbar from '@/components/PdfTopToolbar';
 import VoiceNotesSheet from '@/components/VoiceNotesSheet';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
@@ -2249,16 +2250,9 @@ export default function WorkspacePage() {
 
                   <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
 
-                  {!isPPTX && (
-                    <HdrBtn
-                      onClick={() => setSplitMode((m) => !m)}
-                      title={splitMode ? t('ws_exit_split') : t('ws_enter_split')}
-                      active={splitMode}
-                    >
-                      <SplitIcon />
-                    </HdrBtn>
-                  )}
-
+                  {/* Split-view toggle moved to PdfTopToolbar above the doc
+                      so it sits with the other view controls (zoom +
+                      fullscreen). Only the right-panel toggle remains here. */}
                   <HdrBtn
                     onClick={() => setRightPanelOpen((o) => !o)}
                     title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
@@ -2343,6 +2337,25 @@ export default function WorkspacePage() {
             />
             {activeDocument && (
               <>
+                {/* PDF top toolbar — Figma centerpiece for the doc area.
+                    Owns cursor/select, zoom group, fullscreen and split.
+                    Zoom moved here from PageNavigation; split moved here
+                    from the DocTabsBar tool strip. */}
+                <PdfTopToolbar
+                  toolIsCursor={atTool === 'cursor'}
+                  onSelectCursor={() => atSetTool('cursor')}
+                  zoom={leftZoom}
+                  onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
+                  onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
+                  onZoomReset={() => handleLeftZoomChange(1.0)}
+                  canZoomIn={leftZoom < 2}
+                  canZoomOut={leftZoom > 0.5}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={toggleFullscreen}
+                  splitMode={splitMode}
+                  onToggleSplit={!isPPTX ? () => setSplitMode((m) => !m) : undefined}
+                />
+
                 {/* ── Content area ── */}
                 <div style={{
                   flex: 1, overflow: 'hidden',
@@ -2600,10 +2613,6 @@ export default function WorkspacePage() {
                     onInsertBlankPage={handleInsertBlankPage}
                     onToggleDraw={undefined}
                     isDrawing={false}
-                    zoom={leftZoom}
-                    onZoomChange={handleLeftZoomChange}
-                    onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
-                    onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
                     onHideBar={() => setNavBarVisible(false)}
                     viewMode={isPPTX ? undefined : viewMode}
                     onViewModeChange={isPPTX || showSplit ? undefined : setViewMode}
