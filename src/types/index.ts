@@ -67,6 +67,8 @@ export interface WorkspaceSession {
   createdAt: Date;
 }
 
+export type NoteCategory = 'important' | 'review' | 'idea';
+
 export interface TextNote {
   id: string;
   x: number;        // 0..100 (% of page width)
@@ -76,6 +78,9 @@ export interface TextNote {
   content: string;
   fontSize: number; // px
   color: string;    // hex
+  /** Optional Figma-aligned category — NULL = uncategorized. Persisted
+      in text_notes.category (see 2026-06-28_text_notes_category.sql). */
+  category?: NoteCategory;
 }
 
 export interface KeyTerm {
