@@ -643,7 +643,14 @@ const ScrollPageItem = memo(function ScrollPageItem({
           };
           appliedStrokeIdsRef.current.add(stroke.id);
           console.log('[Draw] stopDraw EMIT', { pageKey, strokeId: stroke.id, points: points.length });
+          // Sentinel — surfaces the function ref's type at the actual call
+          // site. If this logs 'function' but STROKE_DIAG_A doesn't appear,
+          // the call site is invoking a different function than the
+          // RoomClient-defined handleStrokeComplete (stale memo / closure /
+          // bundle mismatch).
+          console.log('STROKE_DIAG_CALL_SITE pageKey/strokeId/cbType', pageKey, stroke.id, typeof onStrokeComplete);
           onStrokeComplete?.(pageKey, stroke);
+          console.log('STROKE_DIAG_CALL_SITE_RETURNED', stroke.id);
         } else {
           console.warn('[Draw] stopDraw NO-EMIT — points.length=0', { pageKey, tool });
         }
