@@ -438,6 +438,7 @@ export async function saveTextNotes(docId: string, pageKey: string, notes: TextN
     id: n.id, user_id: uid, document_id: docId, page_key: pageKey,
     x: n.x, y: n.y, width: n.width, height: n.height,
     content: n.content, font_size: n.fontSize, color: n.color,
+    category: n.category ?? null,
   })));
   if (insErr) console.error('[DB] saveTextNotes insert error:', insErr.message, 'docId:', docId, 'pageKey:', pageKey);
   else console.log('[DB] saveTextNotes OK — docId:', docId, 'pageKey:', pageKey, 'count:', notes.length);
@@ -451,7 +452,14 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
   console.log('[DB] fetchTextNotes rows:', data?.length ?? 0, 'error:', error?.message ?? null);
   const map: Record<string, TextNote[]> = {};
   for (const r of data ?? []) {
-    const note: TextNote = { id: r.id, x: r.x, y: r.y, width: r.width, height: r.height, content: r.content, fontSize: r.font_size, color: r.color };
+    const cat = r.category as string | null | undefined;
+    const note: TextNote = {
+      id: r.id, x: r.x, y: r.y, width: r.width, height: r.height,
+      content: r.content, fontSize: r.font_size, color: r.color,
+      ...(cat === 'important' || cat === 'review' || cat === 'idea'
+        ? { category: cat as TextNote['category'] }
+        : {}),
+    };
     (map[r.page_key] ??= []).push(note);
   }
   return map;
@@ -1109,7 +1117,7 @@ export async function uploadRoomPdf(roomId: string, blob: Blob, docName: string)
 
 export async function createRoom(roomId: string, docName: string, pdfPath: string, maxMembers: number = 5): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
   const { error } = await sb().from('study_rooms').insert({
     id: roomId, host_user_id: uid, document_name: docName, pdf_path: pdfPath,
     status: 'active', max_members: maxMembers, expires_at: expiresAt,
@@ -1133,26 +1141,36 @@ export async function fetchRoom(roomId: string): Promise<{
 }
 
 export async function joinRoom(roomId: string): Promise<{ error?: string }> {
-  const uid = await userId(); if (!uid) return { error: 'unauthenticated' };
-
-  // Re-joining: allow existing members through without capacity check
-  const { data: existing } = await sb().from('room_members')
-    .select('user_id').eq('room_id', roomId).eq('user_id', uid).maybeSingle();
-
-  if (!existing) {
-    const [{ count }, { data: room }] = await Promise.all([
-      sb().from('room_members').select('user_id', { count: 'exact', head: true }).eq('room_id', roomId),
-      sb().from('study_rooms').select('max_members, status').eq('id', roomId).maybeSingle(),
-    ]);
-    if (room?.status === 'closed') return { error: 'closed' };
-    if ((count ?? 0) >= (room?.max_members ?? 10)) return { error: 'full' };
+  // Atomic join via SECURITY DEFINER RPC — locks study_rooms row, checks
+  // capacity under the lock, inserts on success. The previous JS body
+  // was read-then-write (audit C-5): two concurrent joiners both saw
+  // count<max and both inserted, exceeding the cap and bypassing the
+  // Premium/Pro room-size paywall.
+  //
+  // Migration: supabase/migrations/2026-06-27_join_room_atomic.sql
+  // RPC returns: 'joined' | 'rejoined' | 'full' | 'closed' |
+  //              'not_found' | 'unauthenticated'.
+  // Session-state probe — confirms whether the client we're about to call
+  // the RPC with actually has a valid JWT. A null/expired session here
+  // explains the 403s on the subsequent room_members SELECT (auth.uid()
+  // resolves to null inside Postgres → RLS rejects).
+  const client = sb();
+  const { data: sess } = await client.auth.getSession();
+  console.log('[DB] joinRoom session probe', {
+    hasSession:   !!sess.session,
+    userId:       sess.session?.user?.id ?? null,
+    expiresAt:    sess.session?.expires_at ?? null,
+    expiresInSec: sess.session?.expires_at ? (sess.session.expires_at - Math.floor(Date.now() / 1000)) : null,
+    tokenPrefix:  sess.session?.access_token ? sess.session.access_token.slice(0, 12) + '…' : null,
+  });
+  const { data, error } = await client.rpc('join_room_atomic', { p_room_id: roomId });
+  if (error) {
+    console.error('[DB] joinRoom RPC error:', error.message);
+    return { error: error.message };
   }
-
-  await sb().from('room_members').upsert(
-    { room_id: roomId, user_id: uid },
-    { onConflict: 'room_id,user_id' },
-  );
-  return {};
+  const result = (data ?? '') as string;
+  if (result === 'joined' || result === 'rejoined') return {};
+  return { error: result };
 }
 
 export async function leaveRoom(roomId: string): Promise<{ wasLastMember: boolean }> {
@@ -1197,6 +1215,135 @@ export async function fetchAllRoomDrawings(roomId: string): Promise<Array<{ page
     .eq('room_id', roomId);
   if (error) { console.error('[DB] fetchAllRoomDrawings error:', error.message); return []; }
   return (data ?? []).map((row) => ({ pageNumber: row.page_number as number, data: row.data as string }));
+}
+
+// ── Room strokes (append-only stroke log) ────────────────────────────────────
+//
+// Replaces the room_drawings PNG-snapshot model. Every completed stroke is
+// one row in room_strokes; the canvas is a derived view computed by replaying
+// strokes in `seq` order. Bugs A and B both stem from the old snapshot model
+// — see supabase/migrations/2026-06-29_room_strokes.sql for the full why.
+//
+// The `stroke` JSON is shaped by the client and replayed verbatim on every
+// canvas — keep it small (no bitmaps, just a points list).
+
+export interface RoomStrokePayload {
+  id:             string;
+  tool:           'pen' | 'eraser' | 'line';
+  penType:        'normal' | 'marker' | 'highlighter';
+  color:          string;
+  size:           number;
+  points:         Array<{ x: number; y: number }>;
+  /** 'destination-out' for eraser; 'source-over' (or omitted) for paint. */
+  compositeMode?: 'source-over' | 'destination-out';
+  /** Logical canvas dimensions at draw time. Used to scale point
+   *  coordinates when replaying on a viewer with different zoom/DPR. */
+  canvasW:        number;
+  canvasH:        number;
+}
+
+export interface RoomStrokeRow {
+  id:        string;
+  pageKey:   string;
+  userId:    string;
+  seq:       number;
+  stroke:    RoomStrokePayload;
+  createdAt: string;
+}
+
+/**
+ * Fetch every stroke for a room, ordered by seq (replay order).
+ * Pass `sinceSeq` to fetch only strokes newer than a known seq —
+ * the reconnect reconciliation path uses this to catch up after
+ * a dropped realtime broadcast.
+ */
+export async function fetchAllRoomStrokes(roomId: string, sinceSeq?: number): Promise<RoomStrokeRow[]> {
+  let query = sb()
+    .from('room_strokes')
+    .select('id, page_key, user_id, seq, stroke, created_at')
+    .eq('room_id', roomId)
+    .order('seq', { ascending: true });
+  if (typeof sinceSeq === 'number') {
+    query = query.gt('seq', sinceSeq);
+  }
+  const { data, error } = await query;
+  if (error) { console.error('[DB] fetchAllRoomStrokes error:', error.message); return []; }
+  return (data ?? []).map((r) => ({
+    id:        r.id as string,
+    pageKey:   r.page_key as string,
+    userId:    r.user_id as string,
+    seq:       Number(r.seq),
+    stroke:    r.stroke as RoomStrokePayload,
+    createdAt: r.created_at as string,
+  }));
+}
+
+/**
+ * Append one stroke to the room. The stroke's own id is the client-generated
+ * uuid in the payload — recipients dedupe by it (same stroke can arrive via
+ * realtime broadcast and via reconciliation; both routes should be idempotent).
+ * Returns the assigned `seq` so the caller can advance its maxLocalSeq.
+ */
+export async function insertRoomStroke(
+  roomId: string, pageKey: string, stroke: RoomStrokePayload,
+): Promise<{ seq: number } | null> {
+  // VERBOSE logging until the persistence bug is diagnosed. The previous
+  // implementation logged only error.message which hides RLS-vs-network
+  // distinction; here we dump the whole object plus the auth uid + payload
+  // shape so the next failing run surfaces the actual cause.
+  console.log('[DB] insertRoomStroke ENTRY', {
+    roomId, pageKey, strokeId: stroke.id, tool: stroke.tool, points: stroke.points?.length,
+  });
+  // Session-state probe — pulls a fresh client (the same one we'll INSERT
+  // through) and dumps its session. If hasSession is false here on a user
+  // whose strokes don't persist, the client lost its JWT (most likely
+  // Tracking Prevention blocking storage between page loads, or token
+  // refresh silently failing). expiresInSec < 0 means the JWT in memory
+  // is past its TTL — autoRefreshToken should have rotated it; if it
+  // didn't, refresh itself is broken.
+  const client = sb();
+  const { data: sess } = await client.auth.getSession();
+  console.log('[DB] insertRoomStroke session probe', {
+    hasSession:   !!sess.session,
+    userId:       sess.session?.user?.id ?? null,
+    expiresAt:    sess.session?.expires_at ?? null,
+    expiresInSec: sess.session?.expires_at ? (sess.session.expires_at - Math.floor(Date.now() / 1000)) : null,
+    tokenPrefix:  sess.session?.access_token ? sess.session.access_token.slice(0, 12) + '…' : null,
+    strokeId:     stroke.id,
+  });
+  const uid = sess.session?.user?.id ?? null;
+  if (!uid) {
+    console.error('[DB] insertRoomStroke ABORT — session.user is null (Tracking Prevention blocked storage? token refresh failed?)', {
+      roomId, strokeId: stroke.id,
+    });
+    return null;
+  }
+  const { data, error } = await client
+    .from('room_strokes')
+    .insert({
+      id:        stroke.id,
+      room_id:   roomId,
+      page_key:  pageKey,
+      user_id:   uid,
+      stroke,
+    })
+    .select('seq')
+    .single();
+  if (error) {
+    // Dump the full PostgrestError. .code distinguishes RLS (42501),
+    // FK violations (23503), not-null (23502), etc. .details + .hint
+    // come from the planner and are gold for diagnosing the actual cause.
+    console.error('[DB] insertRoomStroke ERROR', {
+      message: error.message,
+      code:    (error as { code?: string }).code,
+      details: (error as { details?: string }).details,
+      hint:    (error as { hint?: string }).hint,
+      uid, roomId, pageKey, strokeId: stroke.id,
+    });
+    return null;
+  }
+  console.log('[DB] insertRoomStroke OK', { strokeId: stroke.id, seq: data.seq });
+  return { seq: Number(data.seq) };
 }
 
 // ── Friends ───────────────────────────────────────────────────────────────────
@@ -1437,6 +1584,125 @@ export async function markMessagesRead(friendId: string): Promise<void> {
     .eq('sender_id', friendId)
     .eq('recipient_id', uid)
     .eq('read', false);
+}
+
+// ── Study Rooms — listing ─────────────────────────────────────────────────────
+
+export interface ActiveRoomMember {
+  userId:    string;
+  username:  string | null;
+  avatarUrl: string | null;
+  isVip:     boolean;
+}
+
+export interface ActiveRoom {
+  id:           string;
+  hostUserId:   string;
+  documentName: string;
+  status:       'active' | 'closed';
+  maxMembers:   number;
+  expiresAt:    string | null;
+  createdAt:    string;
+  host:         ActiveRoomMember | null;
+  memberCount:  number;
+  /** Up to 6 sample members for the avatar stack. */
+  members:      ActiveRoomMember[];
+  /** Whether the caller is already a member (host or invitee). */
+  myMembership: boolean;
+}
+
+/**
+ * Returns all currently-active rooms with batched joins:
+ *   1) study_rooms (status=active)
+ *   2) room_members for those room IDs
+ *   3) profiles for all referenced user IDs (hosts + members)
+ *
+ * RLS: study_rooms SELECT is `using: true` and room_members SELECT is
+ * `using: true`, so this works without service-role bypass. Profiles
+ * SELECT is also open. Three round-trips total — does NOT scale per-
+ * room, which is the point.
+ */
+export async function getActiveRooms(): Promise<ActiveRoom[]> {
+  const uid = await userId();
+
+  const { data: rooms, error } = await sb()
+    .from('study_rooms')
+    .select('id, host_user_id, document_name, status, max_members, expires_at, created_at')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+  if (error) { console.error('[DB] getActiveRooms rooms error:', error.message); return []; }
+  if (!rooms?.length) return [];
+
+  const roomIds = rooms.map((r) => r.id as string);
+
+  const { data: memberships } = await sb()
+    .from('room_members')
+    .select('room_id, user_id')
+    .in('room_id', roomIds);
+
+  const userIds = new Set<string>();
+  for (const r of rooms) userIds.add(r.host_user_id as string);
+  for (const m of (memberships ?? []) as Array<{ room_id: string; user_id: string }>) {
+    userIds.add(m.user_id);
+  }
+
+  const { data: profiles } = userIds.size
+    ? await sb()
+        .from('profiles')
+        .select('id, username, avatar_url, is_vip')
+        .in('id', [...userIds])
+    : { data: [] as Array<{ id: string; username: string | null; avatar_url: string | null; is_vip: boolean }> };
+
+  const profileMap = new Map<string, ActiveRoomMember>(
+    (profiles ?? []).map((p) => [p.id as string, {
+      userId:    p.id as string,
+      username:  (p.username  as string | null) ?? null,
+      avatarUrl: (p.avatar_url as string | null) ?? null,
+      isVip:     !!p.is_vip,
+    }]),
+  );
+
+  // Group memberships by room id (preserve any natural ordering — first 6 = avatar stack).
+  const memberMap = new Map<string, string[]>();
+  for (const m of (memberships ?? []) as Array<{ room_id: string; user_id: string }>) {
+    const arr = memberMap.get(m.room_id) ?? [];
+    arr.push(m.user_id);
+    memberMap.set(m.room_id, arr);
+  }
+
+  return rooms.map((r) => {
+    const ids = memberMap.get(r.id as string) ?? [];
+    const members = ids.slice(0, 6)
+      .map((id) => profileMap.get(id))
+      .filter((m): m is ActiveRoomMember => !!m);
+    return {
+      id:           r.id as string,
+      hostUserId:   r.host_user_id as string,
+      documentName: r.document_name as string,
+      status:       ((r.status as string | null) ?? 'active') as 'active' | 'closed',
+      maxMembers:   (r.max_members as number | null) ?? 10,
+      expiresAt:    (r.expires_at as string | null) ?? null,
+      createdAt:    r.created_at as string,
+      host:         profileMap.get(r.host_user_id as string) ?? null,
+      memberCount:  ids.length,
+      members,
+      myMembership: uid ? ids.includes(uid) : false,
+    };
+  });
+}
+
+export async function getMutualFriendCounts(otherUserIds: string[]): Promise<Record<string, number>> {
+  if (!otherUserIds.length) return {};
+  // SECURITY DEFINER RPC — bypasses friendships RLS so we can read the
+  // other user's friend list, but only ever returns aggregate counts
+  // (no IDs leak). See supabase/migrations/2026-06-28_mutual_friend_counts.sql.
+  const { data, error } = await sb().rpc('mutual_friend_counts', { p_other_ids: otherUserIds });
+  if (error) { console.error('[DB] getMutualFriendCounts error:', error.message); return {}; }
+  const map: Record<string, number> = {};
+  for (const row of (data ?? []) as Array<{ other_user_id: string; mutual_count: number }>) {
+    map[row.other_user_id] = row.mutual_count;
+  }
+  return map;
 }
 
 export async function getUnreadMessageCounts(): Promise<Record<string, number>> {
@@ -1753,14 +2019,14 @@ export function getOrCreateSessionId(): string {
   return id;
 }
 
-// 'ok'        — safe to proceed (no active session, same session, free user, or session expired)
+// 'ok'        — safe to proceed (no active session, same session, free user, VIP, or session expired)
 // 'conflict'  — a different active session exists on another device
-// 'free_user' — user is on free plan, no enforcement needed
+// 'free_user' — user is on free plan (or VIP — VIP bypasses every limit), no enforcement needed
 export async function checkActiveSession(sessionId: string): Promise<'ok' | 'conflict' | 'free_user'> {
   const uid = await userId(); if (!uid) return 'free_user';
 
-  const { data: profile } = await sb().from('profiles').select('plan').eq('id', uid).maybeSingle();
-  if (!profile || profile.plan === 'free') return 'free_user';
+  const { data: profile } = await sb().from('profiles').select('plan, is_vip').eq('id', uid).maybeSingle();
+  if (!profile || profile.plan === 'free' || profile.is_vip) return 'free_user';
 
   const { data: existing } = await sb()
     .from('active_sessions').select('session_id, last_seen').eq('user_id', uid).maybeSingle();

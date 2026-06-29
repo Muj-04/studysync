@@ -2,8 +2,8 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
-  Timer, Download,
+  ChevronUp, FilePlus, Search, CheckCircle, Share2,
+  Timer, Download, Minimize2, Users,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -24,9 +24,13 @@ import PDFScrollViewer from '@/components/PDFScrollViewer';
 import PPTXViewer from '@/components/PPTXViewer';
 import BlankPageCanvas from '@/components/BlankPageCanvas';
 import SidebarThumbnails from '@/components/SidebarThumbnails';
-import DocumentToolsPanel from '@/components/DocumentToolsPanel';
-import FloatingAnnotationToolbar from '@/components/FloatingAnnotationToolbar';
-import VoiceNotesSheet from '@/components/VoiceNotesSheet';
+import DocTabsBar from '@/components/DocTabsBar';
+import RightPanelTabs from '@/components/RightPanelTabs';
+import NotesTabContent from '@/components/NotesTabContent';
+import AIAssistantTabContent from '@/components/AIAssistantTabContent';
+import ChatTabContent from '@/components/ChatTabContent';
+import BottomPillBar from '@/components/BottomPillBar';
+import PdfTopToolbar from '@/components/PdfTopToolbar';
 import PageNavigation from '@/components/PageNavigation';
 import SettingsDropdown from '@/components/SettingsDropdown';
 import AvatarDropdown from '@/components/AvatarDropdown';
@@ -36,7 +40,7 @@ import GlobalSearch from '@/components/GlobalSearch';
 import OnboardingTour, { shouldShowTour } from '@/components/OnboardingTour';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
-import { PLAN_LIMITS, PLAN_LABELS, VOICE_STORAGE_LABELS, nextUpgradePlan } from '@/lib/planLimits';
+import { PLAN_LIMITS, PLAN_LABELS, VOICE_STORAGE_LABELS, nextUpgradePlan, effectivePlanLimits } from '@/lib/planLimits';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -1208,7 +1212,6 @@ export default function WorkspacePage() {
   // step 3) — they're destructured below alongside the right-pane text-note
   // wiring once leftNotesKey / splitRightBlankPage / rightDocId are ready.
   const mainRef            = useRef<HTMLElement>(null);
-  const bottomBarRef       = useRef<HTMLDivElement>(null);
 
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
@@ -1296,8 +1299,15 @@ export default function WorkspacePage() {
   const isPPTXRef       = useRef(false);
   const voiceNoteListRef = useRef<import('@/components/VoiceNoteList').VoiceNoteListHandle>(null);
 
-  const [annotationBarOpen, setAnnotationBarOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Tell the shared (app)/layout's LeftRail to collapse when entering
+  // workspace fullscreen — see CSS rule `body[data-fullscreen] .left-rail`.
+  useEffect(() => {
+    if (isFullscreen) document.body.dataset.fullscreen = 'true';
+    else delete document.body.dataset.fullscreen;
+    return () => { delete document.body.dataset.fullscreen; };
+  }, [isFullscreen]);
 
   const exitFullscreen = useCallback(() => {
     setIsFullscreen(false);
@@ -1427,6 +1437,7 @@ export default function WorkspacePage() {
   // ── UI panels ─────────────────────────────────────────────────────────────
   const [sidebarOpen, setSidebarOpen]       = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelTab, setRightPanelTab]   = useState<'notes' | 'ai' | 'chat'>('ai');
   const [navBarVisible, setNavBarVisible]   = useState(true);
   const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
@@ -1634,9 +1645,13 @@ export default function WorkspacePage() {
       // Escape always works
       if (e.key === 'Escape') {
         if (isFullscreen) { exitFullscreen(); return; }
-        setAnnotationBarOpen(false);
         setShortcutsOpen(false);
         setSearchOpen(false);
+        // Drop back to cursor (replaces the dedicated cursor pill)
+        if (!inInput) {
+          const atSetTool = showSplitRef.current && activeSideRef.current === 'right' ? setRightTool : setLeftTool;
+          atSetTool('cursor');
+        }
         return;
       }
 
@@ -1669,6 +1684,11 @@ export default function WorkspacePage() {
         if (e.key === 'f' || e.key === 'F') {
           e.preventDefault();
           if (!isPPTXRef.current && hasDocumentRef.current) setSearchOpen((o) => !o);
+          return;
+        }
+        if (e.key === 'k' || e.key === 'K') {
+          e.preventDefault();
+          setGlobalSearchOpen(true);
           return;
         }
         if (e.key === 'z' || e.key === 'Z') {
@@ -1712,9 +1732,9 @@ export default function WorkspacePage() {
       isFullscreen, exitFullscreen]);
 
   const handleFilesAdded = useCallback(async (files: File[]) => {
-    const bypass = isVip || userPlan !== 'free';
-    if (!bypass) {
-      const remaining = 3 - documents.length;
+    const docLimit = effectivePlanLimits(userPlan, isVip).documents;
+    if (docLimit !== Infinity) {
+      const remaining = docLimit - documents.length;
       if (remaining <= 0) {
         setLimitModal('documents');
         return;
@@ -1817,8 +1837,8 @@ export default function WorkspacePage() {
 
   const handleCreateRoom = useCallback(async () => {
     if (!activeDocument || activeDocument.type !== 'pdf') return;
-    const bypass = isVip || userPlan !== 'free';
-    if (!bypass) { setLimitModal('room'); return; }
+    const limits = effectivePlanLimits(userPlan, isVip);
+    if (!limits.canCreateRooms) { setLimitModal('room'); return; }
     setRoomModal('creating');
     try {
       const resp = await fetch(activeDocument.url);
@@ -1826,7 +1846,7 @@ export default function WorkspacePage() {
       const roomId = crypto.randomUUID();
       const pdfPath = await uploadRoomPdf(roomId, blob, activeDocument.name);
       if (!pdfPath) throw new Error('upload failed');
-      const created = await createRoom(roomId, activeDocument.name, pdfPath, isVip ? 20 : PLAN_LIMITS[userPlan].maxRoomMembers);
+      const created = await createRoom(roomId, activeDocument.name, pdfPath, limits.maxRoomMembers);
       if (!created) throw new Error('createRoom failed');
       setRoomUrl(`${window.location.origin}/room/${roomId}`);
       setRoomModal('done');
@@ -1834,7 +1854,7 @@ export default function WorkspacePage() {
       console.error('[Room] create error:', e);
       setRoomModal('idle');
     }
-  }, [activeDocument]);
+  }, [activeDocument, isVip, userPlan]);
 
   // ── Page image annotation handlers ───────────────────────────────────────
   const handleSavePageImages = useCallback((images: import('@/types').PDFPageImage[]) => {
@@ -1917,15 +1937,7 @@ export default function WorkspacePage() {
   // leftNotesKey, rightBlankNotesKey, rightDocNotesKey, handleLeftNotesChange,
   // handleRightBlankNotesChange, handleRightDocNotesChange are now sourced
   // from useSinglePageMode (step 3, declared above near useUndoClear).
-  // handleInsertTextNote / handleDeleteTextNote stay here — they're used by
-  // PageNavigation and SidebarThumbnails (both modes), not strictly
-  // single-page rendering.
-
-  const handleInsertTextNote = useCallback((note: Omit<TextNote, 'id'>) => {
-    if (!leftNotesKey) return;
-    const newNote: TextNote = { ...note, id: `note_${Date.now()}_${Math.random().toString(36).slice(2)}` };
-    setPageTextNotes(prev => ({ ...prev, [leftNotesKey]: [...(prev[leftNotesKey] ?? []), newNote] }));
-  }, [leftNotesKey]);
+  // handleDeleteTextNote stays here — it's used by NotesTabContent.
 
   const handleDeleteTextNote = useCallback((pageKey: string, noteId: string) => {
     setPageTextNotes((prev) => ({
@@ -1933,42 +1945,6 @@ export default function WorkspacePage() {
       [pageKey]: (prev[pageKey] ?? []).filter((n) => n.id !== noteId),
     }));
   }, []);
-
-  const handleInsertBlankPageWithGrid = useCallback((rows: number, cols: number) => {
-    if (!activeDocument) return;
-    const afterPage = currentVP?.type === 'pdf'
-      ? currentVP.pdfPage
-      : currentVP?.type === 'blank'
-        ? currentVP.blankPage.insertAfterPage
-        : activeDocument.currentPage;
-    const newPage = insertBlankPage(activeDocument.id, afterPage, defaultBgTheme);
-
-    // Draw grid on offscreen canvas and pre-load it as canvasData
-    const W = 816, H = 1056;
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      const isDark = defaultBgTheme === 'dark';
-      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.28)';
-      ctx.lineWidth = 1.5;
-      const pad = 60, tableW = W - pad * 2, tableH = H - pad * 2;
-      const cellW = tableW / cols, cellH = tableH / rows;
-      for (let r = 0; r <= rows; r++) {
-        const y = pad + r * cellH;
-        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(pad + tableW, y); ctx.stroke();
-      }
-      for (let c = 0; c <= cols; c++) {
-        const x = pad + c * cellW;
-        ctx.beginPath(); ctx.moveTo(x, pad); ctx.lineTo(x, pad + tableH); ctx.stroke();
-      }
-      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-      ctx.fillRect(pad, pad, tableW, cellH);
-    }
-    updateCanvasData(newPage.id, canvas.toDataURL('image/png'));
-    setVirtualIndex((i) => i + 1);
-  }, [activeDocument, currentVP, insertBlankPage, updateCanvasData, defaultBgTheme]);
 
   // handleRightBlankNotesChange / handleRightDocNotesChange now come from
   // useSinglePageMode (step 3, declared above near useUndoClear).
@@ -1985,24 +1961,23 @@ export default function WorkspacePage() {
           previously overflow:hidden was clipping NotificationBell /
           SettingsDropdown / AvatarDropdown the moment they extended past
           the 56px header. z-index 700 lifts the header above sibling fixed
-          floats (FloatingAnnotationToolbar z 200, PageNavigation z 100,
+          floats (BottomPillBar z 30, PageNavigation z 100,
           PomodoroWidget z 600) while staying below modals (z 800/1000). */}
       <header style={{
         height: isFullscreen ? 0 : 56, flexShrink: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: isFullscreen ? '0' : '0 12px 0 8px',
-        background: 'rgba(0, 0, 0, 0.65)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: isFullscreen ? 'none' : '1px solid rgba(255,255,255,0.1)',
+        background: 'var(--bg-app)',
+        borderBottom: isFullscreen ? 'none' : '1px solid var(--border-subtle)',
         position: 'relative', zIndex: 700,
         gap: 8,
         overflow: isFullscreen ? 'hidden' : 'visible',
         transition: 'height 0.3s ease, padding 0.3s ease',
       }}>
 
-        {/* Left: sidebar toggle + brand + nav */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {/* Left: sidebar toggle + breadcrumb. Brand + nav links moved to
+            the shared LeftRail in (app)/layout.tsx. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
           <HdrBtn
             onClick={() => setSidebarOpen((o) => !o)}
             title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -2011,191 +1986,108 @@ export default function WorkspacePage() {
             <PanelLeft size={18} />
           </HdrBtn>
 
-          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
-
-          {/* Brand */}
-          <span style={{
-            fontSize: 14, fontWeight: 700,
-            color: 'var(--text-1)', letterSpacing: '-0.02em', flexShrink: 0,
-          }}>
-            StudySync
-          </span>
-
-          {/* Nav links — hidden on small screens */}
-          <nav style={{
-            display: 'flex', gap: 2, marginLeft: 16,
-          }} className="hidden md:flex">
-            {[
-              { label: t('nav_dashboard'), active: false, href: '/dashboard' },
-              { label: t('nav_workspace'), active: true,  href: '#' },
-              { label: t('nav_library'),   active: false, href: '/library' },
-              { label: t('nav_community'), active: false, href: '/community' },
-              { label: 'Pricing',          active: false, href: '/pricing' },
-            ].map(({ label, active, href }) => (
-              <a
-                key={label}
-                href={href}
-                onClick={(e) => { if (href === '#') e.preventDefault(); }}
-                style={{
-                  fontSize: 13, fontWeight: 400,
-                  color: active ? 'var(--accent)' : 'var(--text-2)',
-                  textDecoration: 'none',
-                  padding: '4px 10px',
-                  borderRadius: 4,
-                  borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent',
-                  transition: 'color 0.15s',
-                  cursor: 'pointer',
-                }}
-                onMouseOver={(e) => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'; }}
-                onMouseOut={(e)  => { if (!active) (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
-              >
-                {label}
-              </a>
-            ))}
+          <nav
+            aria-label="Breadcrumb"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              fontSize: 13, color: 'var(--text-2)',
+              marginLeft: 6, minWidth: 0,
+            }}
+          >
+            <span>Workspace</span>
+            {activeDocument && (
+              <>
+                <span style={{ color: 'var(--text-3)' }}>›</span>
+                <span
+                  key={activeDocument.id}
+                  className="animate-fade-in"
+                  style={{
+                    color: 'var(--text-1)', fontWeight: 500,
+                    maxWidth: 220, overflow: 'hidden',
+                    textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {activeDocument.name}
+                </span>
+              </>
+            )}
           </nav>
-
-          {/* Active document name */}
-          {activeDocument && (
-            <>
-              <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
-              <span
-                key={activeDocument.id}
-                className="animate-fade-in"
-                style={{
-                  fontSize: 11.5, color: 'var(--text-3)',
-                  maxWidth: 180, overflow: 'hidden',
-                  textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}
-              >
-                {activeDocument.name}
-              </span>
-            </>
-          )}
         </div>
 
-        {/* Right: actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          {documents.length > 0 && (
-            <PDFUploader onFilesAdded={handleFilesAdded} compact />
-          )}
+        {/* Centered global search — Figma centerpiece. Clickable button
+            styled as an input; click opens the existing GlobalSearch modal
+            (also Ctrl/Cmd+K). The per-document Find-in-PDF search lives
+            in the DocTabsBar tools row, not the header. */}
+        <button
+          onClick={() => setGlobalSearchOpen(true)}
+          aria-label="Search everything (Ctrl+K)"
+          title="Search everything (Ctrl+K)"
+          style={{
+            flex: 1, maxWidth: 560, minWidth: 240,
+            display: 'flex', alignItems: 'center', gap: 10,
+            height: 36, padding: '0 14px',
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 9999,
+            color: 'var(--text-3)',
+            cursor: 'pointer', fontFamily: 'inherit',
+            transition: 'background 0.13s, border-color 0.13s, color 0.13s',
+          }}
+          onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+            background: 'var(--bg-hover)', borderColor: 'var(--border-strong)', color: 'var(--text-2)',
+          })}
+          onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+            background: 'var(--bg-elevated)', borderColor: 'var(--border-subtle)', color: 'var(--text-3)',
+          })}
+        >
+          <Search size={15} strokeWidth={2} style={{ flexShrink: 0 }} />
+          <span style={{ flex: 1, textAlign: 'left', fontSize: 13 }}>
+            Search anything…
+          </span>
+          <kbd
+            className="hidden md:inline-flex"
+            style={{
+              alignItems: 'center', gap: 2,
+              padding: '2px 6px',
+              fontSize: 10.5, fontWeight: 600, letterSpacing: '0.02em',
+              fontFamily: 'var(--font-mono), monospace',
+              color: 'var(--text-3)',
+              background: 'var(--bg-panel)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 4,
+              flexShrink: 0,
+            }}
+          >
+            Ctrl K
+          </kbd>
+        </button>
 
-          {documents.length > 0 && !isPPTX && (
-            <HdrBtn
-              onClick={() => setSearchOpen((o) => !o)}
-              title={searchOpen ? t('ws_close_search') : t('ws_open_search')}
-              active={searchOpen}
+        {/* Right: notifications · collaborators · avatar (+ Upgrade for free) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          {userPlan === 'free' && !isVip && (
+            <a
+              href="/pricing"
+              style={{
+                fontSize: 12, fontWeight: 600, color: '#fff',
+                background: 'var(--accent)', border: 'none', borderRadius: 999,
+                padding: '6px 14px', textDecoration: 'none', cursor: 'pointer',
+                transition: 'background 0.15s', flexShrink: 0,
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-hover)'; }}
+              onMouseOut={(e)  => { e.currentTarget.style.background = 'var(--accent)'; }}
             >
-              <Search size={17} />
-            </HdrBtn>
+              Upgrade
+            </a>
           )}
 
-          {/* Global search */}
-          <HdrBtn onClick={() => setGlobalSearchOpen(true)} title={t('ws_global_search_title')}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              <line x1="8" y1="11" x2="14" y2="11" /><line x1="11" y1="8" x2="11" y2="14" />
-            </svg>
-          </HdrBtn>
+          <NotificationBell />
 
-          {/* Pomodoro */}
-          <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title={t('ws_pomodoro_title')} active={pomodoroOpen}>
-            <Timer size={17} />
-          </HdrBtn>
-
-          {/* Export notes */}
-          {hasDocument && (
-            <div ref={exportMenuRef} style={{ position: 'relative' }}>
-              <HdrBtn onClick={() => setExportMenuOpen((o) => !o)} title={t('ws_export_notes_title')} active={exportMenuOpen}>
-                <Download size={17} />
-              </HdrBtn>
-              {exportMenuOpen && (
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                  background: 'var(--bg-float)', border: '1px solid var(--bg-float-border)',
-                  backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-                  borderRadius: 6, padding: '4px 0', minWidth: 160,
-                  boxShadow: 'var(--shadow-float)', zIndex: 200,
-                }}>
-                  {[
-                    { label: 'Export as PDF', ext: 'pdf' },
-                    { label: 'Export as Word (.docx)', ext: 'docx' },
-                  ].map(({ label, ext }) => (
-                    <button
-                      key={ext}
-                      onClick={async () => {
-                        setExportMenuOpen(false);
-                        if (!activeDocument) return;
-                        const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
-                        const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
-                        if (ext === 'pdf') exportAsPDF(data);
-                        else exportAsDocx(data);
-                      }}
-                      style={{
-                        display: 'flex', width: '100%', padding: '8px 14px',
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        fontSize: 12.5, color: 'var(--text-1)', fontFamily: 'inherit', textAlign: 'left',
-                        transition: 'background 0.1s',
-                      }}
-                      onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                      onMouseOut={(e)  => { e.currentTarget.style.background = 'none'; }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
-
-          {documents.length > 0 && !isPPTX && (
-            <HdrBtn
-              onClick={() => setSplitMode((m) => !m)}
-              title={splitMode ? t('ws_exit_split') : t('ws_enter_split')}
-              active={splitMode}
-            >
-              <SplitIcon />
-            </HdrBtn>
-          )}
-
-          {documents.length > 0 && (
-            <HdrBtn
-              onClick={() => setRightPanelOpen((o) => !o)}
-              title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
-              active={rightPanelOpen}
-            >
-              <PanelRight size={18} />
-            </HdrBtn>
-          )}
-
-          <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
-
-          <SettingsDropdown
-            isDark={isDark}
-            onThemeChange={toggleTheme}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            defaultBgTheme={defaultBgTheme}
-            onDefaultBgThemeChange={handleDefaultBgThemeChange}
-            onZoomReset={() => handleLeftZoomChange(1.0)}
-            hasDocument={hasDocument}
-            isPPTX={isPPTX}
-          />
-
-          <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title={t('ws_shortcuts')}>
-            <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
-          </HdrBtn>
-
-          {hasDocument && (
-            <HdrBtn onClick={() => setShareOpen(true)} title={t('ws_share')}>
-              <Share2 size={15} />
-            </HdrBtn>
-          )}
-
+          {/* Collaborators / members — links to /friends per the Figma
+              right-cluster intent. Future: open a per-room members panel. */}
           <a
             href="/friends"
-            title={t('nav_friends')}
+            title="Collaborators"
+            aria-label="Collaborators"
             style={{
               width: 34, height: 34, borderRadius: 4,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2203,28 +2095,10 @@ export default function WorkspacePage() {
               transition: 'background 0.12s, color 0.12s',
             }}
             onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
+            onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'transparent',     color: 'var(--text-2)' })}
           >
             <Users size={16} />
           </a>
-
-          {userPlan === 'free' && (
-            <a
-              href="/pricing"
-              style={{
-                fontSize: 12, fontWeight: 600, color: '#0f172a',
-                background: '#ffffff', border: 'none', borderRadius: 4,
-                padding: '5px 12px', textDecoration: 'none', cursor: 'pointer',
-                transition: 'background 0.15s', flexShrink: 0,
-              }}
-              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
-              onMouseOut={(e)  => { e.currentTarget.style.background = '#ffffff'; }}
-            >
-              Upgrade
-            </a>
-          )}
-
-          <NotificationBell />
 
           <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
         </div>
@@ -2321,11 +2195,8 @@ export default function WorkspacePage() {
               onRemoveBookmark={handleRemoveBookmark}
               onNavigateToPdfPage={handleNavigateToPdfPage}
               isPPTX={isPPTX}
-              allTextNotes={pageTextNotes}
-              voiceNotes={voiceNotes}
-              onDeleteTextNote={handleDeleteTextNote}
-              onDeleteVoiceNote={deleteNote}
               onReorderDocuments={handleReorderDocuments}
+              onDeleteBlankPage={handleDeleteBlankPage}
             />
           </div>
 
@@ -2352,8 +2223,143 @@ export default function WorkspacePage() {
             className="flex-1 flex flex-col overflow-hidden"
             style={{ position: 'relative', minWidth: 0 }}
           >
+            {!isFullscreen && (
+            <DocTabsBar
+              documents={documents}
+              activeDocumentId={activeDocumentId}
+              onSelect={setActiveDocument}
+              onRemove={handleRemoveDocument}
+              onReorder={handleReorderDocuments}
+              rightSlot={
+                /* Per-document tool strip — relocated from the top header.
+                   Renders inside the DocTabsBar row so the only top chrome
+                   is the slim 56px header (breadcrumb + search + identity
+                   cluster). All handlers + popovers preserved verbatim. */
+                <>
+                  <PDFUploader onFilesAdded={handleFilesAdded} compact />
+
+                  {!isPPTX && (
+                    <HdrBtn
+                      onClick={() => setSearchOpen((o) => !o)}
+                      title={searchOpen ? t('ws_close_search') : t('ws_open_search')}
+                      active={searchOpen}
+                    >
+                      <Search size={17} />
+                    </HdrBtn>
+                  )}
+
+                  <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+                  {/* Split-view toggle moved to PdfTopToolbar above the doc
+                      so it sits with the other view controls (zoom +
+                      fullscreen). Only the right-panel toggle remains here. */}
+                  <HdrBtn
+                    onClick={() => setRightPanelOpen((o) => !o)}
+                    title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
+                    active={rightPanelOpen}
+                  >
+                    <PanelRight size={18} />
+                  </HdrBtn>
+
+                  <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
+
+                  <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title={t('ws_pomodoro_title')} active={pomodoroOpen}>
+                    <Timer size={17} />
+                  </HdrBtn>
+
+                  {hasDocument && (
+                    <div ref={exportMenuRef} style={{ position: 'relative' }}>
+                      <HdrBtn onClick={() => setExportMenuOpen((o) => !o)} title={t('ws_export_notes_title')} active={exportMenuOpen}>
+                        <Download size={17} />
+                      </HdrBtn>
+                      {exportMenuOpen && (
+                        <div style={{
+                          position: 'absolute', top: '100%', right: 0, marginTop: 4,
+                          background: 'var(--bg-float)', border: '1px solid var(--bg-float-border)',
+                          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                          borderRadius: 6, padding: '4px 0', minWidth: 160,
+                          boxShadow: 'var(--shadow-float)', zIndex: 200,
+                        }}>
+                          {[
+                            { label: 'Export as PDF', ext: 'pdf' },
+                            { label: 'Export as Word (.docx)', ext: 'docx' },
+                          ].map(({ label, ext }) => (
+                            <button
+                              key={ext}
+                              onClick={async () => {
+                                setExportMenuOpen(false);
+                                if (!activeDocument) return;
+                                const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
+                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
+                                if (ext === 'pdf') exportAsPDF(data);
+                                else exportAsDocx(data);
+                              }}
+                              style={{
+                                display: 'flex', width: '100%', padding: '8px 14px',
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                fontSize: 12.5, color: 'var(--text-1)', fontFamily: 'inherit', textAlign: 'left',
+                                transition: 'background 0.1s',
+                              }}
+                              onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                              onMouseOut={(e)  => { e.currentTarget.style.background = 'none'; }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <SettingsDropdown
+                    isDark={isDark}
+                    onThemeChange={toggleTheme}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                    defaultBgTheme={defaultBgTheme}
+                    onDefaultBgThemeChange={handleDefaultBgThemeChange}
+                    onZoomReset={() => handleLeftZoomChange(1.0)}
+                    hasDocument={hasDocument}
+                    isPPTX={isPPTX}
+                  />
+
+                  {hasDocument && (
+                    <HdrBtn onClick={() => setShareOpen(true)} title={t('ws_share')}>
+                      <Share2 size={15} />
+                    </HdrBtn>
+                  )}
+
+                  <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title={t('ws_shortcuts')}>
+                    <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
+                  </HdrBtn>
+                </>
+              }
+            />
+            )}
             {activeDocument && (
               <>
+                {/* PDF top toolbar — Figma centerpiece for the doc area.
+                    Owns cursor/select, zoom group, fullscreen and split.
+                    In fullscreen, `compact` collapses the bar to just
+                    the zoom pill (transparent surface, no border, no
+                    cursor/fullscreen/split pills) so zoom stays
+                    reachable without intruding on the immersive view. */}
+                <PdfTopToolbar
+                  toolIsCursor={atTool === 'cursor'}
+                  onSelectCursor={() => atSetTool('cursor')}
+                  zoom={leftZoom}
+                  onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
+                  onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
+                  onZoomReset={() => handleLeftZoomChange(1.0)}
+                  canZoomIn={leftZoom < 2}
+                  canZoomOut={leftZoom > 0.5}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={toggleFullscreen}
+                  splitMode={splitMode}
+                  onToggleSplit={!isPPTX ? () => setSplitMode((m) => !m) : undefined}
+                  compact={isFullscreen}
+                />
+
                 {/* ── Content area ── */}
                 <div style={{
                   flex: 1, overflow: 'hidden',
@@ -2429,6 +2435,8 @@ export default function WorkspacePage() {
                         onNotesChange={handleLeftNotesChange}
                         onActivateTextTool={() => setLeftTool('text')}
                         onExitTextTool={() => setLeftTool('pen')}
+                        currentBgTheme={(currentVP!.blankPage.bgTheme ?? 'white')}
+                        onChangeBgTheme={(theme) => updateBgTheme(currentVP!.blankPage.id, theme)}
                       />
                     ) : isPPTX ? (
                       <PPTXViewer document={activeDocument} />
@@ -2537,6 +2545,8 @@ export default function WorkspacePage() {
                               onNotesChange={handleRightBlankNotesChange}
                               onActivateTextTool={() => setRightTool('text')}
                               onExitTextTool={() => setRightTool('pen')}
+                              currentBgTheme={(splitRightBlankPage.bgTheme ?? 'white')}
+                              onChangeBgTheme={(theme) => updateBgTheme(splitRightBlankPage.id, theme)}
                             />
                           ) : (
                             <BlankPaneEmpty onAdd={() => handleInsertSplitBlankPage()} />
@@ -2568,33 +2578,13 @@ export default function WorkspacePage() {
                 </div>
 
                 {/* ── Bottom panels (collapsible) ── */}
-                <div ref={bottomBarRef} style={{
+                <div style={{
                   flexShrink: 0, overflow: 'hidden',
                   maxHeight: isFullscreen ? 0 : navBarVisible ? 800 : 0,
                   transition: (isFullscreen || !navBarVisible)
                     ? 'max-height 0.22s cubic-bezier(0.4,0,1,1)'
                     : 'max-height 0.3s cubic-bezier(0,0,0.2,1)',
                 }}>
-
-                  {/* Voice notes panel: hidden in scroll mode (shown per-page there) */}
-                  {viewMode !== 'scroll' && (
-                    <VoiceNotesSheet
-                      isOpen={voiceSheetOpen}
-                      onToggle={() => setVoiceSheetOpen((o) => !o)}
-                      notes={pageNotes}
-                      pageKey={pageKey}
-                      documentId={activeDocument.id}
-                      pageNumber={pageIdentifier}
-                      isRecording={isRecording}
-                      recordingDuration={recordingDuration}
-                      recordingContext={recordingContext}
-                      onStart={() => startRecording(activeDocument.id, pageIdentifier)}
-                      onStop={stopRecording}
-                      onDelete={deleteNote}
-                      onUpdateTitle={updateNoteTitle}
-                      listRef={voiceNoteListRef}
-                    />
-                  )}
 
                   <PageNavigation
                     currentPage={virtualIndex + 1}
@@ -2603,26 +2593,17 @@ export default function WorkspacePage() {
                     onPrev={goVirtualPrev}
                     onNext={goVirtualNext}
                     onGoToPage={goVirtualToPage}
-                    onInsertBlankPage={handleInsertBlankPage}
-                    onToggleDraw={undefined}
-                    isDrawing={false}
-                    zoom={leftZoom}
-                    onZoomChange={handleLeftZoomChange}
-                    onZoomIn={() => handleLeftZoomChange(leftZoom + 0.1)}
-                    onZoomOut={() => handleLeftZoomChange(leftZoom - 0.1)}
-                    onHideBar={() => setNavBarVisible(false)}
-                    viewMode={isPPTX ? undefined : viewMode}
-                    onViewModeChange={isPPTX || showSplit ? undefined : setViewMode}
-                    onToggleBookmark={hasDocument ? handleToggleBookmark : undefined}
-                    isBookmarked={isCurrentPageBookmarked}
                   />
                 </div>
 
-                {/* Floating annotation toolbar */}
-                <FloatingAnnotationToolbar
-                  isOpen={annotationBarOpen}
-                  onOpen={() => setAnnotationBarOpen(true)}
-                  onClose={() => setAnnotationBarOpen(false)}
+                {/* Bottom pill bar — stays visible in fullscreen so the
+                    user can still annotate. Only the hide-bar chevron
+                    (navBarVisible) gates its visibility now. */}
+                <BottomPillBar
+                  hasDocument={hasDocument}
+                  visible={navBarVisible}
+                  isBlankPage={isBlankPage}
+                  isPPTX={isPPTX}
                   tool={atTool}
                   setTool={atSetTool}
                   penType={atPenType}
@@ -2631,16 +2612,89 @@ export default function WorkspacePage() {
                   setColor={atSetColor}
                   strokeSize={atStrokeSize}
                   setStrokeSize={atSetStrokeSize}
-                  onClear={handleClear}
-                  onUndo={handleUndo}
+                  onActivateNotes={() => { setRightPanelOpen(true); setRightPanelTab('notes'); }}
+                  onInsertImageBlank={isBlankPage ? handleInsertImage : undefined}
+                  onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
+                  onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
+                  onInsertBlankPage={hasDocument ? handleInsertBlankPage : undefined}
+                  docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
+                  currentPdfPageForImages={currentPdfPage}
+                  onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
+                  onToggleBookmark={hasDocument ? handleToggleBookmark : undefined}
+                  isBookmarked={isCurrentPageBookmarked}
+                  onVoiceNote={activeDocument ? () => {
+                    // Toggle — both the pill and the Notes-tab Record button
+                    // share this handler shape. Without toggling, starting from
+                    // the pill would leave the user with no stop control (the
+                    // old VoiceNotesSheet recorder is now hidden in workspace).
+                    if (isRecording) { stopRecording(); return; }
+                    startRecording(activeDocument.id, pageIdentifier);
+                    setVoiceSheetOpen(true);
+                  } : undefined}
+                  isRecording={isRecording}
+                  onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
+                  onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
                   splitMode={showSplit}
                   activeSide={showSplit ? activeSide : undefined}
                   onSwitchSide={showSplit ? setActiveSide : undefined}
-                  containerRef={mainRef}
-                  bottomBarRef={bottomBarRef}
                   isFullscreen={isFullscreen}
                   onToggleFullscreen={toggleFullscreen}
                 />
+
+                {/* Persistent exit-fullscreen button — top-right, labelled
+                    + Esc-hinted so users can clearly find their way out.
+                    Moved from bottom-right to avoid clashing with the
+                    BottomPillBar (now visible in fullscreen too). */}
+                {isFullscreen && (
+                  <button
+                    onClick={toggleFullscreen}
+                    title="Exit fullscreen (Esc)"
+                    aria-label="Exit fullscreen"
+                    className="animate-scale-in"
+                    style={{
+                      position: 'absolute', top: 14, right: 14, zIndex: 31,
+                      height: 40, padding: '0 14px',
+                      borderRadius: 9999,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      background: 'var(--bg-panel)',
+                      border: '1px solid var(--border-strong)',
+                      boxShadow: 'var(--shadow-float)',
+                      color: 'var(--text-1)',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: 13, fontWeight: 600,
+                      transition: 'background 0.15s, border-color 0.15s, color 0.15s',
+                    }}
+                    onMouseOver={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'var(--accent-muted)',
+                      borderColor: 'var(--accent)',
+                      color: 'var(--accent)',
+                    })}
+                    onMouseOut={(e) => Object.assign(e.currentTarget.style, {
+                      background: 'var(--bg-panel)',
+                      borderColor: 'var(--border-strong)',
+                      color: 'var(--text-1)',
+                    })}
+                  >
+                    <Minimize2 size={16} strokeWidth={1.8} />
+                    <span>Exit fullscreen</span>
+                    <kbd
+                      className="hidden md:inline-flex"
+                      style={{
+                        alignItems: 'center',
+                        padding: '2px 6px',
+                        fontSize: 10.5, fontWeight: 600, letterSpacing: '0.02em',
+                        fontFamily: 'var(--font-mono), monospace',
+                        color: 'var(--text-3)',
+                        background: 'var(--bg-elevated)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 4,
+                        marginLeft: 2,
+                      }}
+                    >
+                      Esc
+                    </kbd>
+                  </button>
+                )}
 
                 {/* Restore bottom bar button */}
                 {!navBarVisible && (
@@ -2706,39 +2760,47 @@ export default function WorkspacePage() {
               flexShrink: 0,
             }}
           >
-            <DocumentToolsPanel
+            <RightPanelTabs
               isOpen={rightPanelOpen}
-              hasDocument={hasDocument}
-              isBlankPage={isBlankPage}
-              onInsertBlankPage={handleInsertBlankPage}
-              onInsertImage={isBlankPage ? handleInsertImage : undefined}
-              onDeleteBlankPage={
-                currentVP?.type === 'blank'
-                  ? () => handleDeleteBlankPage(currentVP.blankPage.id)
-                  : undefined
-              }
-              currentBgTheme={currentVP?.type === 'blank' ? (currentVP.blankPage.bgTheme ?? 'white') : undefined}
-              onChangeBgTheme={
-                currentVP?.type === 'blank'
-                  ? (theme) => updateBgTheme(currentVP.blankPage.id, theme)
-                  : undefined
-              }
-              onVoiceNote={activeDocument ? () => { startRecording(activeDocument.id, pageIdentifier); setVoiceSheetOpen(true); } : undefined}
-              isRecording={isRecording}
-              documentUrl={activeDocument?.url}
-              currentPdfPage={currentPdfPage}
-              selectedText={selectedText}
-              activeDocumentId={activeDocumentId ?? undefined}
-              onInsertTextNote={hasDocument ? handleInsertTextNote : undefined}
-              onInsertBlankPageWithGrid={hasDocument ? handleInsertBlankPageWithGrid : undefined}
-              onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
-              onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
-              onAddImageToPage={hasDocument && !isPPTX && !isBlankPage ? handleAddImageToPage : undefined}
-              onAddImageAsNewPage={hasDocument && !isPPTX ? handleAddImageAsNewPage : undefined}
-              docPageImages={activeDocument ? allPageImages[activeDocument.id] : undefined}
-              currentPdfPageForImages={currentPdfPage}
-              onDeletePageImage={hasDocument && !isPPTX ? handleDeletePageImage : undefined}
               onClose={() => setRightPanelOpen(false)}
+              activeTab={rightPanelTab}
+              onTabChange={setRightPanelTab}
+              notes={
+                <NotesTabContent
+                  activeDocumentId={activeDocumentId}
+                  activeDocument={activeDocument}
+                  virtualPages={virtualSequence}
+                  allTextNotes={pageTextNotes}
+                  voiceNotes={voiceNotes}
+                  onNavigate={setVirtualIndex}
+                  onDeleteTextNote={handleDeleteTextNote}
+                  onDeleteVoiceNote={deleteNote}
+                  onAddNote={hasDocument ? () => atSetTool('text') : undefined}
+                  onAddDrawing={hasDocument ? () => { atSetTool('pen'); atSetPenType('normal'); } : undefined}
+                  onAddBookmark={hasDocument ? handleToggleBookmark : undefined}
+                  isBookmarked={isCurrentPageBookmarked}
+                  onAddFlashcard={() => { setRightPanelOpen(true); setRightPanelTab('ai'); }}
+                  onRecordVoiceNote={activeDocument ? () => {
+                    // Same toggle as the Mic pill — the Notes-tab button's
+                    // label already swaps to "Stop Recording" when isRecording,
+                    // so clicking it must actually stop.
+                    if (isRecording) { stopRecording(); return; }
+                    startRecording(activeDocument.id, pageIdentifier);
+                    setVoiceSheetOpen(true);
+                  } : undefined}
+                  isRecording={isRecording}
+                />
+              }
+              aiAssistant={
+                <AIAssistantTabContent
+                  hasDocument={hasDocument}
+                  isBlankPage={isBlankPage}
+                  documentUrl={activeDocument?.url}
+                  currentPdfPage={currentPdfPage}
+                  selectedText={selectedText}
+                />
+              }
+              chat={<ChatTabContent myUserId={userId} />}
             />
           </div>
 

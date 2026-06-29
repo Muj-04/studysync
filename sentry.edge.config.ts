@@ -3,18 +3,25 @@
 // Note that this config is unrelated to the Vercel Edge Runtime and is also required when running locally.
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
-import * as Sentry from "@sentry/nextjs";
+import * as Sentry from '@sentry/nextjs';
+import { scrubSentryEvent } from './sentry.scrub';
 
 Sentry.init({
-  dsn: "https://640cb91183f65f20ed07e78c5aa0b4e0@o4511541268119552.ingest.us.sentry.io/4511541273952256",
+  // DSN comes from env — same key the client/server configs read,
+  // already set in Vercel (Preview + Production).
+  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
-  tracesSampleRate: 1,
+  environment: process.env.NODE_ENV,
+
+  // 10% trace sampling in production; off in dev. Previously 1.0.
+  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
 
   // Enable logs to be sent to Sentry
   enableLogs: true,
 
-  // Enable sending user PII (Personally Identifiable Information)
-  // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
-  sendDefaultPii: true,
+  // PII off — see sentry.server.config.ts for the same reasoning.
+  sendDefaultPii: false,
+
+  // Scrub Authorization/Cookie headers + token-shaped fields.
+  beforeSend: scrubSentryEvent,
 });

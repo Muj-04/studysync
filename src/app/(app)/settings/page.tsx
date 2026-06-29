@@ -11,6 +11,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
+import { clearLocalUserData } from '@/lib/clearLocalUserData';
 import {
   getUserStorageStats,
   getLimitUsageStats,
@@ -465,6 +466,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
     const { error } = await deleteUserAccount();
     if (error) { setDelLoading(false); alert('Failed to delete account: ' + error); return; }
     await sb.auth.signOut();
+    await clearLocalUserData();
     router.replace('/login');
   }, [router, sb]);
 
@@ -571,6 +573,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
         <GhostBtn
           onClick={async () => {
             await sb.auth.signOut();
+            await clearLocalUserData();
             router.replace('/login');
           }}
         >
@@ -703,11 +706,11 @@ function AppearanceSection() {
       setIsDark(dark);
       setFontSize((prefs?.font_size ?? storageGet<string>(KEYS.FONT_SIZE) ?? 'medium') as 'small' | 'medium' | 'large');
       setFontFamily((prefs?.font_family ?? storageGet<string>(KEYS.FONT_FAMILY) ?? 'default') as 'default' | 'serif' | 'mono');
-      const ac = prefs?.accent_color ?? storageGet<string>(KEYS.ACCENT_COLOR) ?? 'Blue';
+      const ac = prefs?.accent_color ?? storageGet<string>(KEYS.ACCENT_COLOR) ?? 'Purple';
       setAccent(ac);
       if (ac.startsWith('#')) setCustomAccent(ac);
-      setBgColor(prefs?.bg_color ?? storageGet<string>(KEYS.BG_COLOR) ?? (dark ? '#000000' : '#f5f5f5'));
-      setSidebarColor(prefs?.sidebar_color ?? storageGet<string>(KEYS.SIDEBAR_COLOR) ?? (dark ? '#0a0a0a' : '#ffffff'));
+      setBgColor(prefs?.bg_color ?? storageGet<string>(KEYS.BG_COLOR) ?? (dark ? '#000000' : '#fafaf9'));
+      setSidebarColor(prefs?.sidebar_color ?? storageGet<string>(KEYS.SIDEBAR_COLOR) ?? (dark ? '#0a0a0a' : '#f3f4f6'));
       setLoading(false);
     });
   }, []);

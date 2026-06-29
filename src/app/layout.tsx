@@ -33,9 +33,11 @@ var r=document.documentElement;
 var g=function(k){try{var v=localStorage.getItem(k);return v?JSON.parse(v):null}catch(e){return null}};
 var t=g('studysync_theme')||localStorage.getItem('theme');
 if(t==='light')r.setAttribute('data-theme','light');
-var AC={'Blue':['#2563eb','#3b82f6','rgba(37,99,235,0.14)'],'Purple':['#7c3aed','#8b5cf6','rgba(124,58,237,0.14)'],'Green':['#059669','#10b981','rgba(5,150,105,0.14)'],'Orange':['#d97706','#f59e0b','rgba(217,119,6,0.14)'],'Pink':['#db2777','#ec4899','rgba(219,39,119,0.14)']};
+var AC={'Purple':['#7c3aed','#8b5cf6','rgba(124,58,237,0.14)'],'Green':['#059669','#10b981','rgba(5,150,105,0.14)'],'Orange':['#d97706','#f59e0b','rgba(217,119,6,0.14)'],'Pink':['#db2777','#ec4899','rgba(219,39,119,0.14)']};
 var ac=g('studysync_accent_color');
-if(ac&&AC[ac]){r.style.setProperty('--accent',AC[ac][0]);r.style.setProperty('--accent-hover',AC[ac][1]);r.style.setProperty('--accent-muted',AC[ac][2]);r.style.setProperty('--violet',AC[ac][0]);r.style.setProperty('--violet-muted',AC[ac][2]);}
+/* 'Blue' is the legacy brand default — treated as no-op so the CSS :root --accent (violet) wins. Mirrors the branch in src/lib/preferences.ts applyPreferences. */
+if(ac==='Blue'){/* no inline override */}
+else if(ac&&AC[ac]){r.style.setProperty('--accent',AC[ac][0]);r.style.setProperty('--accent-hover',AC[ac][1]);r.style.setProperty('--accent-muted',AC[ac][2]);r.style.setProperty('--violet',AC[ac][0]);r.style.setProperty('--violet-muted',AC[ac][2]);}
 else if(ac&&ac.startsWith('#')){var rgb=function(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]};var c=rgb(ac);var lt='rgb('+(Math.min(255,Math.round(c[0]+(255-c[0])*.18)))+','+(Math.min(255,Math.round(c[1]+(255-c[1])*.18)))+','+(Math.min(255,Math.round(c[2]+(255-c[2])*.18)))+')';r.style.setProperty('--accent',ac);r.style.setProperty('--accent-hover',lt);r.style.setProperty('--accent-muted','rgba('+c[0]+','+c[1]+','+c[2]+',.14)');r.style.setProperty('--violet',ac);r.style.setProperty('--violet-muted','rgba('+c[0]+','+c[1]+','+c[2]+',.14)');}
 var fs=g('studysync_font_size');
 if(fs==='small')document.body&&(document.body.style.fontSize='11px');

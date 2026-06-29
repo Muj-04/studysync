@@ -22,6 +22,13 @@ interface Props {
   onDelete: (id: string) => void;
   onUpdateTitle: (id: string, title: string) => void;
   listRef?: React.Ref<VoiceNoteListHandle>;
+  /**
+   * Workspace passes `hideRecorder` because voice recording moved to the
+   * Notes tab's Record button + the BottomPillBar Mic pill per the Figma
+   * redesign. RoomClient still uses the recorder here (no Figma redesign
+   * for rooms yet), so default = false.
+   */
+  hideRecorder?: boolean;
 }
 
 export default function VoiceNotesSheet({
@@ -29,6 +36,7 @@ export default function VoiceNotesSheet({
   notes, pageKey, documentId, pageNumber,
   isRecording, recordingDuration, recordingContext,
   onStart, onStop, onDelete, onUpdateTitle, listRef,
+  hideRecorder = false,
 }: Props) {
   const { t } = useLanguage();
   const touchStartY = useRef<number | null>(null);
@@ -144,35 +152,41 @@ export default function VoiceNotesSheet({
       }}>
         <div style={{ borderTop: '1px solid var(--border)' }}>
 
-          {/* Recorder row */}
-          <div
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 14px 8px',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 400 }}>
-              {notes.length === 0
-                ? t('vs_no_notes')
-                : `${notes.length} note${notes.length !== 1 ? 's' : ''}`}
-            </span>
-            <VoiceNoteRecorder
-              documentId={documentId}
-              pageNumber={pageNumber}
-              isRecording={isRecording}
-              recordingDuration={recordingDuration}
-              recordingContext={recordingContext}
-              onStart={onStart}
-              onStop={onStop}
-            />
-          </div>
+          {/* Recorder row — hidden by the workspace per Figma; the room
+              view still shows it because rooms have no Notes-tab/pill
+              equivalent yet. */}
+          {!hideRecorder && (
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 14px 8px',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 400 }}>
+                {notes.length === 0
+                  ? t('vs_no_notes')
+                  : `${notes.length} note${notes.length !== 1 ? 's' : ''}`}
+              </span>
+              <VoiceNoteRecorder
+                documentId={documentId}
+                pageNumber={pageNumber}
+                isRecording={isRecording}
+                recordingDuration={recordingDuration}
+                recordingContext={recordingContext}
+                onStart={onStart}
+                onStop={onStop}
+              />
+            </div>
+          )}
 
-          {/* Notes list */}
+          {/* Notes list — wrapped in a top border ONLY when the recorder
+              row above is showing (otherwise we'd have a double-border
+              when the recorder is hidden and the list is first). */}
           {notes.length > 0 && (
             <div
               style={{
-                borderTop: '1px solid var(--border-subtle)',
+                borderTop: hideRecorder ? 'none' : '1px solid var(--border-subtle)',
                 padding: '4px 8px 6px',
               }}
               onClick={(e) => e.stopPropagation()}
@@ -184,6 +198,19 @@ export default function VoiceNotesSheet({
                 onDelete={onDelete}
                 onUpdateTitle={onUpdateTitle}
               />
+            </div>
+          )}
+
+          {/* When the recorder is hidden AND there are no notes, the
+              expanded sheet would be empty. Show a small placeholder so
+              users understand recording happens elsewhere. */}
+          {hideRecorder && notes.length === 0 && (
+            <div style={{
+              padding: '14px 16px',
+              textAlign: 'center',
+              fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5,
+            }}>
+              {t('vs_no_notes')}
             </div>
           )}
         </div>

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RoomStrokePayload } from '@/lib/supabase/db';
 
 export interface RoomVoiceNotePayload {
   id: string;
@@ -39,6 +40,11 @@ export function useStudyRoom(
   onIncomingBlankDrawing?: (pageId: string, data: string) => void,
   onRoomClosed?: () => void,
   onIncomingDocChange?: (uploaderName: string, fileName: string) => void,
+  // New stroke-event broadcast (append-only). Coexists with the legacy
+  // 'drawing' / 'blank_drawing' PNG-snapshot events for back-compat during
+  // rollout. Rooms using the new model should set this and ignore the
+  // legacy ones.
+  onIncomingStroke?: (pageKey: string, stroke: RoomStrokePayload) => void,
 ) {
   const [memberCount, setMemberCount] = useState(1);
   const [members, setMembers] = useState<RoomMember[]>([]);
@@ -48,6 +54,7 @@ export function useStudyRoom(
   const onVoiceNoteAddedRef  = useRef(onIncomingVoiceNoteAdded);
   const onVoiceNoteDeleteRef = useRef(onIncomingVoiceNoteDelete);
   const onBlankPageRef       = useRef(onIncomingBlankPage);
+  const onStrokeRef          = useRef(onIncomingStroke);
   const onBlankDrawingRef    = useRef(onIncomingBlankDrawing);
   const onRoomClosedRef      = useRef(onRoomClosed);
   const onDocChangeRef       = useRef(onIncomingDocChange);
@@ -63,6 +70,7 @@ export function useStudyRoom(
   useEffect(() => { onVoiceNoteAddedRef.current = onIncomingVoiceNoteAdded; });
   useEffect(() => { onVoiceNoteDeleteRef.current = onIncomingVoiceNoteDelete; });
   useEffect(() => { onBlankPageRef.current = onIncomingBlankPage; });
+  useEffect(() => { onStrokeRef.current = onIncomingStroke; });
   useEffect(() => { onBlankDrawingRef.current = onIncomingBlankDrawing; });
   useEffect(() => { onRoomClosedRef.current = onRoomClosed; });
   useEffect(() => { onDocChangeRef.current = onIncomingDocChange; });
@@ -123,6 +131,10 @@ export function useStudyRoom(
         .on('broadcast', { event: 'blank_drawing' }, ({ payload }: { payload: { pageId: string; data: string } }) => {
           if (generation !== generationRef.current) return;
           onBlankDrawingRef.current?.(payload.pageId, payload.data);
+        })
+        .on('broadcast', { event: 'stroke' }, ({ payload }: { payload: { pageKey: string; stroke: RoomStrokePayload } }) => {
+          if (generation !== generationRef.current) return;
+          onStrokeRef.current?.(payload.pageKey, payload.stroke);
         })
         .on('broadcast', { event: 'voice_note_added' }, ({ payload }: { payload: { noteId: string } }) => {
           if (generation !== generationRef.current) return;
@@ -247,6 +259,22 @@ export function useStudyRoom(
       .catch((err) => console.error('[StudyRoom] broadcast blank_drawing error:', err));
   }, []);
 
+  // Stroke delta — sent on every completed stroke. Recipients dedupe by
+  // stroke.id, so a stroke that arrives both via realtime and via the
+  // reconnect reconciliation fetch is applied only once.
+  const broadcastStroke = useCallback((pageKey: string, stroke: RoomStrokePayload) => {
+    const ch = channelRef.current;
+    const chState = (ch as unknown as { state?: string })?.state ?? 'no channel';
+    if (!ch) {
+      console.warn('[StudyRoom] broadcastStroke — channel not ready', { pageKey, strokeId: stroke.id, chState });
+      return;
+    }
+    console.log('[StudyRoom] broadcastStroke send', { pageKey, strokeId: stroke.id, chState });
+    ch.send({ type: 'broadcast', event: 'stroke', payload: { pageKey, stroke } })
+      .then(() => console.log('[StudyRoom] broadcastStroke OK', { strokeId: stroke.id }))
+      .catch((err) => console.error('[StudyRoom] broadcastStroke error', { strokeId: stroke.id, err }));
+  }, []);
+
   const broadcastVoiceNoteAdded = useCallback((noteId: string) => {
     const ch = channelRef.current;
     const state = (ch as unknown as { state?: string })?.state ?? 'no channel';
@@ -300,7 +328,7 @@ export function useStudyRoom(
   }, []);
 
   return {
-    broadcastDrawing, broadcastBlankDrawing,
+    broadcastDrawing, broadcastBlankDrawing, broadcastStroke,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
     broadcastBlankPageAdded, broadcastRoomClosed,
     broadcastDocChanged,

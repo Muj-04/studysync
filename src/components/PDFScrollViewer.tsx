@@ -6,6 +6,7 @@ import type { Tool, PenType } from '@/lib/drawing';
 import { getDrawingCursor } from '@/lib/drawing';
 import { Mic, Plus, Square } from 'lucide-react';
 import TextNotesLayer from './TextNotesLayer';
+import type { RoomStrokePayload } from '@/lib/supabase/db';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,40 @@ function applyCtx(
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'round';
   }
+}
+
+// Replay one stroke onto a 2D context. Points are stored in the canvas-CSS
+// coordinate space at draw time (canvasW × canvasH); the scale factors map
+// them onto the current canvas size, and the line width is scaled by the
+// average factor so the same stroke looks consistent across zooms.
+//
+// Used by the stroke-event render path (room mode) — both for the initial
+// full-replay and for the incremental "new strokes only" apply.
+function applyStrokeToCtx(
+  ctx: CanvasRenderingContext2D,
+  stroke: RoomStrokePayload,
+  scaleX: number,
+  scaleY: number,
+) {
+  const { tool, penType, color, size, points } = stroke;
+  if (!points || points.length === 0) return;
+  const sizeScale = (scaleX + scaleY) / 2;
+  ctx.save();
+  applyCtx(ctx, tool, penType, color, size * sizeScale);
+  if (points.length === 1) {
+    const p = points[0];
+    ctx.beginPath();
+    ctx.arc(p.x * scaleX, p.y * scaleY, Math.max(ctx.lineWidth / 2, 1), 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x * scaleX, points[0].y * scaleY);
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(points[i].x * scaleX, points[i].y * scaleY);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // ── Voice note badge ──────────────────────────────────────────────────────────
@@ -195,6 +230,15 @@ interface PageItemProps {
   // in scroll mode. Keyed by pdfPage (number) instead of blankPage.id.
   pdfNotes?: TextNote[];
   onSavePdfNotes?: (pdfPage: number, notes: TextNote[]) => void;
+  // ── Stroke-event mode (room collaborative drawings) ────────────────────
+  // When `onStrokeComplete` is set, the canvas switches from "snapshot a
+  // PNG of the full canvas on every stopDraw" to "emit one stroke event
+  // per completed stroke; replay strokes by id on every render." This
+  // eliminates the last-write-wins overwrite bug from concurrent drawing.
+  // Workspace single-user callers leave both undefined and keep the PNG
+  // path. See supabase/migrations/2026-06-29_room_strokes.sql.
+  strokes?: RoomStrokePayload[];
+  onStrokeComplete?: (pageKey: string, stroke: RoomStrokePayload) => void;
 }
 
 const ScrollPageItem = memo(function ScrollPageItem({
@@ -206,6 +250,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
   savedBlankDrawing, onSaveBlankDrawing,
   blankNotes, onSaveBlankNotes, onActivateTextTool, onExitTextTool,
   pdfNotes, onSavePdfNotes,
+  strokes, onStrokeComplete,
 }: PageItemProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -235,6 +280,30 @@ const ScrollPageItem = memo(function ScrollPageItem({
   // start → current, giving a rubber-band preview without leaving prior
   // intermediate lines behind. Cleared on stopDraw.
   const lineSnapshotRef = useRef<ImageData | null>(null);
+
+  // ── Stroke-event mode state ─────────────────────────────────────────────
+  // `appliedStrokeIdsRef` tracks which strokes from the `strokes` prop are
+  // already painted on the canvas — the incremental-apply effect uses it
+  // to skip strokes that were already drawn (either by replay or by the
+  // local user just now). Cleared on canvas resize so a full replay can
+  // re-fill it from scratch.
+  const appliedStrokeIdsRef = useRef<Set<string>>(new Set());
+  // `currentStrokePointsRef` collects points during a local stroke; on
+  // stopDraw they become the stroke event's points list. Cleared per stroke.
+  const currentStrokePointsRef = useRef<Array<{ x: number; y: number }>>([]);
+  const currentStrokeIdRef = useRef<string>('');
+  // Line tool stores its end position separately because lastPos.current
+  // stays anchored at the line's start during continueDraw (rubber-band).
+  const lineEndPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Stroke-event mode is opt-in: when both a strokes prop and the completion
+  // callback are passed, this page item uses the stroke-event render path
+  // instead of the PNG-snapshot path. Workspace callers leave both undefined.
+  const strokeMode = !!onStrokeComplete;
+  const pageKey: string =
+    vp.type === 'pdf'
+      ? `pdf:${vp.pdfPage}`
+      : `blank:${vp.blankPage.id}`;
 
   // Keep cssDimsRef in sync
   useEffect(() => { cssDimsRef.current = cssDims; }, [cssDims]);
@@ -342,7 +411,12 @@ const ScrollPageItem = memo(function ScrollPageItem({
     };
   }, [visible, nearViewport, vp, document.url, containerWidth, zoom]);
 
-  // Drawing canvas setup — nearViewport added so drawings reload when returning to window
+  // Drawing canvas setup — nearViewport added so drawings reload when returning to window.
+  // Two render paths share this effect:
+  //   • PNG mode (workspace): load `savedDrawing` data URL onto the canvas.
+  //   • Stroke-event mode (room): replay every stroke from the `strokes` prop
+  //     in seq order. `appliedStrokeIdsRef` is reset and re-filled so the
+  //     incremental-apply effect downstream knows nothing else needs painting.
   useEffect(() => {
     if (vp.type !== 'pdf' || !cssDims || !nearViewport) return;
     const drawCanvas = drawCanvasRef.current;
@@ -357,18 +431,31 @@ const ScrollPageItem = memo(function ScrollPageItem({
     const ctx = drawCanvas.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    if (savedDrawing) {
+    if (strokeMode) {
+      appliedStrokeIdsRef.current = new Set();
+      if (strokes && strokes.length > 0) {
+        for (const s of strokes) {
+          const scaleX = w / (s.canvasW || w);
+          const scaleY = h / (s.canvasH || h);
+          applyStrokeToCtx(ctx, s, scaleX, scaleY);
+          appliedStrokeIdsRef.current.add(s.id);
+        }
+      }
+    } else if (savedDrawing) {
       const img = new Image();
       img.onload = () => ctx.drawImage(img, 0, 0, w, h);
       img.src = savedDrawing;
     }
     isDrawing.current = false;
     lastPos.current = null;
-  }, [cssDims?.w, cssDims?.h, vp.type, nearViewport, savedDrawing]);
+  // strokes deliberately excluded — the incremental-apply effect below
+  // handles strokes-array changes without resizing/clearing the canvas.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cssDims?.w, cssDims?.h, vp.type, nearViewport, savedDrawing, strokeMode]);
 
   // Blank-page drawing canvas setup — mirrors the PDF effect above but uses
   // synthetic dimensions (no PDF render produces cssDims for blank pages).
-  // Re-runs when savedBlankDrawing changes so remote strokes paint in.
+  // Re-runs when savedBlankDrawing (PNG mode) or strokes (event mode) reset.
   useEffect(() => {
     if (vp.type !== 'blank' || !nearViewport || containerWidth < 10) return;
     const drawCanvas = drawCanvasRef.current;
@@ -384,14 +471,49 @@ const ScrollPageItem = memo(function ScrollPageItem({
     const ctx = drawCanvas.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    if (savedBlankDrawing) {
+    if (strokeMode) {
+      appliedStrokeIdsRef.current = new Set();
+      if (strokes && strokes.length > 0) {
+        for (const s of strokes) {
+          const scaleX = w / (s.canvasW || w);
+          const scaleY = h / (s.canvasH || h);
+          applyStrokeToCtx(ctx, s, scaleX, scaleY);
+          appliedStrokeIdsRef.current.add(s.id);
+        }
+      }
+    } else if (savedBlankDrawing) {
       const img = new Image();
       img.onload = () => ctx.drawImage(img, 0, 0, w, h);
       img.src = savedBlankDrawing;
     }
     isDrawing.current = false;
     lastPos.current = null;
-  }, [vp.type, nearViewport, containerWidth, zoom, savedBlankDrawing]);
+  // strokes excluded — handled by the incremental-apply effect below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vp.type, nearViewport, containerWidth, zoom, savedBlankDrawing, strokeMode]);
+
+  // ── Incremental stroke apply (room mode) ────────────────────────────────
+  // Runs whenever the strokes prop changes. Paints any stroke whose id is
+  // NOT already in appliedStrokeIdsRef — i.e. ones that arrived since the
+  // last render. Local strokes that the user just finished are pre-added
+  // to the applied set in stopDraw, so this loop is a no-op for them
+  // (avoids the flash from a full clear-and-replay).
+  useEffect(() => {
+    if (!strokeMode || !strokes || strokes.length === 0) return;
+    const drawCanvas = drawCanvasRef.current;
+    const dims = canvasDimsRef.current;
+    if (!drawCanvas || !dims) return;
+    const ctx = drawCanvas.getContext('2d');
+    if (!ctx) return;
+    const { w, h } = dims;
+    for (const s of strokes) {
+      if (appliedStrokeIdsRef.current.has(s.id)) continue;
+      const scaleX = w / (s.canvasW || w);
+      const scaleY = h / (s.canvasH || h);
+      applyStrokeToCtx(ctx, s, scaleX, scaleY);
+      appliedStrokeIdsRef.current.add(s.id);
+    }
+  }, [strokes, strokeMode]);
 
   const getPos = (e: { clientX: number; clientY: number }) => {
     const dims = canvasDimsRef.current;
@@ -421,6 +543,14 @@ const ScrollPageItem = memo(function ScrollPageItem({
     if (!drawCanvas || !ctx || !canvasDimsRef.current) return;
     isDrawing.current = true;
     lastPos.current = pos;
+    if (strokeMode) {
+      // Begin a new stroke event. `id` is a stable client uuid so dedup-by-id
+      // works whether the stroke arrives at other clients via realtime or via
+      // the reconnect-reconciliation DB fetch.
+      currentStrokeIdRef.current = crypto.randomUUID();
+      currentStrokePointsRef.current = [{ x: pos.x, y: pos.y }];
+      lineEndPosRef.current = null;
+    }
     if (tool === 'line') {
       // Snapshot the pre-line canvas; continueDraw will restore it before
       // each rubber-band redraw. Skip the starting dot so an unmoved click
@@ -452,6 +582,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
       ctx.restore();
+      if (strokeMode) lineEndPosRef.current = { x: pos.x, y: pos.y };
       return;
     }
     ctx.save();
@@ -462,6 +593,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
     ctx.stroke();
     ctx.restore();
     lastPos.current = pos;
+    if (strokeMode) currentStrokePointsRef.current.push({ x: pos.x, y: pos.y });
   };
 
   const stopDraw = () => {
@@ -469,6 +601,60 @@ const ScrollPageItem = memo(function ScrollPageItem({
     isDrawing.current = false;
     lastPos.current = null;
     lineSnapshotRef.current = null;
+    if (strokeMode) {
+      // Build and emit the stroke event. We pre-add the id to the applied
+      // set so the incremental-apply effect skips re-painting (the canvas
+      // already has these pixels from the live draw).
+      // Tool narrows here because startDraw early-returns for 'text', so
+      // isDrawing.current can only be true for paintable tools.
+      const dims = canvasDimsRef.current;
+      const isPaintTool = tool === 'pen' || tool === 'eraser' || tool === 'line';
+      // Verbose trace — confirms stopDraw fires in stroke mode + that the
+      // callback prop is actually wired. If `onStrokeCallbackPresent` ever
+      // logs false on a user reporting the bug, the parent isn't passing it.
+      console.log('[Draw] stopDraw stroke-mode', {
+        pageKey, tool, penType,
+        hasDims: !!dims,
+        isPaintTool,
+        capturedPoints: currentStrokePointsRef.current.length,
+        lineEnd: !!lineEndPosRef.current,
+        onStrokeCallbackPresent: !!onStrokeComplete,
+        strokeIdInFlight: currentStrokeIdRef.current,
+      });
+      if (dims && isPaintTool) {
+        const points = tool === 'line'
+          ? (() => {
+              const start = currentStrokePointsRef.current[0];
+              const end   = lineEndPosRef.current ?? start;
+              return start ? [start, end] : [];
+            })()
+          : currentStrokePointsRef.current.slice();
+        if (points.length > 0) {
+          const stroke: RoomStrokePayload = {
+            id:       currentStrokeIdRef.current,
+            tool,
+            penType,
+            color,
+            size:     strokeSize,
+            points,
+            compositeMode: tool === 'eraser' ? 'destination-out' : 'source-over',
+            canvasW:  dims.w,
+            canvasH:  dims.h,
+          };
+          appliedStrokeIdsRef.current.add(stroke.id);
+          console.log('[Draw] stopDraw EMIT', { pageKey, strokeId: stroke.id, points: points.length });
+          onStrokeComplete?.(pageKey, stroke);
+        } else {
+          console.warn('[Draw] stopDraw NO-EMIT — points.length=0', { pageKey, tool });
+        }
+      } else {
+        console.warn('[Draw] stopDraw NO-EMIT — guard failed', { pageKey, tool, hasDims: !!dims, isPaintTool });
+      }
+      currentStrokePointsRef.current = [];
+      currentStrokeIdRef.current = '';
+      lineEndPosRef.current = null;
+      return;
+    }
     saveCanvas();
   };
 
@@ -730,6 +916,13 @@ interface Props {
   saveDrawing: (docId: string, page: number, data: string) => void;
   getBlankDrawing?: (pageId: string) => string | undefined;
   saveBlankDrawing?: (pageId: string, data: string) => void;
+  // ── Stroke-event mode (room collaborative drawings) ────────────────────
+  // When `onStrokeComplete` is set, the page items switch from PNG-snapshot
+  // saves to append-only stroke events. `roomStrokes` is the per-page-key
+  // map of strokes (already sorted by seq) that each ScrollPageItem replays.
+  // page_key shape: 'pdf:<n>' for PDF pages, 'blank:<uuid>' for blank pages.
+  roomStrokes?: Record<string, RoomStrokePayload[]>;
+  onStrokeComplete?: (pageKey: string, stroke: RoomStrokePayload) => void;
   getBlankNotes?: (pageId: string) => TextNote[];
   saveBlankNotes?: (pageId: string, notes: TextNote[]) => void;
   onActivateTextTool?: () => void;
@@ -747,6 +940,7 @@ export default function PDFScrollViewer({
   getBlankDrawing, saveBlankDrawing,
   getBlankNotes, saveBlankNotes, onActivateTextTool, onExitTextTool,
   getPdfNotes, savePdfNotes,
+  roomStrokes, onStrokeComplete,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -852,6 +1046,11 @@ export default function PDFScrollViewer({
         const savedBlankDrawing = vp.type === 'blank' && getBlankDrawing
           ? getBlankDrawing(vp.blankPage.id)
           : undefined;
+        // Stroke-event mode — pull the per-page slice if the parent opted in.
+        const pageKey = vp.type === 'pdf'
+          ? `pdf:${vp.pdfPage}`
+          : `blank:${vp.blankPage.id}`;
+        const pageStrokes = roomStrokes ? roomStrokes[pageKey] : undefined;
         const blankNotes = vp.type === 'blank' && getBlankNotes
           ? getBlankNotes(vp.blankPage.id)
           : undefined;
@@ -887,6 +1086,8 @@ export default function PDFScrollViewer({
             onExitTextTool={onExitTextTool}
             pdfNotes={pdfNotesForPage}
             onSavePdfNotes={savePdfNotes}
+            strokes={pageStrokes}
+            onStrokeComplete={onStrokeComplete}
           />
         );
       })}

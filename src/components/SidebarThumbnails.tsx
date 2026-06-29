@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Presentation, X, FileImage, Bookmark, ChevronRight, Loader2, Mic, Trash2, GripVertical } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { FileText, Presentation, X, FileImage, Bookmark, ChevronRight, Loader2, GripVertical, MoreHorizontal, Trash2 } from 'lucide-react';
 import {
   DndContext, closestCenter, DragOverlay,
   MouseSensor, TouchSensor, KeyboardSensor,
@@ -12,7 +12,7 @@ import {
   verticalListSortingStrategy, arrayMove, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { PDFDocument, BlankPage, Bookmark as BookmarkType, VoiceNote, TextNote } from '@/types';
+import type { PDFDocument, BlankPage, Bookmark as BookmarkType } from '@/types';
 
 // ── Module-level thumbnail caches ─────────────────────────────────────────────
 
@@ -20,21 +20,11 @@ const docPromises = new Map<string, Promise<unknown>>();
 const thumbCache  = new Map<string, string>(); // "url:page" → jpeg dataURL
 const outlineCache = new Map<string, OutlineItem[]>(); // url → resolved outline
 
-function formatDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-interface NoteEntry {
-  id: string;
-  type: 'text' | 'voice';
-  pageKey: string;
-  pageLabel: string;
-  virtualIdx: number;
-  preview: string;
-  timestamp?: Date;
-}
+// Notes (text + voice) used to live in this sidebar's "Notes" tab; that
+// tab was removed in the right-panel restructure. Notes are now rendered
+// by NotesTabContent in the right panel. The combinedNotes builder, the
+// annotations tab JSX, and the NoteEntry type were deleted from this
+// file. SidebarThumbnails now has just two tabs: Pages and Outlines.
 
 function getPdfDocPromise(url: string): Promise<unknown> {
   if (!docPromises.has(url)) {
@@ -382,19 +372,15 @@ interface Props {
   onRemoveBookmark?:    (id: string) => void;
   onNavigateToPdfPage?: (page: number) => void;
   isPPTX?:              boolean;
-  allTextNotes?:        Record<string, TextNote[]>;
-  voiceNotes?:          VoiceNote[];
-  onDeleteTextNote?:    (pageKey: string, noteId: string) => void;
-  onDeleteVoiceNote?:   (id: string) => void;
   onReorderDocuments?:  (ids: string[]) => void;
+  onDeleteBlankPage?:   (id: string) => void;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 const SIDEBAR_TABS = [
-  { id: 'pages',       label: 'Pages' },
-  { id: 'outlines',    label: 'Outlines' },
-  { id: 'annotations', label: 'Notes' },
+  { id: 'pages',    label: 'Pages' },
+  { id: 'outlines', label: 'Outlines' },
 ] as const;
 
 type SidebarTab = typeof SIDEBAR_TABS[number]['id'];
@@ -405,11 +391,32 @@ export default function SidebarThumbnails({
   onSelectDocument, onRemoveDocument, onNavigate,
   bookmarks = [], onRemoveBookmark, onNavigateToPdfPage,
   isPPTX = false,
-  allTextNotes = {}, voiceNotes = [], onDeleteTextNote, onDeleteVoiceNote,
   onReorderDocuments,
+  onDeleteBlankPage,
 }: Props) {
   const thumbListRef = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<SidebarTab>('pages');
+  const [openBlankMenuId, setOpenBlankMenuId] = useState<string | null>(null);
+
+  // Close kebab menu on outside-click / Escape
+  useEffect(() => {
+    if (!openBlankMenuId) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest?.('[data-blank-menu]') && !target.closest?.('[data-blank-menu-trigger]')) {
+        setOpenBlankMenuId(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenBlankMenuId(null);
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [openBlankMenuId]);
 
   // ── DnD (hooks must be unconditional) ─────────────────────────────────────
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -446,48 +453,6 @@ export default function SidebarThumbnails({
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [currentVirtualIndex]);
 
-  // Combined notes for the annotations tab
-  const combinedNotes = useMemo((): NoteEntry[] => {
-    if (!activeDocumentId) return [];
-    const entries: NoteEntry[] = [];
-    const prefix = `${activeDocumentId}:`;
-
-    Object.entries(allTextNotes).forEach(([key, notes]) => {
-      if (!key.startsWith(prefix)) return;
-      const pageId = key.slice(prefix.length);
-      const pdfPage = parseInt(pageId, 10);
-      const isBlank = isNaN(pdfPage);
-      const virtualIdx = isBlank
-        ? virtualPages.findIndex((vp) => vp.type === 'blank' && vp.blankPage.id === pageId)
-        : virtualPages.findIndex((vp) => vp.type === 'pdf' && vp.pdfPage === pdfPage);
-      if (virtualIdx < 0) return;
-      const pageLabel = isBlank ? 'Blank' : `Page ${pdfPage}`;
-      notes.forEach((note) => {
-        if (!note.content.trim()) return;
-        entries.push({ id: note.id, type: 'text', pageKey: key, pageLabel, virtualIdx, preview: note.content.trim().slice(0, 80) });
-      });
-    });
-
-    voiceNotes.filter((n) => n.documentId === activeDocumentId).forEach((note) => {
-      const pn = note.pageNumber;
-      const isBlank = typeof pn === 'string';
-      const virtualIdx = isBlank
-        ? virtualPages.findIndex((vp) => vp.type === 'blank' && vp.blankPage.id === (pn as string))
-        : virtualPages.findIndex((vp) => vp.type === 'pdf' && vp.pdfPage === (pn as number));
-      if (virtualIdx < 0) return;
-      const pageLabel = isBlank ? 'Blank' : `Page ${pn}`;
-      entries.push({
-        id: note.id, type: 'voice', pageKey: '', pageLabel, virtualIdx,
-        preview: note.title ?? `Voice note · ${formatDuration(note.duration)}`,
-        timestamp: note.timestamp,
-      });
-    });
-
-    return entries.sort((a, b) =>
-      a.virtualIdx !== b.virtualIdx ? a.virtualIdx - b.virtualIdx : a.type === 'text' ? -1 : 1
-    );
-  }, [activeDocumentId, allTextNotes, voiceNotes, virtualPages]);
-
   // Load outline when tab becomes active or document changes
   useEffect(() => {
     if (activeTab !== 'outlines') return;
@@ -517,7 +482,7 @@ export default function SidebarThumbnails({
         background: 'var(--bg-sidebar)',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
-        borderRight: '1px solid rgba(255,255,255,0.1)',
+        borderRight: '1px solid var(--border-subtle)',
         display: 'flex', flexDirection: 'column',
         opacity: isOpen ? 1 : 0,
         transition: 'opacity 0.18s ease',
@@ -539,10 +504,10 @@ export default function SidebarThumbnails({
                   padding: '6px 4px 8px',
                   fontSize: 10, fontWeight: 600,
                   letterSpacing: '0.06em', textTransform: 'uppercase',
-                  color: activeTab === id ? '#ffffff' : 'var(--text-3)',
+                  color: activeTab === id ? 'var(--text-1)' : 'var(--text-3)',
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: `2px solid ${activeTab === id ? 'rgba(255,255,255,0.7)' : 'transparent'}`,
+                  borderBottom: `2px solid ${activeTab === id ? 'var(--accent)' : 'transparent'}`,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
                   transition: 'color 0.13s, border-color 0.13s',
@@ -562,13 +527,6 @@ export default function SidebarThumbnails({
                     position: 'absolute', top: 4, right: 2,
                     width: 5, height: 5, borderRadius: '50%',
                     background: '#f59e0b',
-                  }} />
-                )}
-                {id === 'annotations' && combinedNotes.length > 0 && (
-                  <span style={{
-                    position: 'absolute', top: 4, right: 2,
-                    width: 5, height: 5, borderRadius: '50%',
-                    background: 'rgba(255,255,255,0.65)',
                   }} />
                 )}
               </button>
@@ -622,76 +580,9 @@ export default function SidebarThumbnails({
           </div>
         )}
 
-        {/* ══ NOTES tab ══ */}
-        {activeTab === 'annotations' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '6px 4px 10px' }}>
-            {!activeDocument ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8, padding: 16 }}>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>Open a document to view its notes.</p>
-              </div>
-            ) : combinedNotes.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, gap: 6, padding: 20 }}>
-                <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', textAlign: 'center' }}>No notes yet</p>
-                <p style={{ fontSize: 11, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>Add text or voice notes while studying.</p>
-              </div>
-            ) : (
-              <div style={{ padding: '2px 0' }}>
-                {combinedNotes.map((entry) => (
-                  <div
-                    key={`${entry.type}-${entry.id}`}
-                    className="group"
-                    onClick={() => onNavigate(entry.virtualIdx)}
-                    style={{
-                      display: 'flex', alignItems: 'flex-start', gap: 7,
-                      padding: '6px 7px', borderRadius: 4, marginBottom: 2,
-                      cursor: 'pointer', transition: 'background 0.1s',
-                    }}
-                    onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                    onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    <div style={{ marginTop: 1, flexShrink: 0 }}>
-                      {entry.type === 'voice'
-                        ? <Mic size={10} style={{ color: 'rgba(255,255,255,0.55)' }} />
-                        : <FileText size={10} style={{ color: 'rgba(255,255,255,0.55)' }} />}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 9.5, color: 'var(--text-3)', fontWeight: 600, marginBottom: 1, letterSpacing: '0.03em' }}>
-                        {entry.pageLabel}
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {entry.preview}
-                      </div>
-                      {entry.timestamp && (
-                        <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2 }}>
-                          {entry.timestamp.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                        </div>
-                      )}
-                    </div>
-                    <span
-                      role="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (entry.type === 'text') onDeleteTextNote?.(entry.pageKey, entry.id);
-                        else onDeleteVoiceNote?.(entry.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100"
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: 16, height: 16, borderRadius: 3,
-                        color: 'var(--text-3)', cursor: 'pointer', flexShrink: 0, marginTop: 1,
-                        transition: 'opacity 0.12s, color 0.12s',
-                      }}
-                      onMouseOver={(e) => Object.assign(e.currentTarget.style, { color: 'var(--red)' })}
-                      onMouseOut={(e) => Object.assign(e.currentTarget.style, { color: 'var(--text-3)' })}
-                    >
-                      <Trash2 size={9} />
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* The "Notes" tab was removed from this sidebar; notes (text +
+            voice) are now rendered by NotesTabContent in the right panel
+            as sticky-note cards. */}
 
         {/* ══ PAGES tab ══ */}
         {activeTab === 'pages' && (
@@ -846,13 +737,14 @@ export default function SidebarThumbnails({
                         key={key}
                         data-active={isActive ? 'true' : undefined}
                         onClick={() => onNavigate(idx)}
+                        className="group"
                         style={{
                           width: '100%',
                           display: 'flex', flexDirection: 'column', alignItems: 'center',
                           gap: 4, padding: '4px 3px',
                           borderRadius: 4, marginBottom: 2,
-                          border: `1px solid ${isActive ? 'rgba(255,255,255,0.35)' : 'transparent'}`,
-                          background: isActive ? 'rgba(255,255,255,0.1)' : 'transparent',
+                          border: `1px solid ${isActive ? 'var(--border-strong)' : 'transparent'}`,
+                          background: isActive ? 'var(--bg-active)' : 'transparent',
                           cursor: 'pointer', fontFamily: 'inherit',
                           transition: 'background 0.12s, border-color 0.12s',
                           position: 'relative',
@@ -874,6 +766,72 @@ export default function SidebarThumbnails({
                             position: 'absolute', top: 5, right: 5, zIndex: 1,
                           }}>
                             <Bookmark size={9} fill="#f59e0b" style={{ color: '#f59e0b' }} />
+                          </div>
+                        )}
+
+                        {/* Blank-page kebab menu (hover-revealed) */}
+                        {vp.type === 'blank' && onDeleteBlankPage && (
+                          <div style={{ position: 'absolute', top: 4, left: 4, zIndex: 2 }}>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              data-blank-menu-trigger
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenBlankMenuId(openBlankMenuId === vp.blankPage.id ? null : vp.blankPage.id);
+                              }}
+                              className={openBlankMenuId === vp.blankPage.id ? '' : 'opacity-0 group-hover:opacity-100'}
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: 18, height: 18, borderRadius: 4,
+                                background: 'var(--bg-float)', border: '1px solid var(--bg-float-border)',
+                                color: 'var(--text-2)', cursor: 'pointer',
+                                opacity: openBlankMenuId === vp.blankPage.id ? 1 : 0,
+                                transition: 'opacity 0.12s, color 0.12s',
+                              }}
+                              onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--text-1)'; }}
+                              onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.color = 'var(--text-2)'; }}
+                            >
+                              <MoreHorizontal size={11} />
+                            </span>
+                            {openBlankMenuId === vp.blankPage.id && (
+                              <div
+                                data-blank-menu
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: 'absolute', top: '100%', left: 0, marginTop: 4,
+                                  minWidth: 150,
+                                  background: 'var(--bg-float)',
+                                  backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                                  border: '1px solid var(--bg-float-border)',
+                                  boxShadow: 'var(--shadow-float)',
+                                  borderRadius: 6, padding: 4,
+                                  zIndex: 100,
+                                }}
+                              >
+                                <button
+                                  onClick={() => {
+                                    onDeleteBlankPage(vp.blankPage.id);
+                                    setOpenBlankMenuId(null);
+                                  }}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    width: '100%', height: 28, padding: '0 10px',
+                                    borderRadius: 4,
+                                    background: 'transparent', border: 'none',
+                                    color: 'var(--red)', cursor: 'pointer',
+                                    fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                                    textAlign: 'left',
+                                    transition: 'background 0.12s',
+                                  }}
+                                  onMouseOver={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--red-muted)'; }}
+                                  onMouseOut={(e)  => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                                >
+                                  <Trash2 size={12} />
+                                  Delete blank page
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
 
