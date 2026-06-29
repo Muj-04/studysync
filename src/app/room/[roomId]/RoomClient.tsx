@@ -698,6 +698,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       }
 
       const joinResult = await joinRoom(roomId);
+      // Verbose tracing — joinRoom's RPC writes the row that the room_strokes
+      // INSERT-RLS policy requires. If this logs an error for one user but
+      // not the other, the missing-strokes user never satisfied the policy.
+      console.log('[Room] joinRoom result', { uid: user.id, roomId, joinResult });
       if (joinResult.error === 'full') {
         setErrorMsg(`This room is full (${room.maxMembers}/${room.maxMembers} members).`);
         setStatus('error'); return;
@@ -851,13 +855,21 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // durability + reconciliation channel. Both routes carry the same stroke
   // id so the receiver dedupes them.
   const handleStrokeComplete = useCallback(async (pageKey: string, stroke: RoomStrokePayload) => {
+    // Verbose tracing: log the React-state userId + the roomId being closed
+    // over by this callback. If userId is empty on one user but not the other,
+    // it means joinRoom or the auth load races behind the first draw.
+    console.log('[Room] handleStrokeComplete ENTRY', {
+      pageKey, strokeId: stroke.id, tool: stroke.tool, points: stroke.points?.length,
+      reactUserId: userId, roomId, hasJoined: hasJoinedRef.current,
+    });
     appendStrokeLocal(pageKey, stroke);
     broadcastStroke(pageKey, stroke);
     const result = await insertRoomStroke(roomId, pageKey, stroke);
     if (result && result.seq > maxLocalSeqRef.current) {
       maxLocalSeqRef.current = result.seq;
     }
-  }, [appendStrokeLocal, broadcastStroke, roomId]);
+    console.log('[Room] handleStrokeComplete RESULT', { strokeId: stroke.id, persisted: !!result, seq: result?.seq ?? null });
+  }, [appendStrokeLocal, broadcastStroke, roomId, userId]);
 
   const handlePdfFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

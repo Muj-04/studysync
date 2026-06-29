@@ -1274,7 +1274,19 @@ export async function fetchAllRoomStrokes(roomId: string, sinceSeq?: number): Pr
 export async function insertRoomStroke(
   roomId: string, pageKey: string, stroke: RoomStrokePayload,
 ): Promise<{ seq: number } | null> {
-  const uid = await userId(); if (!uid) return null;
+  // VERBOSE logging until the persistence bug is diagnosed. The previous
+  // implementation logged only error.message which hides RLS-vs-network
+  // distinction; here we dump the whole object plus the auth uid + payload
+  // shape so the next failing run surfaces the actual cause.
+  console.log('[DB] insertRoomStroke ENTRY', {
+    roomId, pageKey, strokeId: stroke.id, tool: stroke.tool, points: stroke.points?.length,
+  });
+  const uid = await userId();
+  if (!uid) {
+    console.error('[DB] insertRoomStroke ABORT — userId() returned null (auth session missing?)', { roomId, strokeId: stroke.id });
+    return null;
+  }
+  console.log('[DB] insertRoomStroke uid', uid);
   const { data, error } = await sb()
     .from('room_strokes')
     .insert({
@@ -1286,7 +1298,20 @@ export async function insertRoomStroke(
     })
     .select('seq')
     .single();
-  if (error) { console.error('[DB] insertRoomStroke error:', error.message); return null; }
+  if (error) {
+    // Dump the full PostgrestError. .code distinguishes RLS (42501),
+    // FK violations (23503), not-null (23502), etc. .details + .hint
+    // come from the planner and are gold for diagnosing the actual cause.
+    console.error('[DB] insertRoomStroke ERROR', {
+      message: error.message,
+      code:    (error as { code?: string }).code,
+      details: (error as { details?: string }).details,
+      hint:    (error as { hint?: string }).hint,
+      uid, roomId, pageKey, strokeId: stroke.id,
+    });
+    return null;
+  }
+  console.log('[DB] insertRoomStroke OK', { strokeId: stroke.id, seq: data.seq });
   return { seq: Number(data.seq) };
 }
 
