@@ -855,6 +855,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // durability + reconciliation channel. Both routes carry the same stroke
   // id so the receiver dedupes them.
   const handleStrokeComplete = useCallback(async (pageKey: string, stroke: RoomStrokePayload) => {
+    // Sentinel A — absolute first line, primitive args only. If this line
+    // does not appear in the console for a user whose strokes don't persist,
+    // handleStrokeComplete itself is never invoked (the bug is in wiring).
+    // If A appears but C/D don't, something between broadcast and insert is
+    // failing silently.
+    console.log('STROKE_DIAG_A handleStrokeComplete CALLED', pageKey, stroke?.id);
     // Verbose tracing: log the React-state userId + the roomId being closed
     // over by this callback. If userId is empty on one user but not the other,
     // it means joinRoom or the auth load races behind the first draw.
@@ -863,8 +869,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       reactUserId: userId, roomId, hasJoined: hasJoinedRef.current,
     });
     appendStrokeLocal(pageKey, stroke);
+    console.log('STROKE_DIAG_B after appendStrokeLocal', stroke?.id);
     broadcastStroke(pageKey, stroke);
+    console.log('STROKE_DIAG_C after broadcastStroke, about to insertRoomStroke', stroke?.id);
     const result = await insertRoomStroke(roomId, pageKey, stroke);
+    console.log('STROKE_DIAG_D after insertRoomStroke await', stroke?.id, !!result, result?.seq ?? null);
     if (result && result.seq > maxLocalSeqRef.current) {
       maxLocalSeqRef.current = result.seq;
     }
