@@ -264,9 +264,15 @@ export function useStudyRoom(
   // reconnect reconciliation fetch is applied only once.
   const broadcastStroke = useCallback((pageKey: string, stroke: RoomStrokePayload) => {
     const ch = channelRef.current;
-    if (!ch) { console.warn('[StudyRoom] broadcastStroke — channel not ready'); return; }
+    const chState = (ch as unknown as { state?: string })?.state ?? 'no channel';
+    if (!ch) {
+      console.warn('[StudyRoom] broadcastStroke — channel not ready', { pageKey, strokeId: stroke.id, chState });
+      return;
+    }
+    console.log('[StudyRoom] broadcastStroke send', { pageKey, strokeId: stroke.id, chState });
     ch.send({ type: 'broadcast', event: 'stroke', payload: { pageKey, stroke } })
-      .catch((err) => console.error('[StudyRoom] broadcast stroke error:', err));
+      .then(() => console.log('[StudyRoom] broadcastStroke OK', { strokeId: stroke.id }))
+      .catch((err) => console.error('[StudyRoom] broadcastStroke error', { strokeId: stroke.id, err }));
   }, []);
 
   const broadcastVoiceNoteAdded = useCallback((noteId: string) => {

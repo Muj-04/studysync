@@ -609,6 +609,18 @@ const ScrollPageItem = memo(function ScrollPageItem({
       // isDrawing.current can only be true for paintable tools.
       const dims = canvasDimsRef.current;
       const isPaintTool = tool === 'pen' || tool === 'eraser' || tool === 'line';
+      // Verbose trace — confirms stopDraw fires in stroke mode + that the
+      // callback prop is actually wired. If `onStrokeCallbackPresent` ever
+      // logs false on a user reporting the bug, the parent isn't passing it.
+      console.log('[Draw] stopDraw stroke-mode', {
+        pageKey, tool, penType,
+        hasDims: !!dims,
+        isPaintTool,
+        capturedPoints: currentStrokePointsRef.current.length,
+        lineEnd: !!lineEndPosRef.current,
+        onStrokeCallbackPresent: !!onStrokeComplete,
+        strokeIdInFlight: currentStrokeIdRef.current,
+      });
       if (dims && isPaintTool) {
         const points = tool === 'line'
           ? (() => {
@@ -630,8 +642,13 @@ const ScrollPageItem = memo(function ScrollPageItem({
             canvasH:  dims.h,
           };
           appliedStrokeIdsRef.current.add(stroke.id);
+          console.log('[Draw] stopDraw EMIT', { pageKey, strokeId: stroke.id, points: points.length });
           onStrokeComplete?.(pageKey, stroke);
+        } else {
+          console.warn('[Draw] stopDraw NO-EMIT — points.length=0', { pageKey, tool });
         }
+      } else {
+        console.warn('[Draw] stopDraw NO-EMIT — guard failed', { pageKey, tool, hasDims: !!dims, isPaintTool });
       }
       currentStrokePointsRef.current = [];
       currentStrokeIdRef.current = '';
