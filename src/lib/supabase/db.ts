@@ -1204,6 +1204,92 @@ export async function fetchAllRoomDrawings(roomId: string): Promise<Array<{ page
   return (data ?? []).map((row) => ({ pageNumber: row.page_number as number, data: row.data as string }));
 }
 
+// ── Room strokes (append-only stroke log) ────────────────────────────────────
+//
+// Replaces the room_drawings PNG-snapshot model. Every completed stroke is
+// one row in room_strokes; the canvas is a derived view computed by replaying
+// strokes in `seq` order. Bugs A and B both stem from the old snapshot model
+// — see supabase/migrations/2026-06-29_room_strokes.sql for the full why.
+//
+// The `stroke` JSON is shaped by the client and replayed verbatim on every
+// canvas — keep it small (no bitmaps, just a points list).
+
+export interface RoomStrokePayload {
+  id:             string;
+  tool:           'pen' | 'eraser' | 'line';
+  penType:        'normal' | 'marker' | 'highlighter';
+  color:          string;
+  size:           number;
+  points:         Array<{ x: number; y: number }>;
+  /** 'destination-out' for eraser; 'source-over' (or omitted) for paint. */
+  compositeMode?: 'source-over' | 'destination-out';
+  /** Logical canvas dimensions at draw time. Used to scale point
+   *  coordinates when replaying on a viewer with different zoom/DPR. */
+  canvasW:        number;
+  canvasH:        number;
+}
+
+export interface RoomStrokeRow {
+  id:        string;
+  pageKey:   string;
+  userId:    string;
+  seq:       number;
+  stroke:    RoomStrokePayload;
+  createdAt: string;
+}
+
+/**
+ * Fetch every stroke for a room, ordered by seq (replay order).
+ * Pass `sinceSeq` to fetch only strokes newer than a known seq —
+ * the reconnect reconciliation path uses this to catch up after
+ * a dropped realtime broadcast.
+ */
+export async function fetchAllRoomStrokes(roomId: string, sinceSeq?: number): Promise<RoomStrokeRow[]> {
+  let query = sb()
+    .from('room_strokes')
+    .select('id, page_key, user_id, seq, stroke, created_at')
+    .eq('room_id', roomId)
+    .order('seq', { ascending: true });
+  if (typeof sinceSeq === 'number') {
+    query = query.gt('seq', sinceSeq);
+  }
+  const { data, error } = await query;
+  if (error) { console.error('[DB] fetchAllRoomStrokes error:', error.message); return []; }
+  return (data ?? []).map((r) => ({
+    id:        r.id as string,
+    pageKey:   r.page_key as string,
+    userId:    r.user_id as string,
+    seq:       Number(r.seq),
+    stroke:    r.stroke as RoomStrokePayload,
+    createdAt: r.created_at as string,
+  }));
+}
+
+/**
+ * Append one stroke to the room. The stroke's own id is the client-generated
+ * uuid in the payload — recipients dedupe by it (same stroke can arrive via
+ * realtime broadcast and via reconciliation; both routes should be idempotent).
+ * Returns the assigned `seq` so the caller can advance its maxLocalSeq.
+ */
+export async function insertRoomStroke(
+  roomId: string, pageKey: string, stroke: RoomStrokePayload,
+): Promise<{ seq: number } | null> {
+  const uid = await userId(); if (!uid) return null;
+  const { data, error } = await sb()
+    .from('room_strokes')
+    .insert({
+      id:        stroke.id,
+      room_id:   roomId,
+      page_key:  pageKey,
+      user_id:   uid,
+      stroke,
+    })
+    .select('seq')
+    .single();
+  if (error) { console.error('[DB] insertRoomStroke error:', error.message); return null; }
+  return { seq: Number(data.seq) };
+}
+
 // ── Friends ───────────────────────────────────────────────────────────────────
 
 export interface UserResult {
