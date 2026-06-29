@@ -1150,7 +1150,20 @@ export async function joinRoom(roomId: string): Promise<{ error?: string }> {
   // Migration: supabase/migrations/2026-06-27_join_room_atomic.sql
   // RPC returns: 'joined' | 'rejoined' | 'full' | 'closed' |
   //              'not_found' | 'unauthenticated'.
-  const { data, error } = await sb().rpc('join_room_atomic', { p_room_id: roomId });
+  // Session-state probe — confirms whether the client we're about to call
+  // the RPC with actually has a valid JWT. A null/expired session here
+  // explains the 403s on the subsequent room_members SELECT (auth.uid()
+  // resolves to null inside Postgres → RLS rejects).
+  const client = sb();
+  const { data: sess } = await client.auth.getSession();
+  console.log('[DB] joinRoom session probe', {
+    hasSession:   !!sess.session,
+    userId:       sess.session?.user?.id ?? null,
+    expiresAt:    sess.session?.expires_at ?? null,
+    expiresInSec: sess.session?.expires_at ? (sess.session.expires_at - Math.floor(Date.now() / 1000)) : null,
+    tokenPrefix:  sess.session?.access_token ? sess.session.access_token.slice(0, 12) + '…' : null,
+  });
+  const { data, error } = await client.rpc('join_room_atomic', { p_room_id: roomId });
   if (error) {
     console.error('[DB] joinRoom RPC error:', error.message);
     return { error: error.message };
@@ -1281,13 +1294,31 @@ export async function insertRoomStroke(
   console.log('[DB] insertRoomStroke ENTRY', {
     roomId, pageKey, strokeId: stroke.id, tool: stroke.tool, points: stroke.points?.length,
   });
-  const uid = await userId();
+  // Session-state probe — pulls a fresh client (the same one we'll INSERT
+  // through) and dumps its session. If hasSession is false here on a user
+  // whose strokes don't persist, the client lost its JWT (most likely
+  // Tracking Prevention blocking storage between page loads, or token
+  // refresh silently failing). expiresInSec < 0 means the JWT in memory
+  // is past its TTL — autoRefreshToken should have rotated it; if it
+  // didn't, refresh itself is broken.
+  const client = sb();
+  const { data: sess } = await client.auth.getSession();
+  console.log('[DB] insertRoomStroke session probe', {
+    hasSession:   !!sess.session,
+    userId:       sess.session?.user?.id ?? null,
+    expiresAt:    sess.session?.expires_at ?? null,
+    expiresInSec: sess.session?.expires_at ? (sess.session.expires_at - Math.floor(Date.now() / 1000)) : null,
+    tokenPrefix:  sess.session?.access_token ? sess.session.access_token.slice(0, 12) + '…' : null,
+    strokeId:     stroke.id,
+  });
+  const uid = sess.session?.user?.id ?? null;
   if (!uid) {
-    console.error('[DB] insertRoomStroke ABORT — userId() returned null (auth session missing?)', { roomId, strokeId: stroke.id });
+    console.error('[DB] insertRoomStroke ABORT — session.user is null (Tracking Prevention blocked storage? token refresh failed?)', {
+      roomId, strokeId: stroke.id,
+    });
     return null;
   }
-  console.log('[DB] insertRoomStroke uid', uid);
-  const { data, error } = await sb()
+  const { data, error } = await client
     .from('room_strokes')
     .insert({
       id:        stroke.id,
