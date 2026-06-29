@@ -11,12 +11,12 @@ import { useVoiceChat } from '@/hooks/useVoiceChat';
 import { createClient } from '@/lib/supabase/client';
 import {
   fetchRoom, joinRoom, leaveRoom, closeRoom,
-  saveRoomDrawing, fetchAllRoomDrawings,
+  fetchAllRoomStrokes, insertRoomStroke,
   fetchRoomVoiceNotes, fetchSingleRoomVoiceNote,
   saveRoomBlankPage, fetchRoomBlankPages,
   getProfile, getFriends, inviteToRoom,
 } from '@/lib/supabase/db';
-import type { FriendEntry } from '@/lib/supabase/db';
+import type { FriendEntry, RoomStrokePayload } from '@/lib/supabase/db';
 import { usePDF } from '@/hooks/usePDF';
 import { usePDFDrawings } from '@/hooks/usePDFDrawings';
 import { useStudyRoom } from '@/hooks/useStudyRoom';
@@ -354,11 +354,23 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // ── Blank pages state ─────────────────────────────────────────────────────
   const [docId, setDocId]                 = useState<string | null>(null);
   const [roomBlankPages, setRoomBlankPages] = useState<RoomBlankPagePayload[]>([]);
-  // Per-blank-page-id drawing data URLs. Kept in memory only — broadcast over
-  // the existing 'blank_drawing' realtime channel so other members see strokes
-  // live, mirroring how PDF-page drawings sync. DB persistence would need a
-  // new table; out of scope for this fix.
+  // Legacy per-blank-page PNG snapshots — retained only so existing rooms
+  // that haven't migrated to the stroke-event log still render their old
+  // drawings. New rooms write strokes to `roomStrokes` instead and this map
+  // stays empty.
   const [blankDrawings, setBlankDrawings] = useState<Record<string, string>>({});
+
+  // ── Room strokes (append-only log; replaces PNG-snapshot model) ──────────
+  // Keyed by page_key: 'pdf:<n>' for PDF pages, 'blank:<uuid>' for blank
+  // pages. Per-key arrays are kept sorted by seq (replay order). See
+  // supabase/migrations/2026-06-29_room_strokes.sql for the why.
+  const [roomStrokes, setRoomStrokes] = useState<Record<string, RoomStrokePayload[]>>({});
+  // Tracks every stroke id we've already applied so dedupe is O(1) when a
+  // stroke arrives via both the realtime broadcast AND the reconcile fetch.
+  const knownStrokeIdsRef = useRef<Set<string>>(new Set());
+  // Highest seq we've ingested from the DB. The reconcile fetch uses
+  // `seq > maxLocalSeq` to catch up after dropped broadcasts.
+  const maxLocalSeqRef = useRef<number>(0);
   const [virtualIndex, setVirtualIndex]   = useState(0);
   const [blankMenuOpen, setBlankMenuOpen] = useState(false);
   const [drawOpen, setDrawOpen]           = useState(false);
@@ -381,7 +393,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const docIdRef        = useRef<string | null>(null);
   const currentPageRef  = useRef<number>(1);
   const currentVPRef    = useRef<VirtualPage | null>(null);
-  const saveRoomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
@@ -431,17 +442,44 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [virtualIndex]);
 
   // ── Incoming handlers ─────────────────────────────────────────────────────
+  // Legacy PNG-snapshot broadcasts. Kept so a room that for any reason still
+  // has the old broadcast event in flight doesn't break, but stroke-event
+  // rooms never invoke this path (PDFScrollViewer doesn't call
+  // onSavePageDrawing in stroke mode).
   const handleIncomingDrawing = useCallback((pageNumber: number, data: string) => {
     if (docIdRef.current) saveDrawing(docIdRef.current, pageNumber, data);
   }, [saveDrawing]);
 
-  const handleReconnect = useCallback(() => {
-    const did = docIdRef.current;
-    if (!did || !activeDocument) return;
-    const page = activeDocument.currentPage;
-    const data = getDrawing(did, page);
-    if (data) broadcastRef.current(page, data);
-  }, [activeDocument, getDrawing]);
+  // Idempotent local append: skips strokes whose id is already known, and
+  // returns true if anything changed (so caller can decide whether to bump
+  // maxLocalSeqRef etc.).
+  const appendStrokeLocal = useCallback((pageKey: string, stroke: RoomStrokePayload) => {
+    if (knownStrokeIdsRef.current.has(stroke.id)) return false;
+    knownStrokeIdsRef.current.add(stroke.id);
+    setRoomStrokes((prev) => {
+      const existing = prev[pageKey] ?? [];
+      return { ...prev, [pageKey]: [...existing, stroke] };
+    });
+    return true;
+  }, []);
+
+  const handleIncomingStroke = useCallback((pageKey: string, stroke: RoomStrokePayload) => {
+    appendStrokeLocal(pageKey, stroke);
+  }, [appendStrokeLocal]);
+
+  // Reconnect → fetch every stroke with seq > maxLocalSeq and apply any we
+  // haven't seen. Recovers strokes whose realtime broadcast was dropped
+  // while we were offline (or even just briefly in transit). The dedupe via
+  // knownStrokeIdsRef makes this safe to call on every reconnect cycle.
+  const handleReconnect = useCallback(async () => {
+    if (!roomId) return;
+    const since = maxLocalSeqRef.current;
+    const rows = await fetchAllRoomStrokes(roomId, since);
+    for (const row of rows) {
+      appendStrokeLocal(row.pageKey, row.stroke);
+      if (row.seq > maxLocalSeqRef.current) maxLocalSeqRef.current = row.seq;
+    }
+  }, [roomId, appendStrokeLocal]);
 
   const handleIncomingVoiceNoteAdded = useCallback(async (noteId: string) => {
     console.log('[Room] received voice_note_added, fetching from DB:', noteId);
@@ -497,7 +535,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [router]);
 
   const {
-    broadcastDrawing, broadcastBlankDrawing,
+    broadcastDrawing, broadcastBlankDrawing, broadcastStroke,
     broadcastVoiceNoteAdded, broadcastVoiceNoteDelete,
     broadcastBlankPageAdded, broadcastRoomClosed,
     broadcastDocChanged,
@@ -509,6 +547,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     handleIncomingBlankPage, myPresence,
     handleIncomingBlankDrawing, handleRoomClosed,
     handleIncomingDocChange,
+    handleIncomingStroke,
   );
 
   useEffect(() => { broadcastRef.current = broadcastDrawing; }, [broadcastDrawing]);
@@ -621,10 +660,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       );
       storageSet(KEYS.DRAWINGS, filteredDrawings);
 
-      const [remoteVoiceNotes, remoteBlankPages, remoteDrawings] = await Promise.all([
+      const [remoteVoiceNotes, remoteBlankPages, remoteStrokes] = await Promise.all([
         fetchRoomVoiceNotes(roomId),
         fetchRoomBlankPages(roomId),
-        fetchAllRoomDrawings(roomId),
+        fetchAllRoomStrokes(roomId),
       ]);
 
       if (remoteVoiceNotes.length > 0 && !cancelled) {
@@ -635,9 +674,26 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         setRoomBlankPages(remoteBlankPages);
       }
 
-      if (remoteDrawings.length > 0 && !cancelled) {
-        remoteDrawings.forEach(({ pageNumber, data }) => {
-          saveDrawing(newDocId, pageNumber, data);
+      // Seed roomStrokes from the append-only log. Strokes arrive in seq
+      // order (DB orders by seq); group by page_key for PDFScrollViewer.
+      // Merge into existing state rather than replace — a broadcast can
+      // land in the gap between the fetch firing and this code running,
+      // and dropping it on the floor would resurrect Bug A.
+      if (remoteStrokes.length > 0 && !cancelled) {
+        let maxSeq = maxLocalSeqRef.current;
+        for (const row of remoteStrokes) {
+          if (row.seq > maxSeq) maxSeq = row.seq;
+        }
+        maxLocalSeqRef.current = maxSeq;
+        setRoomStrokes((prev) => {
+          const merged: Record<string, RoomStrokePayload[]> = { ...prev };
+          for (const row of remoteStrokes) {
+            if (knownStrokeIdsRef.current.has(row.stroke.id)) continue;
+            knownStrokeIdsRef.current.add(row.stroke.id);
+            const existing = merged[row.pageKey] ?? [];
+            merged[row.pageKey] = [...existing, row.stroke];
+          }
+          return merged;
         });
       }
 
@@ -773,21 +829,35 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [roomId, voiceDisconnectImmediate, disconnectChannel]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+  // Legacy PNG-snapshot handlers — retained because PDFScrollViewer still
+  // accepts the props, but in the room these are never invoked: stroke-event
+  // mode (signalled by handleStrokeComplete below) bypasses saveCanvas
+  // entirely. Existing rooms with old PNG data continue to render from the
+  // savedDrawing path; new strokes go through the stroke log.
   const handleSavePageDrawing = useCallback((docId: string, page: number, data: string) => {
     saveDrawing(docId, page, data);
     broadcastDrawing(page, data);
-    if (saveRoomTimerRef.current) clearTimeout(saveRoomTimerRef.current);
-    saveRoomTimerRef.current = setTimeout(() => {
-      saveRoomDrawing(roomId, page, data);
-    }, 500);
-  }, [saveDrawing, broadcastDrawing, roomId]);
+  }, [saveDrawing, broadcastDrawing]);
 
-  // Local save + realtime broadcast for blank-page strokes. Supabase channel
-  // is configured with broadcast.self=false so we won't echo back to ourselves.
   const handleSaveBlankDrawing = useCallback((pageId: string, data: string) => {
     setBlankDrawings((prev) => ({ ...prev, [pageId]: data }));
     broadcastBlankDrawing(pageId, data);
   }, [broadcastBlankDrawing]);
+
+  // Stroke-event mode: one INSERT + one broadcast per completed stroke. No
+  // last-write-wins — concurrent strokes from different members converge
+  // because each is its own row, ordered by `seq`. Broadcast is sent before
+  // the DB insert so peers see the stroke immediately; the DB write is the
+  // durability + reconciliation channel. Both routes carry the same stroke
+  // id so the receiver dedupes them.
+  const handleStrokeComplete = useCallback(async (pageKey: string, stroke: RoomStrokePayload) => {
+    appendStrokeLocal(pageKey, stroke);
+    broadcastStroke(pageKey, stroke);
+    const result = await insertRoomStroke(roomId, pageKey, stroke);
+    if (result && result.seq > maxLocalSeqRef.current) {
+      maxLocalSeqRef.current = result.seq;
+    }
+  }, [appendStrokeLocal, broadcastStroke, roomId]);
 
   const handlePdfFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -801,11 +871,13 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     setDocId(newDocId);
     setVirtualIndex(0);
     setRoomBlankPages([]);
-    const remoteDrawings = await fetchAllRoomDrawings(roomId);
-    remoteDrawings.forEach(({ pageNumber, data }) => saveDrawing(newDocId, pageNumber, data));
+    // Strokes are room-scoped (page_key='pdf:N' is page number, not doc id)
+    // so they persist across PDF swaps without a refetch — handleReconnect
+    // already covers any catch-up. Matches the prior behavior of carrying
+    // shared drawings forward when the host swaps the document.
     if (!isResponding) broadcastDocChanged(userName, file.name);
     setDocChangePrompt(null);
-  }, [docChangePrompt, removeDocument, addDocument, saveDrawing, roomId, broadcastDocChanged, userName]);
+  }, [docChangePrompt, removeDocument, addDocument, broadcastDocChanged, userName]);
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(window.location.href);
@@ -1333,6 +1405,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             saveDrawing={handleSavePageDrawing}
             getBlankDrawing={getBlankDrawing}
             saveBlankDrawing={handleSaveBlankDrawing}
+            // Stroke-event mode for the room. Presence of onStrokeComplete
+            // flips PDFScrollViewer's drawing canvases into append-only mode,
+            // bypassing the workspace's PNG-snapshot path entirely.
+            roomStrokes={roomStrokes}
+            onStrokeComplete={handleStrokeComplete}
           />
         )}
 
