@@ -62,8 +62,9 @@ export default function DashboardPage() {
   const [studyStreak, setStudyStreak] = useState(0);
 
   useEffect(() => {
-    // Load user info
+    // Load user info — redirect to login if not authenticated
     createClient().auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { window.location.replace('/login'); return; }
       setUserEmail(user?.email ?? '');
       const profile = await getProfile();
       setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
