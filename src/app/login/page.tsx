@@ -72,8 +72,6 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [debugMsg, setDebugMsg] = useState('Ready');
-
   const [showConflict, setShowConflict] = useState(false);
   const [conflictLoading, setConflictLoading] = useState(false);
 
@@ -95,11 +93,8 @@ export default function LoginPage() {
     const rawEmail = emailRef.current?.value || '';
     const rawPass = passRef.current?.value || '';
 
-    setDebugMsg('Tapped! email=' + rawEmail.length + ' pass=' + rawPass.length);
-
     if (!rawEmail || !rawPass) {
       setError('Please fill in all fields.');
-      setDebugMsg('Empty fields: email=' + rawEmail.length + ' pass=' + rawPass.length);
       return;
     }
 
@@ -109,22 +104,17 @@ export default function LoginPage() {
     const cleanEmail = rawEmail.trim().replace(/[^\x20-\x7e]/g, '');
 
     try {
-      setDebugMsg('[1] Connecting...');
       const supabase = createClient();
 
-      setDebugMsg('[2] Signing in...');
       const { error: err, data } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password: rawPass,
       });
 
       if (err) {
-        setDebugMsg('[X] ' + err.message);
         setError(err.message);
         return;
       }
-
-      setDebugMsg('[3] OK! ' + (data.user?.id?.slice(0, 8) || ''));
 
       try {
         const sessionId = getOrCreateSessionId();
@@ -135,7 +125,6 @@ export default function LoginPage() {
         }
         await registerSession(sessionId, 'StudySync Mobile');
       } catch {
-        setDebugMsg('[4] Session skip');
       }
 
       try {
@@ -156,11 +145,9 @@ export default function LoginPage() {
         }
       } catch { /* non-fatal */ }
 
-      setDebugMsg('[5] Redirecting...');
       window.location.href = '/dashboard';
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      setDebugMsg('[ERR] ' + msg);
       setError('Login failed: ' + msg);
     } finally {
       setLoading(false);
@@ -238,11 +225,6 @@ export default function LoginPage() {
 
           <h1 style={{ textAlign: 'center', fontSize: '2rem', fontWeight: 600, marginBottom: 4 }}>Login</h1>
           <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>Welcome back - sign in to continue</p>
-
-          {/* DEBUG — remove after fixing */}
-          <div style={{ marginBottom: '0.75rem', padding: '0.5rem', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.4)', borderRadius: 8, fontSize: '0.7rem', color: '#4ade80', textAlign: 'center', fontFamily: 'monospace', wordBreak: 'break-all' }}>
-            {debugMsg}
-          </div>
 
           {wasKicked && (
             <div style={{ marginBottom: '1rem', padding: '0.6rem 1rem', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 8, fontSize: '0.8rem', color: '#fbbf24', textAlign: 'center' }}>
