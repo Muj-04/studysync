@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
   ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
-  Timer, Download,
+  Timer, Download, Upload, FileText,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -58,8 +58,10 @@ import {
   getProfile,
   createCommunityPost,
   deleteAllDataForDocument,
+  fetchDocuments,
 } from '@/lib/supabase/db';
 import { getPendingReopenFile, clearPendingReopenFile } from '@/lib/pendingReopenFile';
+import { getPdfBlob } from '@/lib/pdfStore';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import type { Tool, PenType } from '@/lib/drawing';
 
@@ -1016,6 +1018,60 @@ export default function WorkspacePage() {
       addDocument(file).catch(console.error);
     }).catch(console.error);
   }, [addDocument]);
+
+  // ── Open specific doc from dashboard/library click ─────────────────────────
+  const pendingOpenRef = useRef<string | null>(
+    typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('studysync_open_doc') : null
+  );
+  const [reopenModal, setReopenModal] = useState<{ docId: string; docName: string } | null>(null);
+  const reopenFileRef = useRef<HTMLInputElement>(null);
+  const pendingCheckedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('studysync_open_doc')) {
+      sessionStorage.removeItem('studysync_open_doc');
+    }
+  }, []);
+
+  useEffect(() => {
+    const targetDocId = pendingOpenRef.current;
+    if (!targetDocId || documents.length === 0) return;
+    if (documents.some((d) => d.id === targetDocId)) {
+      pendingOpenRef.current = null;
+      setReopenModal(null);
+      setActiveDocument(targetDocId);
+    }
+  }, [documents, setActiveDocument]);
+
+  // If the pending doc wasn't restored from IndexedDB, check if blob exists and show re-upload modal
+  useEffect(() => {
+    const targetDocId = pendingOpenRef.current;
+    if (!targetDocId || pendingCheckedRef.current) return;
+    pendingCheckedRef.current = true;
+
+    const timer = setTimeout(async () => {
+      if (!pendingOpenRef.current) return; // already found
+      const blob = await getPdfBlob(targetDocId).catch(() => null);
+      if (blob) return; // will be restored by usePDF
+      // PDF not in IndexedDB — fetch doc name from Supabase and show re-upload modal
+      const docs = await fetchDocuments().catch(() => []);
+      const match = docs.find((d) => d.id === targetDocId);
+      setReopenModal({ docId: targetDocId, docName: match?.name ?? 'Document' });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleReopenFile = useCallback((file: File) => {
+    const modal = reopenModal;
+    if (!modal) return;
+    setReopenModal(null);
+    pendingOpenRef.current = null;
+    // Pre-seed the DOC_MAP so addDocument uses the canonical Supabase ID
+    const map = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
+    map[file.name] = modal.docId;
+    storageSet(KEYS.DOC_MAP, map);
+    addDocument(file).catch(console.error);
+  }, [reopenModal, addDocument]);
 
   // ── Document order ────────────────────────────────────────────────────────
   const savedOrderRef = useRef<string[]>([]);
@@ -2742,6 +2798,29 @@ export default function WorkspacePage() {
             />
           </div>
 
+        </div>
+      )}
+
+      {/* ══ Re-upload modal (PDF not available locally) ══ */}
+      {reopenModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => { setReopenModal(null); pendingOpenRef.current = null; }}>
+          <div style={{ background: 'var(--bg-float)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid var(--bg-float-border)', boxShadow: 'var(--shadow-float)', borderRadius: 4, padding: '28px', width: 400, maxWidth: '90vw' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Open Document</h3>
+              <button onClick={() => { setReopenModal(null); pendingOpenRef.current = null; }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}><X size={16} /></button>
+            </div>
+            <div style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '16px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ color: 'var(--accent)' }}><FileText size={20} /></div>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{reopenModal.docName}</p>
+            </div>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-2)', lineHeight: 1.55 }}>
+              Upload the original PDF file to restore your notes and annotations.
+            </p>
+            <input ref={reopenFileRef} type="file" accept=".pdf,.pptx" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleReopenFile(f); }} />
+            <button onClick={() => reopenFileRef.current?.click()} style={{ width: '100%', height: 42, borderRadius: 4, background: '#ffffff', color: '#0f172a', border: 'none', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <Upload size={15} /> Upload File
+            </button>
+          </div>
         </div>
       )}
 
