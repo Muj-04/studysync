@@ -3,13 +3,13 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   Heart, MessageCircle, Share2, Bookmark, Trash2, Send,
   MoreHorizontal, FileText, PenLine, ChevronDown, ChevronUp,
-  UserPlus, UserMinus, Users, Flame, Clock,
+  UserPlus, UserMinus, Users, Flame, Clock, X, CheckCircle2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   fetchCommunityPosts, togglePostLike, addPostComment,
   deletePostComment, deleteCommunityPost,
-  getFollowingIds, followUser, unfollowUser,
+  getFollowingIds, followUser, unfollowUser, createCommunityPost,
 } from '@/lib/supabase/db';
 import type { CommunityPost, CommunityFeedTab } from '@/lib/supabase/db';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
@@ -593,6 +593,255 @@ function FooterBtn({
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
+function CreatePostModal({ onClose, onPosted }: {
+  onClose: () => void;
+  onPosted: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [tagInput, setTagInput] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [posting, setPosting] = useState(false);
+  const [posted, setPosted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !posting) onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose, posting]);
+
+  const addTag = useCallback(() => {
+    const nextTag = tagInput.trim().replace(/^#/, '').replace(/,/g, '');
+    if (!nextTag || tags.includes(nextTag) || tags.length >= 5) return;
+    setTags((current) => [...current, nextTag]);
+    setTagInput('');
+  }, [tagInput, tags]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!title.trim() || posting) return;
+
+    setPosting(true);
+    setError(null);
+    const postId = await createCommunityPost({
+      documentId: null,
+      title: title.trim(),
+      description: description.trim(),
+      pages: [],
+      tags,
+    });
+
+    if (!postId) {
+      setError('The post could not be created. Please try again.');
+      setPosting(false);
+      return;
+    }
+
+    setPosted(true);
+    onPosted();
+    window.setTimeout(onClose, 900);
+  };
+
+  return (
+    <div
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !posting) onClose();
+      }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20, background: 'rgba(15, 23, 42, 0.42)',
+        backdropFilter: 'blur(3px)',
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-post-title"
+        style={{
+          width: '100%', maxWidth: 520,
+          background: 'var(--bg-panel)', border: '1px solid var(--border)',
+          borderRadius: 14, boxShadow: '0 24px 70px rgba(15, 23, 42, 0.22)',
+          padding: 22,
+        }}
+      >
+        {posted ? (
+          <div style={{ textAlign: 'center', padding: '32px 12px' }}>
+            <CheckCircle2 size={38} style={{ color: 'var(--green)', marginBottom: 12 }} />
+            <h2 style={{ margin: '0 0 5px', fontSize: 18 }}>Post published</h2>
+            <p style={{ margin: 0, color: 'var(--text-2)', fontSize: 13 }}>
+              Your post is now visible in the community.
+            </p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
+              <div>
+                <h2 id="create-post-title" style={{ margin: 0, fontSize: 18, color: 'var(--text-1)' }}>
+                  Create a post
+                </h2>
+                <p style={{ margin: '4px 0 0', color: 'var(--text-2)', fontSize: 12.5 }}>
+                  Share a question, idea, or study tip with the community.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={posting}
+                aria-label="Close create post dialog"
+                style={{
+                  display: 'flex', padding: 6, border: 0, borderRadius: 7,
+                  background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <label style={{ display: 'block', marginBottom: 13 }}>
+              <span style={{ display: 'block', marginBottom: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
+                Title
+              </span>
+              <input
+                autoFocus
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                maxLength={200}
+                placeholder="What would you like to share?"
+                style={{
+                  width: '100%', height: 40, boxSizing: 'border-box', padding: '0 11px',
+                  border: '1px solid var(--border)', borderRadius: 8,
+                  background: 'var(--bg-elevated)', color: 'var(--text-1)',
+                  font: 'inherit', fontSize: 13.5, outline: 'none',
+                }}
+              />
+            </label>
+
+            <label style={{ display: 'block', marginBottom: 13 }}>
+              <span style={{ display: 'block', marginBottom: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
+                Description
+              </span>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                maxLength={2000}
+                rows={5}
+                placeholder="Add details to your post..."
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '10px 11px', resize: 'vertical',
+                  border: '1px solid var(--border)', borderRadius: 8,
+                  background: 'var(--bg-elevated)', color: 'var(--text-1)',
+                  font: 'inherit', fontSize: 13.5, lineHeight: 1.5, outline: 'none',
+                }}
+              />
+            </label>
+
+            <div style={{ marginBottom: 16 }}>
+              <span style={{ display: 'block', marginBottom: 6, fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
+                Tags <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>(optional)</span>
+              </span>
+              {tags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                  {tags.map((tag) => (
+                    <span key={tag} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '4px 8px', borderRadius: 999,
+                      background: 'var(--accent-muted)', color: 'var(--accent)',
+                      fontSize: 11.5, fontWeight: 600,
+                    }}>
+                      #{tag}
+                      <button
+                        type="button"
+                        onClick={() => setTags((current) => current.filter((item) => item !== tag))}
+                        aria-label={`Remove ${tag} tag`}
+                        style={{ padding: 0, border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', lineHeight: 1 }}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={tagInput}
+                  onChange={(event) => setTagInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ',') {
+                      event.preventDefault();
+                      addTag();
+                    }
+                  }}
+                  disabled={tags.length >= 5}
+                  placeholder={tags.length >= 5 ? 'Maximum 5 tags' : 'Add a tag'}
+                  maxLength={50}
+                  style={{
+                    flex: 1, minWidth: 0, height: 36, padding: '0 10px',
+                    border: '1px solid var(--border)', borderRadius: 8,
+                    background: 'var(--bg-elevated)', color: 'var(--text-1)',
+                    font: 'inherit', fontSize: 12.5, outline: 'none',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={addTag}
+                  disabled={!tagInput.trim() || tags.length >= 5}
+                  style={{
+                    height: 36, padding: '0 12px', borderRadius: 8,
+                    border: '1px solid var(--border)', background: 'var(--bg-elevated)',
+                    color: 'var(--text-2)', font: 'inherit', fontSize: 12.5,
+                    cursor: tagInput.trim() && tags.length < 5 ? 'pointer' : 'default',
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <p role="alert" style={{ margin: '0 0 12px', color: 'var(--red, #dc2626)', fontSize: 12.5 }}>
+                {error}
+              </p>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9 }}>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={posting}
+                style={{
+                  height: 38, padding: '0 15px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'transparent',
+                  color: 'var(--text-2)', font: 'inherit', fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!title.trim() || posting}
+                style={{
+                  height: 38, padding: '0 17px', borderRadius: 8, border: 0,
+                  background: title.trim() && !posting ? 'var(--accent)' : 'var(--bg-elevated)',
+                  color: title.trim() && !posting ? '#fff' : 'var(--text-3)',
+                  font: 'inherit', fontSize: 13, fontWeight: 600,
+                  cursor: title.trim() && !posting ? 'pointer' : 'default',
+                }}
+              >
+                {posting ? 'Publishing...' : 'Publish post'}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const SAVED_POSTS_KEY = 'community_saved_posts';
 
 type Tab = 'trending' | 'following' | 'recent';
@@ -609,6 +858,8 @@ export default function CommunityPage() {
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('trending');
+  const [createPostOpen, setCreatePostOpen] = useState(false);
+  const [feedVersion, setFeedVersion] = useState(0);
 
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
@@ -631,7 +882,6 @@ export default function CommunityPage() {
 
   // Feed
   useEffect(() => {
-    setLoading(true);
     const followingArr = [...followingIds];
     const serverTab = TABS.find((t) => t.id === tab)?.serverTab ?? 'latest';
     fetchCommunityPosts({
@@ -641,7 +891,7 @@ export default function CommunityPage() {
       setPosts(data);
       setLoading(false);
     });
-  }, [tab, followingIds]);
+  }, [tab, followingIds, feedVersion]);
 
   // Handlers
   const handleLike = useCallback(async (postId: string) => {
@@ -687,6 +937,12 @@ export default function CommunityPage() {
       try { localStorage.setItem(SAVED_POSTS_KEY, JSON.stringify([...next])); } catch { /* */ }
       return next;
     });
+  }, []);
+
+  const handlePostCreated = useCallback(() => {
+    setLoading(true);
+    setTab('recent');
+    setFeedVersion((version) => version + 1);
   }, []);
 
   const emptyCopy = useMemo(() => {
@@ -735,11 +991,13 @@ export default function CommunityPage() {
             </p>
           </div>
 
-          <a
-            href="/workspace"
+          <button
+            type="button"
+            onClick={() => setCreatePostOpen(true)}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 7,
               height: 38, padding: '0 16px', borderRadius: 8,
+              border: 'none', cursor: 'pointer',
               background: 'var(--accent)', color: '#fff',
               fontSize: 13, fontWeight: 600,
               textDecoration: 'none', fontFamily: 'inherit',
@@ -750,7 +1008,7 @@ export default function CommunityPage() {
             onMouseOut={(e)  => { e.currentTarget.style.background = 'var(--accent)'; }}
           >
             <PenLine size={14} /> Create Post
-          </a>
+          </button>
         </div>
 
         {/* ── Tabs ── */}
@@ -763,7 +1021,10 @@ export default function CommunityPage() {
             return (
               <button
                 key={id}
-                onClick={() => setTab(id)}
+                onClick={() => {
+                  setLoading(true);
+                  setTab(id);
+                }}
                 style={{
                   position: 'relative',
                   display: 'flex', alignItems: 'center', gap: 6,
@@ -834,6 +1095,12 @@ export default function CommunityPage() {
           </div>
         )}
       </main>
+      {createPostOpen && (
+        <CreatePostModal
+          onClose={() => setCreatePostOpen(false)}
+          onPosted={handlePostCreated}
+        />
+      )}
     </div>
   );
 }

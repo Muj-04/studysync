@@ -2,6 +2,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import {
+  PROFILE_HANDLE_MAX_LENGTH,
+  normalizeProfileHandle,
+  validateProfileHandle,
+} from '@/lib/profileHandle';
 
 const OAUTH_REDIRECT = 'https://pdf-study-workspace.vercel.app/auth/callback';
 
@@ -72,6 +77,8 @@ const glassInput: React.CSSProperties = {
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
+  const [handle, setHandle] = useState('');
+  const [handleStatus, setHandleStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -90,6 +97,25 @@ export default function RegisterPage() {
     });
   }, []);
 
+  useEffect(() => {
+    const normalized = normalizeProfileHandle(handle);
+    if (!normalized || validateProfileHandle(normalized)) return;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      const { data, error: availabilityError } = await createClient()
+        .rpc('is_handle_available', { p_handle: normalized });
+      if (cancelled) return;
+      if (availabilityError) setHandleStatus('error');
+      else setHandleStatus(data === true ? 'available' : 'taken');
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [handle]);
+
   const DISPOSABLE_DOMAINS = new Set([
     'tempmail.com','guerrillamail.com','guerrillamail.net','guerrillamail.org','guerrillamail.biz','guerrillamail.de',
     '10minutemail.com','10minutemail.net','10minutemail.org','mailinator.com','yopmail.com','yopmail.fr',
@@ -101,7 +127,12 @@ export default function RegisterPage() {
   ]);
 
   const handleRegister = async () => {
-    if (!username || !email || !password) { setError('Please fill in all fields.'); return; }
+    const displayName = username.trim();
+    const normalizedHandle = normalizeProfileHandle(handle);
+    if (!displayName || !normalizedHandle || !email || !password) { setError('Please fill in all fields.'); return; }
+    if (displayName.length > 50) { setError('Display name must be 50 characters or fewer.'); return; }
+    const handleError = validateProfileHandle(normalizedHandle);
+    if (handleError) { setError(handleError); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     const emailDomain = email.trim().toLowerCase().split('@')[1] ?? '';
     if (DISPOSABLE_DOMAINS.has(emailDomain)) {
@@ -111,13 +142,36 @@ export default function RegisterPage() {
     setError('');
     setLoading(true);
     const supabase = createClient();
+    const { data: handleAvailable, error: availabilityError } = await supabase
+      .rpc('is_handle_available', { p_handle: normalizedHandle });
+    if (availabilityError) {
+      setLoading(false);
+      setError('Could not verify this handle. Please try again.');
+      return;
+    }
+    if (handleAvailable !== true) {
+      setLoading(false);
+      setHandleStatus('taken');
+      setError('This handle is already taken.');
+      return;
+    }
     const { data, error: err } = await supabase.auth.signUp({
-      email,
+      email: email.trim().toLowerCase(),
       password,
-      options: { data: { username } },
+      options: { data: { username: displayName, handle: normalizedHandle } },
     });
     setLoading(false);
-    if (err) { setError(err.message); return; }
+    if (err) {
+      const { data: stillAvailable } = await supabase
+        .rpc('is_handle_available', { p_handle: normalizedHandle });
+      if (stillAvailable === false) {
+        setHandleStatus('taken');
+        setError('This handle was just taken. Please choose another.');
+      } else {
+        setError(err.message);
+      }
+      return;
+    }
 
     // Supabase Auth, with email-confirm enabled, returns error=null even
     // when the email is already in use — an intentional anti-enumeration
@@ -193,17 +247,48 @@ export default function RegisterPage() {
 
         <OAuthButtons />
 
-        {/* Username */}
+        {/* Display name */}
         <div style={{ position: 'relative', marginBottom: '1rem' }}>
           <input
             type="text"
-            placeholder="Username"
-            autoComplete="username"
+            placeholder="Display name"
+            autoComplete="name"
+            maxLength={50}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             style={glassInput}
           />
           <i className="bx bx-user" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
+        </div>
+
+        {/* Unique account handle */}
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Handle (for example: study_sam)"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              maxLength={PROFILE_HANDLE_MAX_LENGTH}
+              value={handle}
+              onChange={(e) => {
+                const nextHandle = e.target.value.toLowerCase();
+                setHandle(nextHandle);
+                setHandleStatus(validateProfileHandle(nextHandle) ? 'idle' : 'checking');
+              }}
+              aria-describedby="handle-status"
+              style={glassInput}
+            />
+            <span style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }}>@</span>
+          </div>
+          <p id="handle-status" aria-live="polite" style={{ margin: '5px 12px 0', fontSize: '0.72rem', color: handleStatus === 'available' ? '#6ee7b7' : handleStatus === 'taken' || handleStatus === 'error' ? '#ff8a8e' : 'rgba(255,255,255,0.5)' }}>
+            {handleStatus === 'checking' && 'Checking availability…'}
+            {handleStatus === 'available' && 'Handle is available'}
+            {handleStatus === 'taken' && 'This handle is already taken'}
+            {handleStatus === 'error' && 'Could not check availability'}
+            {handleStatus === 'idle' && '3–24 lowercase letters, numbers, or underscores'}
+          </p>
         </div>
 
         {/* Email */}

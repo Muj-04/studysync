@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { Settings, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getInitials } from '@/lib/preferences';
 import { clearLocalUserData } from '@/lib/clearLocalUserData';
@@ -143,25 +143,6 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
 
           {/* Menu items */}
           <div style={{ padding: '6px' }}>
-            <a
-              href="/settings"
-              onClick={() => setOpen(false)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 9,
-                padding: '8px 10px', borderRadius: 4,
-                fontSize: 13, fontWeight: 500, color: 'var(--text-2)',
-                textDecoration: 'none', cursor: 'pointer',
-                transition: 'background 0.12s, color 0.12s',
-              }}
-              onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-              onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
-            >
-              <Settings size={13} style={{ flexShrink: 0 }} />
-              {t('avatar_settings')}
-            </a>
-
-            <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
-
             <button
               onClick={handleLogout}
               style={{

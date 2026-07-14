@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/contexts/LanguageContext';
 import {
@@ -22,6 +22,7 @@ import {
   loadUserPreferences,
   saveUserPreferences,
   getProfile,
+  isProfileHandleAvailable,
   upsertProfile,
   uploadAvatar,
   getUserSettings,
@@ -34,6 +35,11 @@ import {
 import type { UserAppSettings } from '@/lib/supabase/db';
 import { applyPreferences, ACCENT_PRESETS, FONT_STACKS } from '@/lib/preferences';
 import { PLAN_LIMITS, PLAN_LABELS } from '@/lib/planLimits';
+import {
+  PROFILE_HANDLE_MAX_LENGTH,
+  normalizeProfileHandle,
+  validateProfileHandle,
+} from '@/lib/profileHandle';
 
 const NAV = [
   { id: 'account',       tKey: 'set_nav_account',       Icon: User },
@@ -81,13 +87,17 @@ function SubLabel({ children }: { children: React.ReactNode }) {
 }
 
 function AppInput({
-  value, onChange, type = 'text', placeholder, disabled, onMouseOver, onMouseOut,
+  value, onChange, type = 'text', placeholder, disabled, maxLength,
+  autoCapitalize, spellCheck, onMouseOver, onMouseOut,
 }: {
   value: string;
   onChange: (v: string) => void;
   type?: string;
   placeholder?: string;
   disabled?: boolean;
+  maxLength?: number;
+  autoCapitalize?: string;
+  spellCheck?: boolean;
   onMouseOver?: React.MouseEventHandler<HTMLInputElement>;
   onMouseOut?: React.MouseEventHandler<HTMLInputElement>;
 }) {
@@ -98,6 +108,9 @@ function AppInput({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       disabled={disabled}
+      maxLength={maxLength}
+      autoCapitalize={autoCapitalize}
+      spellCheck={spellCheck}
       className="app-input"
       onMouseOver={onMouseOver}
       onMouseOut={onMouseOut}
@@ -379,18 +392,33 @@ function ConfirmModal({ title, body, confirmLabel, onConfirm, onCancel, loading 
 // Section: Account
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
+function AccountSection({
+  userEmail,
+  displayName,
+  profileHandle,
+  avatarUrl,
+  onDisplayNameChange,
+  onHandleChange,
+  onAvatarChange,
+}: {
   userEmail: string;
   displayName: string;
+  profileHandle: string;
   avatarUrl?: string | null;
+  onDisplayNameChange?: (name: string) => void;
+  onHandleChange?: (handle: string) => void;
   onAvatarChange?: (url: string) => void;
 }) {
   const { t } = useLanguage();
-  const sb = createClient();
+  const sb = useMemo(() => createClient(), []);
 
   const [name, setName] = useState(displayName);
   const [nameSt, setNameSt] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
   const [nameErr, setNameErr] = useState('');
+
+  const [handle, setHandle] = useState(profileHandle);
+  const [handleSt, setHandleSt] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
+  const [handleErr, setHandleErr] = useState('');
 
   const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null>(avatarUrl ?? null);
   const [uploadSt, setUploadSt] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
@@ -414,34 +442,69 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadSt('loading');
-    const url = await uploadAvatar(file);
-    if (url) {
+    try {
+      const url = await uploadAvatar(file);
+      if (!url) throw new Error(t('set_acc_upload_failed'));
       await upsertProfile({ avatarUrl: url });
       setLocalAvatarUrl(url);
       onAvatarChange?.(url);
       setUploadSt('ok');
       setTimeout(() => setUploadSt('idle'), 3000);
-    } else {
+    } catch {
       setUploadSt('err');
       setTimeout(() => setUploadSt('idle'), 3000);
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
-  }, [onAvatarChange]);
+  }, [onAvatarChange, t]);
 
   const saveName = useCallback(async () => {
+    const nextName = name.trim();
+    if (!nextName) {
+      setNameErr('Display name cannot be empty.');
+      setNameSt('err');
+      return;
+    }
     setNameSt('loading');
+    setNameErr('');
     try {
-      await upsertProfile({ username: name.trim() });
+      await upsertProfile({ username: nextName });
+      setName(nextName);
+      onDisplayNameChange?.(nextName);
       setNameSt('ok');
       setTimeout(() => setNameSt('idle'), 3000);
     } catch (e) {
-      setNameErr(String(e));
+      setNameErr(e instanceof Error ? e.message : 'Could not update display name.');
       setNameSt('err');
     }
-  }, [name]);
+  }, [name, onDisplayNameChange]);
+
+  const saveHandle = useCallback(async () => {
+    const nextHandle = normalizeProfileHandle(handle);
+    const validationError = validateProfileHandle(nextHandle);
+    if (validationError) {
+      setHandleErr(validationError);
+      setHandleSt('err');
+      return;
+    }
+    setHandleSt('loading');
+    setHandleErr('');
+    try {
+      const available = await isProfileHandleAvailable(nextHandle);
+      if (!available) throw new Error('This handle is already taken.');
+      await upsertProfile({ handle: nextHandle });
+      setHandle(nextHandle);
+      onHandleChange?.(nextHandle);
+      setHandleSt('ok');
+      setTimeout(() => setHandleSt('idle'), 3000);
+    } catch (e) {
+      setHandleErr(e instanceof Error ? e.message : 'Could not update handle.');
+      setHandleSt('err');
+    }
+  }, [handle, onHandleChange]);
 
   const saveEmail = useCallback(async () => {
     setEmailSt('loading');
+    setEmailErr('');
     const { error } = await sb.auth.updateUser({ email: email.trim() });
     if (error) { setEmailErr(error.message); setEmailSt('err'); }
     else { setEmailSt('ok'); setTimeout(() => setEmailSt('idle'), 3000); }
@@ -451,6 +514,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
     if (newPwd !== cfmPwd) { setPwdErr(t('set_acc_pw_mismatch')); setPwdSt('err'); return; }
     if (newPwd.length < 8) { setPwdErr(t('set_acc_pw_short')); setPwdSt('err'); return; }
     setPwdSt('loading');
+    setPwdErr('');
     const { error } = await sb.auth.signInWithPassword({ email: userEmail, password: curPwd });
     if (error) { setPwdErr(t('set_acc_current_pw_wrong')); setPwdSt('err'); return; }
     const { error: updErr } = await sb.auth.updateUser({ password: newPwd });
@@ -459,7 +523,7 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
       setPwdSt('ok'); setCurPwd(''); setNewPwd(''); setCfmPwd('');
       setTimeout(() => setPwdSt('idle'), 3000);
     }
-  }, [curPwd, newPwd, cfmPwd, userEmail, sb]);
+  }, [curPwd, newPwd, cfmPwd, userEmail, sb, t]);
 
   const handleDelete = useCallback(async () => {
     setDelLoading(true);
@@ -513,13 +577,40 @@ function AccountSection({ userEmail, displayName, avatarUrl, onAvatarChange }: {
       <div style={{ marginBottom: 20 }}>
         <FieldLabel>{t('set_acc_name')}</FieldLabel>
         <div style={{ display: 'flex', gap: 8 }}>
-          <AppInput value={name} onChange={setName} placeholder={t('set_acc_name_placeholder')} />
+          <AppInput value={name} onChange={setName} placeholder={t('set_acc_name_placeholder')} maxLength={50} />
           <PrimaryBtn onClick={saveName} loading={nameSt === 'loading'} disabled={name.trim() === displayName}>
             {t('set_acc_save')}
           </PrimaryBtn>
         </div>
         {nameSt === 'ok' && <StatusMsg type="ok">{t('set_acc_name_updated')}</StatusMsg>}
         {nameSt === 'err' && <StatusMsg type="err">{nameErr}</StatusMsg>}
+      </div>
+
+      <Divider />
+
+      {/* Unique handle */}
+      <div style={{ marginBottom: 20 }}>
+        <FieldLabel>{t('set_acc_handle')}</FieldLabel>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <AppInput
+            value={handle}
+            onChange={(value) => setHandle(value.toLowerCase())}
+            placeholder={t('set_acc_handle_placeholder')}
+            maxLength={PROFILE_HANDLE_MAX_LENGTH}
+            autoCapitalize="none"
+            spellCheck={false}
+          />
+          <PrimaryBtn
+            onClick={saveHandle}
+            loading={handleSt === 'loading'}
+            disabled={normalizeProfileHandle(handle) === profileHandle}
+          >
+            {t('set_acc_save')}
+          </PrimaryBtn>
+        </div>
+        <SubLabel>{t('set_acc_handle_hint')}</SubLabel>
+        {handleSt === 'ok' && <StatusMsg type="ok">{t('set_acc_handle_updated')}</StatusMsg>}
+        {handleSt === 'err' && <StatusMsg type="err">{handleErr}</StatusMsg>}
       </div>
 
       <Divider />
@@ -1287,7 +1378,7 @@ function ReferralSection() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [stats?.referralLink]);
+  }, [stats]);
 
   const formatExpiry = (iso: string) => {
     const d = new Date(iso);
@@ -1632,10 +1723,11 @@ export default function SettingsPage() {
   const [active, setActive] = useState<Section>('account');
   const [userEmail, setUserEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [profileHandle, setProfileHandle] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const router = useRouter();
-  const sb = createClient();
+  const sb = useMemo(() => createClient(), []);
 
   useEffect(() => {
     sb.auth.getUser().then(async ({ data: { user } }) => {
@@ -1643,6 +1735,7 @@ export default function SettingsPage() {
       setUserEmail(user.email ?? '');
       const profile = await getProfile();
       setDisplayName(profile?.username ?? user.email?.split('@')[0] ?? '');
+      setProfileHandle(profile?.handle ?? '');
       setAvatarUrl(profile?.avatarUrl ?? null);
       setAuthReady(true);
     });
@@ -1738,7 +1831,15 @@ export default function SettingsPage() {
           padding: '36px 48px',
           maxWidth: 640,
         }}>
-          {active === 'account'       && <AccountSection userEmail={userEmail} displayName={displayName} avatarUrl={avatarUrl} onAvatarChange={setAvatarUrl} />}
+          {active === 'account'       && <AccountSection
+            userEmail={userEmail}
+            displayName={displayName}
+            profileHandle={profileHandle}
+            avatarUrl={avatarUrl}
+            onDisplayNameChange={setDisplayName}
+            onHandleChange={setProfileHandle}
+            onAvatarChange={setAvatarUrl}
+          />}
           {active === 'appearance'    && <AppearanceSection />}
           {active === 'workspace'     && <WorkspaceSection />}
           {active === 'study'         && <StudySection />}

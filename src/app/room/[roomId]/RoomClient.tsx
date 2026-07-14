@@ -33,6 +33,7 @@ import type { Tool, PenType } from '@/lib/drawing';
 import type { BlankPage } from '@/types';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { useToolStrokeSize } from '@/hooks/useToolStrokeSize';
 
 // ── Virtual page sequence ─────────────────────────────────────────────────────
 
@@ -193,6 +194,64 @@ function RoomPill({
   );
 }
 
+function RoomSplitPill({
+  icon, label, active, optionsOpen, indicatorColor, onActivate, onToggleOptions,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  optionsOpen?: boolean;
+  indicatorColor?: string;
+  onActivate: () => void;
+  onToggleOptions: () => void;
+}) {
+  return (
+    <div style={{
+      height: 34, display: 'flex', alignItems: 'stretch', flexShrink: 0,
+      borderRadius: 9999, overflow: 'hidden',
+      border: `1px solid ${active ? 'var(--accent)' : 'transparent'}`,
+      background: active ? 'var(--accent-muted)' : 'transparent',
+      color: active ? 'var(--accent)' : 'var(--text-2)',
+    }}>
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        aria-pressed={active}
+        onClick={onActivate}
+        style={{
+          position: 'relative', width: 36, padding: 0, border: 'none',
+          background: 'transparent', color: 'inherit', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {icon}
+        {indicatorColor && <span aria-hidden style={{
+          position: 'absolute', left: '50%', bottom: 3, transform: 'translateX(-50%)',
+          width: 8, height: 2, borderRadius: 999, background: indicatorColor,
+          boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
+        }} />}
+      </button>
+      <button
+        type="button"
+        title={`${label} options`}
+        aria-label={`${label} options`}
+        aria-expanded={optionsOpen}
+        onClick={onToggleOptions}
+        style={{
+          width: 22, padding: 0, border: 'none', borderLeft: '1px solid var(--border-subtle)',
+          background: optionsOpen ? 'var(--bg-hover)' : 'transparent', color: 'inherit',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <ChevronDown size={10} strokeWidth={2.5} style={{
+          transform: optionsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s',
+        }} />
+      </button>
+    </div>
+  );
+}
+
 // Slim second-row icon button (zoom / blank / voice / change PDF).
 function MiniBtn({
   onClick, title, disabled, active, danger, accent, children,
@@ -244,6 +303,7 @@ function MiniBtn({
 function RoomPopover({ children }: { children: React.ReactNode }) {
   return (
     <div
+      data-tool-popover
       style={{
         position: 'absolute', left: 0,
         bottom: '100%', marginBottom: 8,
@@ -345,7 +405,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [tool, setTool]             = useState<Tool>('pen');
   const [penType, setPenType]       = useState<PenType>('normal');
   const [color, setColor]           = useState('#ededf0');
-  const [strokeSize, setStrokeSize] = useState(5);
+  const { strokeSize, setStrokeSize } = useToolStrokeSize(tool, penType);
   const [zoom, setZoom]             = useState(1.0);
 
   // ── Voice notes state ─────────────────────────────────────────────────────
@@ -375,6 +435,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [blankMenuOpen, setBlankMenuOpen] = useState(false);
   const [drawOpen, setDrawOpen]           = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
+  const [eraserOpen, setEraserOpen]       = useState(false);
   const [docChangePrompt, setDocChangePrompt] = useState<{ uploaderName: string; fileName: string } | null>(null);
   const pendingBlankIdRef = useRef<string | null>(null);
   const changePdfInputRef = useRef<HTMLInputElement>(null);
@@ -384,6 +445,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const [friendsList, setFriendsList]   = useState<FriendEntry[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [invitedIds, setInvitedIds]     = useState<Set<string>>(new Set());
+  const [invitingIds, setInvitingIds]   = useState<Set<string>>(new Set());
 
   const hasJoinedRef    = useRef(false);
   // Cached Supabase access token for the unload-time DB delete. Read once
@@ -624,6 +686,41 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const plan  = profile?.plan ?? 'free';
       if (!isVip && plan === 'free') { setPlanBlocked(true); return; }
 
+      // Authorize the invite before querying the RLS-protected room row.
+      // First-time invitees are not room members yet, so fetching first can
+      // make a valid private room look missing. The SECURITY DEFINER RPC
+      // validates the invitation server-side and establishes membership.
+      const joinResult = await joinRoom(roomId);
+      console.log('[Room] joinRoom result', { uid: user.id, roomId, joinResult });
+      if (joinResult.error === 'full') {
+        setErrorMsg('This room is full.'); setStatus('error'); return;
+      }
+      if (joinResult.error === 'closed') {
+        setErrorMsg('This room has been closed.'); setStatus('error'); return;
+      }
+      if (joinResult.error === 'expired') {
+        setErrorMsg('This room has expired.'); setStatus('error'); return;
+      }
+      if (joinResult.error === 'not_invited') {
+        setErrorMsg('You need a valid invitation to join this private room.');
+        setStatus('error'); return;
+      }
+      if (joinResult.error === 'plan_required') {
+        setPlanBlocked(true); return;
+      }
+      if (joinResult.error === 'not_found') {
+        setErrorMsg(t('room_not_found')); setStatus('error'); return;
+      }
+      if (joinResult.error) {
+        setErrorMsg('Could not join this room. Please try again.');
+        setStatus('error'); return;
+      }
+      if (cancelled) {
+        await leaveRoom(roomId);
+        return;
+      }
+      hasJoinedRef.current = true;
+
       const room = await fetchRoom(roomId);
       if (!room) { setErrorMsg(t('room_not_found')); setStatus('error'); return; }
       if (room.status === 'closed') { setErrorMsg(t('room_ended_msg')); setStatus('error'); return; }
@@ -697,19 +794,6 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         });
       }
 
-      const joinResult = await joinRoom(roomId);
-      // Verbose tracing — joinRoom's RPC writes the row that the room_strokes
-      // INSERT-RLS policy requires. If this logs an error for one user but
-      // not the other, the missing-strokes user never satisfied the policy.
-      console.log('[Room] joinRoom result', { uid: user.id, roomId, joinResult });
-      if (joinResult.error === 'full') {
-        setErrorMsg(`This room is full (${room.maxMembers}/${room.maxMembers} members).`);
-        setStatus('error'); return;
-      }
-      if (joinResult.error === 'closed') {
-        setErrorMsg('This room has been closed.'); setStatus('error'); return;
-      }
-      if (!cancelled) hasJoinedRef.current = true;
       if (!cancelled) {
         setStatus('ready');
         // Let friends page know which room is active
@@ -870,12 +954,12 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     });
     appendStrokeLocal(pageKey, stroke);
     console.log('STROKE_DIAG_B after appendStrokeLocal', stroke?.id);
-    broadcastStroke(pageKey, stroke);
-    console.log('STROKE_DIAG_C after broadcastStroke, about to insertRoomStroke', stroke?.id);
+    console.log('STROKE_DIAG_C about to insertRoomStroke', stroke?.id);
     const result = await insertRoomStroke(roomId, pageKey, stroke);
     console.log('STROKE_DIAG_D after insertRoomStroke await', stroke?.id, !!result, result?.seq ?? null);
     if (result && result.seq > maxLocalSeqRef.current) {
       maxLocalSeqRef.current = result.seq;
+      await broadcastStroke(pageKey, stroke);
     }
     console.log('[Room] handleStrokeComplete RESULT', { strokeId: stroke.id, persisted: !!result, seq: result?.seq ?? null });
   }, [appendStrokeLocal, broadcastStroke, roomId, userId]);
@@ -908,9 +992,13 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   const handleLeave = useCallback(async () => {
     if (hasJoinedRef.current) {
+      const { wasLastMember, error } = await leaveRoom(roomId);
+      if (error) {
+        setErrorMsg('Could not leave the room. Please try again.');
+        return;
+      }
       hasJoinedRef.current = false;
-      const { wasLastMember } = await leaveRoom(roomId);
-      if (wasLastMember) broadcastRoomClosed();
+      if (wasLastMember) await broadcastRoomClosed();
     }
     try { localStorage.removeItem('activeRoom'); } catch { /* */ }
     router.replace('/workspace');
@@ -918,9 +1006,14 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
   const handleEndRoom = useCallback(async () => {
     setEndRoomConfirm(false);
+    try {
+      await closeRoom(roomId);
+    } catch {
+      setErrorMsg('Could not end the room. Please try again.');
+      return;
+    }
     hasJoinedRef.current = false;
-    await closeRoom(roomId);
-    broadcastRoomClosed();
+    await broadcastRoomClosed();
     try { localStorage.removeItem('activeRoom'); } catch { /* */ }
     router.replace('/workspace');
   }, [roomId, broadcastRoomClosed, router]);
@@ -975,22 +1068,23 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // workspace BottomPillBar. The pills and their popovers share data-pill-root
   // so taps inside don't dismiss; everything else does.
   useEffect(() => {
-    if (!drawOpen && !highlightOpen) return;
-    const onDown = (e: MouseEvent) => {
+    if (!drawOpen && !highlightOpen && !eraserOpen) return;
+    const onDown = (e: PointerEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target?.closest?.('[data-pill-root]')) return;
-      setDrawOpen(false); setHighlightOpen(false);
+      if (target?.closest?.('[data-tool-popover]')) return;
+      if (target?.closest?.('[data-room-pen-trigger], [data-room-highlight-trigger], [data-room-eraser-trigger]')) return;
+      setDrawOpen(false); setHighlightOpen(false); setEraserOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setDrawOpen(false); setHighlightOpen(false); }
+      if (e.key === 'Escape') { setDrawOpen(false); setHighlightOpen(false); setEraserOpen(false); }
     };
-    window.addEventListener('mousedown', onDown);
+    window.addEventListener('pointerdown', onDown, true);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('keydown', onKey);
     };
-  }, [drawOpen, highlightOpen]);
+  }, [drawOpen, highlightOpen, eraserOpen]);
 
   // Open invite modal — lazy-load friends on first open
   const handleOpenInvite = useCallback(async () => {
@@ -1004,8 +1098,21 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [friendsList.length]);
 
   const handleInviteFriend = useCallback(async (friendId: string) => {
-    await inviteToRoom(friendId, roomId, roomName);
-    setInvitedIds((prev) => new Set([...prev, friendId]));
+    setInvitingIds((prev) => new Set(prev).add(friendId));
+    try {
+      const result = await inviteToRoom(friendId, roomId, roomName);
+      if (result.error) {
+        console.error('[Room] invite failed:', result.error);
+        return;
+      }
+      setInvitedIds((prev) => new Set(prev).add(friendId));
+    } finally {
+      setInvitingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(friendId);
+        return next;
+      });
+    }
   }, [roomId, roomName]);
 
   // ── Loading / error states ────────────────────────────────────────────────
@@ -1412,6 +1519,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             currentVirtualIndex={virtualIndex}
             onPageChange={setVirtualIndex}
             zoom={zoom}
+            onZoomChange={(next) => setZoom(clampZoom(next))}
             getNotesForPage={(_docId, pageId) => voiceGetNotesForPage(typeof pageId === 'number' ? pageId : 0)}
             isRecording={voiceIsRecording}
             recordingContext={voiceRecordingContext && activeDocument ? { documentId: activeDocument.id, pageNumber: voiceRecordingContext.pageNumber } : null}
@@ -1437,7 +1545,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         {/* ── Floating drawing-tools pill bar ── */}
         {/* Same shape as workspace BottomPillBar — Cursor · Pen · Marker
             · Highlight · Eraser. Pen + Highlight open color/size popovers
-            above; Marker and Eraser activate immediately. */}
+            above, Eraser opens its own size popover, and Marker activates immediately. */}
         <div
           data-pill-root
           role="toolbar"
@@ -1460,26 +1568,38 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             label={t('room_cursor')}
             icon={<MousePointer size={15} strokeWidth={1.8} />}
             active={tool === 'cursor'}
-            onClick={() => { selectTool('cursor'); setDrawOpen(false); setHighlightOpen(false); }}
+            onClick={() => { selectTool('cursor'); setDrawOpen(false); setHighlightOpen(false); setEraserOpen(false); }}
           />
 
           {/* Pen — popover with color + size */}
-          <div style={{ position: 'relative' }}>
-            <RoomPill
+          <div data-room-pen-trigger style={{ position: 'relative' }}>
+            <RoomSplitPill
               label={t('room_pen')}
               icon={<Pencil size={15} strokeWidth={1.8} />}
               active={tool === 'pen' && penType === 'normal'}
-              dropdown
-              onClick={() => {
-                selectTool('pen', 'normal');
+              optionsOpen={drawOpen}
+              indicatorColor={color}
+              onActivate={() => {
                 setHighlightOpen(false);
-                setDrawOpen((o) => !o);
+                setEraserOpen(false);
+                if (tool === 'pen' && penType === 'normal') setDrawOpen((open) => !open);
+                else { selectTool('pen', 'normal'); setDrawOpen(false); }
+              }}
+              onToggleOptions={() => {
+                if (tool !== 'pen' || penType !== 'normal') selectTool('pen', 'normal');
+                setHighlightOpen(false);
+                setEraserOpen(false);
+                setDrawOpen((open) => !open);
               }}
             />
             {drawOpen && (
               <RoomPopover>
                 <PopoverLabel>Color</PopoverLabel>
-                <RoomColorRow color={color} setColor={(c) => { setColor(c); if (tool === 'eraser' || tool === 'cursor') selectTool('pen', 'normal'); }} />
+                <RoomColorRow color={color} setColor={(c) => {
+                  setColor(c);
+                  if (tool === 'eraser' || tool === 'cursor') selectTool('pen', 'normal');
+                  setDrawOpen(false);
+                }} />
                 <PopoverHr />
                 <PopoverLabel>Size</PopoverLabel>
                 <DragScrubber value={strokeSize} onChange={setStrokeSize} />
@@ -1491,26 +1611,34 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             label={t('room_marker')}
             icon={<div style={{ width: 14, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.75 }} />}
             active={tool === 'pen' && penType === 'marker'}
-            onClick={() => { selectTool('pen', 'marker'); setDrawOpen(false); setHighlightOpen(false); }}
+            onClick={() => { selectTool('pen', 'marker'); setDrawOpen(false); setHighlightOpen(false); setEraserOpen(false); }}
           />
 
           {/* Highlight — popover with color + size */}
-          <div style={{ position: 'relative' }}>
-            <RoomPill
+          <div data-room-highlight-trigger style={{ position: 'relative' }}>
+            <RoomSplitPill
               label={t('room_highlight')}
               icon={<Highlighter size={15} strokeWidth={1.8} />}
               active={tool === 'pen' && penType === 'highlighter'}
-              dropdown
-              onClick={() => {
-                selectTool('pen', 'highlighter');
+              optionsOpen={highlightOpen}
+              indicatorColor={color}
+              onActivate={() => {
                 setDrawOpen(false);
-                setHighlightOpen((o) => !o);
+                setEraserOpen(false);
+                if (tool === 'pen' && penType === 'highlighter') setHighlightOpen((open) => !open);
+                else { selectTool('pen', 'highlighter'); setHighlightOpen(false); }
+              }}
+              onToggleOptions={() => {
+                if (tool !== 'pen' || penType !== 'highlighter') selectTool('pen', 'highlighter');
+                setDrawOpen(false);
+                setEraserOpen(false);
+                setHighlightOpen((open) => !open);
               }}
             />
             {highlightOpen && (
               <RoomPopover>
                 <PopoverLabel>Highlighter color</PopoverLabel>
-                <RoomColorRow color={color} setColor={setColor} />
+                <RoomColorRow color={color} setColor={(c) => { setColor(c); setHighlightOpen(false); }} />
                 <PopoverHr />
                 <PopoverLabel>Size</PopoverLabel>
                 <DragScrubber value={strokeSize} onChange={setStrokeSize} />
@@ -1518,12 +1646,33 @@ export default function RoomClient({ roomId }: { roomId: string }) {
             )}
           </div>
 
-          <RoomPill
-            label={t('room_eraser')}
-            icon={<Eraser size={15} strokeWidth={1.8} />}
-            active={tool === 'eraser'}
-            onClick={() => { selectTool('eraser'); setDrawOpen(false); setHighlightOpen(false); }}
-          />
+          {/* Eraser — independent size control */}
+          <div data-room-eraser-trigger style={{ position: 'relative' }}>
+            <RoomSplitPill
+              label={t('room_eraser')}
+              icon={<Eraser size={15} strokeWidth={1.8} />}
+              active={tool === 'eraser'}
+              optionsOpen={eraserOpen}
+              onActivate={() => {
+                setDrawOpen(false);
+                setHighlightOpen(false);
+                if (tool === 'eraser') setEraserOpen((open) => !open);
+                else { selectTool('eraser'); setEraserOpen(false); }
+              }}
+              onToggleOptions={() => {
+                if (tool !== 'eraser') selectTool('eraser');
+                setDrawOpen(false);
+                setHighlightOpen(false);
+                setEraserOpen((open) => !open);
+              }}
+            />
+            {eraserOpen && (
+              <RoomPopover>
+                <PopoverLabel>Size</PopoverLabel>
+                <DragScrubber value={strokeSize} onChange={setStrokeSize} />
+              </RoomPopover>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1696,6 +1845,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
               ) : (
                 friendsList.map((f) => {
                   const sent = invitedIds.has(f.userId);
+                  const sending = invitingIds.has(f.userId);
                   const displayN = f.username || 'Unknown';
                   const initials = displayN.trim().split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
                   return (
@@ -1718,18 +1868,22 @@ export default function RoomClient({ roomId }: { roomId: string }) {
                       </span>
                       <button
                         onClick={() => handleInviteFriend(f.userId)}
-                        disabled={sent}
+                        disabled={sending}
                         style={{
                           height: 28, padding: '0 12px', borderRadius: 4,
-                          background: sent ? 'var(--bg-elevated)' : 'var(--accent)',
-                          color: sent ? 'var(--text-3)' : '#fff',
-                          border: sent ? '1px solid var(--border)' : 'none',
-                          fontSize: 12, fontWeight: 600, cursor: sent ? 'default' : 'pointer',
+                          background: sending ? 'var(--bg-elevated)' : 'var(--accent)',
+                          color: sending ? 'var(--text-3)' : '#fff',
+                          border: sending ? '1px solid var(--border)' : 'none',
+                          fontSize: 12, fontWeight: 600, cursor: sending ? 'wait' : 'pointer',
                           fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5,
                           transition: 'background 0.12s',
                         }}
                       >
-                        {sent ? <><UserCheck size={12} /> {t('room_sent_btn')}</> : <><UserPlus size={12} /> {t('room_invite_btn')}</>}
+                        {sending
+                          ? <><UserCheck size={12} /> {t('room_sending_btn')}</>
+                          : sent
+                            ? <><UserPlus size={12} /> {t('room_resend_btn')}</>
+                            : <><UserPlus size={12} /> {t('room_invite_btn')}</>}
                       </button>
                     </div>
                   );

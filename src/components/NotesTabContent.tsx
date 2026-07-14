@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import {
   StickyNote, Pencil, Bookmark as BookmarkIcon, Layers,
-  Plus, Mic, FileText, Trash2,
+  Plus, Mic, FileText, Trash2, Play, Pause,
 } from 'lucide-react';
 import type { TextNote, VoiceNote, PDFDocument, BlankPage, NoteCategory } from '@/types';
 
@@ -117,6 +117,7 @@ interface VoiceEntry {
   preview: string;
   timestamp: Date;
   duration: number;
+  audioUrl: string;
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -129,6 +130,33 @@ export default function NotesTabContent({
   onAddFlashcard,
   onRecordVoiceNote, isRecording = false,
 }: Props) {
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const [voicePlayState, setVoicePlayState] = useState<'playing' | 'paused'>('playing');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const destroyAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+    setPlayingVoiceId(null);
+    setVoicePlayState('playing');
+  }, []);
+
+  useEffect(() => () => destroyAudio(), [destroyAudio]);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+  }, [activeDocumentId]);
+
   // Merge text + voice notes for the active document.
   const { textEntries, voiceEntries } = useMemo(() => {
     const text:  TextEntry[]  = [];
@@ -175,6 +203,7 @@ export default function NotesTabContent({
         preview: n.title ?? `Voice note · ${formatDuration(n.duration)}`,
         timestamp: n.timestamp,
         duration: n.duration,
+        audioUrl: n.audioUrl,
       });
     });
 
@@ -182,6 +211,33 @@ export default function NotesTabContent({
     voice.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     return { textEntries: text, voiceEntries: voice };
   }, [activeDocumentId, allTextNotes, voiceNotes, virtualPages]);
+
+  const handleToggleVoicePlayback = useCallback((entry: VoiceEntry) => {
+    if (!entry.audioUrl) return;
+    if (playingVoiceId === entry.id && audioRef.current) {
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(() => destroyAudio());
+        setVoicePlayState('playing');
+      } else {
+        audioRef.current.pause();
+        setVoicePlayState('paused');
+      }
+      return;
+    }
+
+    destroyAudio();
+    const audio = new Audio(entry.audioUrl);
+    audioRef.current = audio;
+    audio.onended = () => {
+      audioRef.current = null;
+      setPlayingVoiceId(null);
+      setVoicePlayState('playing');
+    };
+    audio.onerror = () => destroyAudio();
+    setPlayingVoiceId(entry.id);
+    setVoicePlayState('playing');
+    audio.play().catch(() => destroyAudio());
+  }, [playingVoiceId, destroyAudio]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -320,6 +376,9 @@ export default function NotesTabContent({
                 key={`voice-${e.id}`}
                 entry={e}
                 onClick={() => onNavigate(e.virtualIdx)}
+                onTogglePlay={() => handleToggleVoicePlayback(e)}
+                isPlaying={playingVoiceId === e.id && voicePlayState === 'playing'}
+                isPaused={playingVoiceId === e.id && voicePlayState === 'paused'}
                 onDelete={onDeleteVoiceNote ? () => onDeleteVoiceNote(e.id) : undefined}
               />
             ))}
@@ -535,10 +594,13 @@ function NoteCard({
 }
 
 function VoiceCard({
-  entry, onClick, onDelete,
+  entry, onClick, onTogglePlay, isPlaying, isPaused, onDelete,
 }: {
   entry:   VoiceEntry;
   onClick: () => void;
+  onTogglePlay: () => void;
+  isPlaying: boolean;
+  isPaused: boolean;
   onDelete?: () => void;
 }) {
   return (
@@ -562,6 +624,28 @@ function VoiceCard({
         background: 'var(--bg-panel)', borderColor: 'var(--border-subtle)',
       })}
     >
+      <button
+        onClick={(e) => { e.stopPropagation(); onTogglePlay(); }}
+        aria-label={isPlaying ? 'Pause voice note' : 'Play voice note'}
+        title={isPlaying ? 'Pause voice note' : 'Play voice note'}
+        disabled={!entry.audioUrl}
+        style={{
+          width: 28, height: 28, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: (isPlaying || isPaused) ? 'var(--accent)' : 'var(--accent-muted)',
+          color: (isPlaying || isPaused) ? '#fff' : 'var(--accent)',
+          border: 'none',
+          cursor: entry.audioUrl ? 'pointer' : 'not-allowed',
+          opacity: entry.audioUrl ? 1 : 0.5,
+          flexShrink: 0,
+          transition: 'background 0.12s, color 0.12s, opacity 0.12s',
+        }}
+      >
+        {isPlaying
+          ? <Pause size={12} fill="currentColor" />
+          : <Play size={12} fill="currentColor" style={{ marginLeft: 1 }} />
+        }
+      </button>
       <span style={{
         width: 28, height: 28, borderRadius: '50%',
         display: 'flex', alignItems: 'center', justifyContent: 'center',

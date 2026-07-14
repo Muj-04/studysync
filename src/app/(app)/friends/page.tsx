@@ -799,7 +799,11 @@ export default function FriendsPage() {
 
   const handleInvite = useCallback(async (friendUserId: string) => {
     if (!activeRoom) return;
-    await inviteToRoom(friendUserId, activeRoom.roomId, activeRoom.roomName);
+    const result = await inviteToRoom(friendUserId, activeRoom.roomId, activeRoom.roomName);
+    if (result.error) {
+      console.error('[Friends] room invite failed:', result.error);
+      return;
+    }
     setInviteSent((prev) => new Set([...prev, friendUserId]));
   }, [activeRoom]);
 

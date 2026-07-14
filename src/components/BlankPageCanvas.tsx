@@ -3,8 +3,14 @@ import {
   forwardRef, useRef, useState, useEffect, useCallback, useImperativeHandle,
 } from 'react';
 import type { BlankPage, CanvasImage, TextNote } from '@/types';
-import { getDrawingCursor } from '@/lib/drawing';
+import { getDrawingCursor, MAX_UNDO_HISTORY } from '@/lib/drawing';
 import type { Tool, PenType } from '@/lib/drawing';
+import {
+  createTwoFingerGestureState,
+  handleTwoFingerPanZoom,
+  resetTwoFingerGesture,
+  seedTwoFingerGesture,
+} from '@/lib/touchGestures';
 import TextNotesLayer from './TextNotesLayer';
 
 const PAGE_W = 816;
@@ -78,6 +84,7 @@ export interface DrawingCanvasHandle {
   clear: () => void;
   insertImage?: (dataUrl: string) => void;
   undo?: () => void;
+  redo?: () => void;
   loadData?: (data: string) => void;
 }
 
@@ -113,10 +120,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
     const liveZoomRef = useRef(zoom);
     zoomRef.current   = zoom;
 
-    const toolRef = useRef(tool);
-    toolRef.current = tool;
-
-    const lastPinchDistRef = useRef<number | null>(null);
+    const twoFingerGestureRef = useRef(createTwoFingerGestureState());
 
     const [cssDims, setCssDims]   = useState({ w: PAGE_W, h: PAGE_H });
     const [images, setImages]     = useState<CanvasImage[]>(blankPage.images ?? []);
@@ -131,6 +135,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
 
     // Undo stack — stores up to 10 canvas snapshots (data URLs)
     const undoStack = useRef<string[]>([]);
+    const redoStack = useRef<string[]>([]);
 
     function computeCss(containerWidth: number, z: number) {
       const baseW = Math.min(containerWidth - 48, PAGE_W);
@@ -158,6 +163,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       cancelLine();
       isPenDown.current = false;
       undoStack.current = [];
+      redoStack.current = [];
 
       const canvas    = canvasRef.current;
       const container = containerRef.current;
@@ -212,7 +218,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       };
       el.addEventListener('wheel', onWheel, { passive: false });
       return () => el.removeEventListener('wheel', onWheel);
-    }, [onZoomChange]);
+    }, [onZoomChange, tool]);
 
     // ── Pinch-to-zoom ──────────────────────────────────────────────────────
     useEffect(() => {
@@ -220,37 +226,34 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       if (!el) return;
 
       const onTouchStart = (e: TouchEvent) => {
-        // Suppress pinch zoom while a drawing tool is active (but allow in cursor/text modes)
-        if (toolRef.current !== 'text' && toolRef.current !== 'cursor') { lastPinchDistRef.current = null; return; }
-        if (e.touches.length === 2) {
-          lastPinchDistRef.current = Math.hypot(
-            e.touches[0].clientX - e.touches[1].clientX,
-            e.touches[0].clientY - e.touches[1].clientY,
-          );
-        }
+        if (e.touches.length === 2) seedTwoFingerGesture(e, twoFingerGestureRef.current);
       };
       const onTouchMove = (e: TouchEvent) => {
-        if (toolRef.current !== 'text' && toolRef.current !== 'cursor') { lastPinchDistRef.current = null; return; }
-        if (e.touches.length !== 2 || lastPinchDistRef.current === null) return;
-        e.preventDefault();
-        const dist = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY,
-        );
-        const next = clampZ(liveZoomRef.current * (dist / lastPinchDistRef.current));
-        lastPinchDistRef.current = dist;
-        liveZoomRef.current = next;
-        onZoomChange(next);
+        if (e.touches.length !== 2) return;
+        handleTwoFingerPanZoom(e, twoFingerGestureRef.current, {
+          scrollEl: el,
+          getZoom: () => liveZoomRef.current,
+          onZoomChange: (next) => {
+            liveZoomRef.current = next;
+            onZoomChange(next);
+          },
+          clampZoom: clampZ,
+          allowPinchZoom: tool === 'cursor',
+        });
       };
-      const onTouchEnd = () => { lastPinchDistRef.current = null; };
+      const onTouchEnd = (e: TouchEvent) => {
+        if (e.touches.length < 2) resetTwoFingerGesture(twoFingerGestureRef.current);
+      };
 
       el.addEventListener('touchstart', onTouchStart, { passive: true });
       el.addEventListener('touchmove', onTouchMove, { passive: false });
       el.addEventListener('touchend', onTouchEnd);
+      el.addEventListener('touchcancel', onTouchEnd);
       return () => {
         el.removeEventListener('touchstart', onTouchStart);
         el.removeEventListener('touchmove', onTouchMove);
         el.removeEventListener('touchend', onTouchEnd);
+        el.removeEventListener('touchcancel', onTouchEnd);
       };
     }, [onZoomChange]);
 
@@ -322,7 +325,8 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
         const ls = lineStateRef.current;
         if (ls.phase === 'idle') {
           // Push undo snapshot before first line click
-          undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+          undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+          redoStack.current = [];
           const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
           lineStateRef.current = { phase: 'active', start: pos, snapshot };
           ctx.save();
@@ -354,7 +358,8 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       if (!canvas || !ctx) return;
 
       // Push undo snapshot before starting a stroke
-      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+      redoStack.current = [];
       isPenDown.current = true;
       lastPt.current    = pos;
       ctx.save();
@@ -419,7 +424,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       if (it?.type === 'move') {
         interactionRef.current = null;
         const canvas = canvasRef.current;
-        if (canvas) canvas.style.cursor = getDrawingCursor(tool, penType);
+        if (canvas) canvas.style.cursor = getDrawingCursor(tool, penType, strokeSize);
         onSaveImages(blankPage.id, imagesRef.current);
         return;
       }
@@ -435,7 +440,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       const canvas = canvasRef.current;
       if (!canvas || interactionRef.current) return;
       const hit = imageAtPoint(pos.x, pos.y);
-      canvas.style.cursor = hit ? 'move' : getDrawingCursor(tool, penType);
+      canvas.style.cursor = hit ? 'move' : getDrawingCursor(tool, penType, strokeSize);
     };
 
     // ── Resize handles ─────────────────────────────────────────────────────
@@ -476,7 +481,8 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       const canvas = canvasRef.current;
       const ctx    = canvas?.getContext('2d');
       if (!canvas || !ctx) return;
-      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+      redoStack.current = [];
       ctx.clearRect(0, 0, PAGE_W, PAGE_H);
       setImages([]);
       setSelectedId(null);
@@ -495,6 +501,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext('2d');
       if (!canvas || !ctx) return;
+      redoStack.current = [...redoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
       const img = new Image();
       img.onload = () => {
         ctx.clearRect(0, 0, PAGE_W, PAGE_H);
@@ -502,6 +509,26 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
         onSaveData(blankPage.id, prev);
       };
       img.src = prev;
+    }, [blankPage.id, onSaveData, cancelLine]);
+
+    const redo = useCallback(() => {
+      const stack = redoStack.current;
+      if (stack.length === 0) return;
+      const next = stack[stack.length - 1];
+      redoStack.current = stack.slice(0, -1);
+      cancelLine();
+      isPenDown.current = false;
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (!canvas || !ctx) return;
+      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, PAGE_W, PAGE_H);
+        ctx.drawImage(img, 0, 0, PAGE_W, PAGE_H);
+        onSaveData(blankPage.id, next);
+      };
+      img.src = next;
     }, [blankPage.id, onSaveData, cancelLine]);
 
     // ── Insert image ───────────────────────────────────────────────────────
@@ -530,7 +557,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
       el.src = dataUrl;
     }, [blankPage.id, onSaveImages]);
 
-    useImperativeHandle(ref, () => ({ clear: clearCanvas, insertImage, undo, loadData }), [clearCanvas, insertImage, undo, loadData]);
+    useImperativeHandle(ref, () => ({ clear: clearCanvas, insertImage, undo, redo, loadData }), [clearCanvas, insertImage, undo, redo, loadData]);
 
     useEffect(() => {
       const fn = (e: KeyboardEvent) => {
@@ -647,19 +674,27 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
               onMouseLeave={() => { if (tool !== 'text' && tool !== 'cursor') stopDraw(); }}
               onTouchStart={(e) => {
                 if (tool === 'text' || tool === 'cursor') return;
+                if (e.touches.length !== 1) {
+                  stopDraw();
+                  return;
+                }
                 e.preventDefault();
-                if (e.touches.length === 1) startDraw(evToLogical(e.touches[0]));
+                startDraw(evToLogical(e.touches[0]));
               }}
               onTouchMove={(e) => {
                 if (tool === 'text' || tool === 'cursor') return;
+                if (e.touches.length !== 1) {
+                  stopDraw();
+                  return;
+                }
                 e.preventDefault();
-                if (e.touches.length === 1) continueDraw(evToLogical(e.touches[0]));
+                continueDraw(evToLogical(e.touches[0]));
               }}
               onTouchEnd={() => { if (tool !== 'text' && tool !== 'cursor') stopDraw(); }}
               style={{
                 display: 'block',
                 position: 'relative',
-                cursor: (tool === 'text' || tool === 'cursor') ? 'default' : getDrawingCursor(tool, penType),
+                cursor: (tool === 'text' || tool === 'cursor') ? 'default' : getDrawingCursor(tool, penType, strokeSize),
                 touchAction: (tool !== 'text' && tool !== 'cursor') ? 'none' : 'pan-y',
                 pointerEvents: (tool === 'text' || tool === 'cursor') ? 'none' : 'auto',
               }}

@@ -5,7 +5,7 @@ import PDFSearchBar from './PDFSearchBar';
 import TextNotesLayer from './TextNotesLayer';
 import type { HighlightRect } from './PDFViewer';
 import type { PDFDocument, TextNote, PDFPageImage } from '@/types';
-import { getDrawingCursor } from '@/lib/drawing';
+import { getDrawingCursor, MAX_UNDO_HISTORY } from '@/lib/drawing';
 import type { Tool, PenType } from '@/lib/drawing';
 import type { PDFPageProxy, PageViewport } from 'pdfjs-dist';
 
@@ -84,6 +84,7 @@ function constrainToAngle(
 export interface DrawingCanvasHandle {
   clear: () => void;
   undo?: () => void;
+  redo?: () => void;
   loadData?: (data: string) => void;
   insertImage?: (dataUrl: string) => void;
 }
@@ -287,6 +288,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
 
     const lineStateRef  = useRef<LineState>({ phase: 'idle' });
     const undoStack     = useRef<string[]>([]);
+    const redoStack     = useRef<string[]>([]);
     const shiftSnapRef  = useRef<{ active: boolean; startPos: { x: number; y: number }; snapshot: ImageData | null }>({
       active: false, startPos: { x: 0, y: 0 }, snapshot: null,
     });
@@ -385,6 +387,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       isDrawing.current = false;
       lastPos.current = null;
       undoStack.current = [];
+      redoStack.current = [];
       const { w, h } = canvasDims;
       const dpr = window.devicePixelRatio || 1;
       canvas.width  = Math.round(w * dpr);
@@ -436,7 +439,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       if (tool === 'line') {
         const ls = lineStateRef.current;
         if (ls.phase === 'idle') {
-          undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+          undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+          redoStack.current = [];
           const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
           lineStateRef.current = { phase: 'active', start: pos, snapshot };
           ctx.save();
@@ -461,7 +465,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         }
         return;
       }
-      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+      redoStack.current = [];
       isDrawing.current = true;
       lastPos.current = pos;
       if (shiftKey) {
@@ -538,7 +543,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       const ctx = canvas?.getContext('2d');
       const dims = canvasDimsRef.current;
       if (!canvas || !ctx || !dims) return;
-      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+      redoStack.current = [];
       ctx.clearRect(0, 0, dims.w, dims.h);
       onSave(canvas.toDataURL('image/png'));
     }, [onSave, cancelLine]);
@@ -554,9 +560,27 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       const ctx = canvas?.getContext('2d');
       const dims = canvasDimsRef.current;
       if (!canvas || !ctx || !dims) return;
+      redoStack.current = [...redoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
       const img = new Image();
       img.onload = () => { ctx.clearRect(0, 0, dims.w, dims.h); ctx.drawImage(img, 0, 0, dims.w, dims.h); onSave(prev); };
       img.src = prev;
+    }, [cancelLine, onSave]);
+
+    const redoCanvas = useCallback(() => {
+      const stack = redoStack.current;
+      if (stack.length === 0) return;
+      const next = stack[stack.length - 1];
+      redoStack.current = stack.slice(0, -1);
+      cancelLine();
+      isDrawing.current = false;
+      const canvas = drawCanvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      const dims = canvasDimsRef.current;
+      if (!canvas || !ctx || !dims) return;
+      undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+      const img = new Image();
+      img.onload = () => { ctx.clearRect(0, 0, dims.w, dims.h); ctx.drawImage(img, 0, 0, dims.w, dims.h); onSave(next); };
+      img.src = next;
     }, [cancelLine, onSave]);
 
     const loadData = useCallback((data: string) => {
@@ -596,7 +620,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       el.src = dataUrl;
     }, []);
 
-    useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas, loadData, insertImage }), [clearCanvas, undoCanvas, loadData, insertImage]);
+    useImperativeHandle(ref, () => ({ clear: clearCanvas, undo: undoCanvas, redo: redoCanvas, loadData, insertImage }), [clearCanvas, undoCanvas, redoCanvas, loadData, insertImage]);
 
     // ── Image interaction: global drag/resize ─────────────────────────────────
 
@@ -740,7 +764,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       if (!ctx) return;
       const el = new Image();
       el.onload = () => {
-        undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-10);
+        undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
+        redoStack.current = [];
         ctx.save();
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = 1;
@@ -835,7 +860,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
               position: 'absolute', top: 0, left: 0,
               zIndex: 2,
               pointerEvents: canDrawNow ? 'auto' : 'none',
-              cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
+              cursor: canDrawNow ? getDrawingCursor(tool, penType, strokeSize) : 'default',
               touchAction: canDrawNow ? 'none' : 'pan-y',
             }}
             onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent), e.shiftKey); }}
@@ -844,13 +869,21 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
             onMouseLeave={() => canDrawNow && stopDraw()}
             onTouchStart={(e) => {
               if (!canDrawNow) return;
+              if (e.touches.length !== 1) {
+                stopDraw();
+                return;
+              }
               e.preventDefault();
-              if (e.touches.length === 1) startDraw(getPos(e.touches[0]));
+              startDraw(getPos(e.touches[0]));
             }}
             onTouchMove={(e) => {
               if (!canDrawNow) return;
+              if (e.touches.length !== 1) {
+                stopDraw();
+                return;
+              }
               e.preventDefault();
-              if (e.touches.length === 1) continueDraw(getPos(e.touches[0]));
+              continueDraw(getPos(e.touches[0]));
             }}
             onTouchEnd={() => canDrawNow && stopDraw()}
           />
@@ -931,8 +964,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
           onPageReady={handlePageReady}
           searchHighlights={searchOpen ? searchRects : undefined}
           searchActiveIndex={searchOpen ? activeMatchIdx : undefined}
+          allowPinchZoom={tool === 'cursor'}
           overlay={overlay}
-          disablePinch={canDrawNow}
         />
       </div>
     );

@@ -7,6 +7,13 @@ import { getDrawingCursor } from '@/lib/drawing';
 import { Mic, Plus, Square } from 'lucide-react';
 import TextNotesLayer from './TextNotesLayer';
 import type { RoomStrokePayload } from '@/lib/supabase/db';
+import { clampZoom } from './PDFViewer';
+import {
+  createTwoFingerGestureState,
+  handleTwoFingerPanZoom,
+  resetTwoFingerGesture,
+  seedTwoFingerGesture,
+} from '@/lib/touchGestures';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -720,7 +727,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
               display: 'block',
               zIndex: 3,
               pointerEvents: canDrawNow ? 'auto' : 'none',
-              cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
+              cursor: canDrawNow ? getDrawingCursor(tool, penType, strokeSize) : 'default',
               touchAction: canDrawNow ? 'none' : 'pan-y',
             }}
             onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent)); }}
@@ -729,13 +736,21 @@ const ScrollPageItem = memo(function ScrollPageItem({
             onMouseLeave={() => canDrawNow && stopDraw()}
             onTouchStart={(e) => {
               if (!canDrawNow) return;
+              if (e.touches.length !== 1) {
+                stopDraw();
+                return;
+              }
               e.preventDefault();
-              if (e.touches.length === 1) startDraw(getPos(e.touches[0]));
+              startDraw(getPos(e.touches[0]));
             }}
             onTouchMove={(e) => {
               if (!canDrawNow) return;
+              if (e.touches.length !== 1) {
+                stopDraw();
+                return;
+              }
               e.preventDefault();
-              if (e.touches.length === 1) continueDraw(getPos(e.touches[0]));
+              continueDraw(getPos(e.touches[0]));
             }}
             onTouchEnd={() => canDrawNow && stopDraw()}
           />
@@ -828,7 +843,7 @@ const ScrollPageItem = memo(function ScrollPageItem({
             display: 'block',
             zIndex: 3,
             pointerEvents: canDrawNow ? 'auto' : 'none',
-            cursor: canDrawNow ? getDrawingCursor(tool, penType) : 'default',
+            cursor: canDrawNow ? getDrawingCursor(tool, penType, strokeSize) : 'default',
             touchAction: canDrawNow ? 'none' : 'pan-y',
           }}
           onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent)); }}
@@ -837,13 +852,21 @@ const ScrollPageItem = memo(function ScrollPageItem({
           onMouseLeave={() => canDrawNow && stopDraw()}
           onTouchStart={(e) => {
             if (!canDrawNow) return;
+            if (e.touches.length !== 1) {
+              stopDraw();
+              return;
+            }
             e.preventDefault();
-            if (e.touches.length === 1) startDraw(getPos(e.touches[0]));
+            startDraw(getPos(e.touches[0]));
           }}
           onTouchMove={(e) => {
             if (!canDrawNow) return;
+            if (e.touches.length !== 1) {
+              stopDraw();
+              return;
+            }
             e.preventDefault();
-            if (e.touches.length === 1) continueDraw(getPos(e.touches[0]));
+            continueDraw(getPos(e.touches[0]));
           }}
           onTouchEnd={() => canDrawNow && stopDraw()}
         />
@@ -909,6 +932,7 @@ interface Props {
   currentVirtualIndex: number;
   onPageChange: (index: number) => void;
   zoom: number;
+  onZoomChange?: (zoom: number) => void;
   getNotesForPage: (docId: string, pageId: number | string) => VoiceNote[];
   isRecording: boolean;
   recordingContext: { documentId: string; pageNumber: number | string } | null;
@@ -940,7 +964,7 @@ interface Props {
 
 export default function PDFScrollViewer({
   document, virtualPages, currentVirtualIndex, onPageChange,
-  zoom, getNotesForPage, isRecording, recordingContext,
+  zoom, onZoomChange, getNotesForPage, isRecording, recordingContext,
   onRecordStart, onRecordStop,
   tool, penType, color, strokeSize, annotationActive,
   getDrawing, saveDrawing,
@@ -958,6 +982,10 @@ export default function PDFScrollViewer({
   const lastScrollReportedIdxRef = useRef(currentVirtualIndex);
   const mountedRef = useRef(false);
   const initialIndexRef = useRef(currentVirtualIndex);
+  const liveZoomRef = useRef(zoom);
+  const twoFingerGestureRef = useRef(createTwoFingerGestureState());
+
+  useEffect(() => { liveZoomRef.current = zoom; }, [zoom]);
 
   // Measure content width consistently — getBoundingClientRect includes padding (24px×2=48px)
   useEffect(() => {
@@ -1022,6 +1050,40 @@ export default function PDFScrollViewer({
       onPageChange(bestIdx);
     }
   }, [onPageChange]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) seedTwoFingerGesture(e, twoFingerGestureRef.current);
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      handleTwoFingerPanZoom(e, twoFingerGestureRef.current, {
+        scrollEl: el,
+        getZoom: () => liveZoomRef.current,
+        onZoomChange: (next) => {
+          liveZoomRef.current = next;
+          onZoomChange?.(next);
+        },
+        clampZoom,
+        allowPinchZoom: tool === 'cursor',
+      });
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) resetTwoFingerGesture(twoFingerGestureRef.current);
+    };
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd);
+    el.addEventListener('touchcancel', onTouchEnd);
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [onZoomChange, tool]);
 
   return (
     <div

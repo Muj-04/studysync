@@ -57,5 +57,6 @@ async function postAI(body: Record<string, unknown>): Promise<string> {
 
   // Success path — body is guaranteed JSON from /api/ai.
   const parsed = JSON.parse(raw) as { result?: string };
+  window.dispatchEvent(new Event('studysync:ai-usage'));
   return (parsed.result ?? '') as string;
 }

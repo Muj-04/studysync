@@ -76,20 +76,42 @@ export function useStudyRoom(
   useEffect(() => { onDocChangeRef.current = onIncomingDocChange; });
   useEffect(() => { myPresenceRef.current = myPresence; });
 
-  // Re-track presence when name or avatar becomes available (loads async after connect)
-  useEffect(() => {
-    if (!myPresence?.name) return;
-    const ch = channelRef.current;
-    if (!ch) return;
-    ch.track({
-      ts: Date.now(),
-      userId: myPresence.userId ?? '',
-      name: myPresence.name,
-      avatarUrl: myPresence.avatarUrl ?? '',
-      isVip: myPresence.isVip ?? false,
-    }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myPresence?.name, myPresence?.avatarUrl, myPresence?.isVip]);
+  // Presence payloads are controlled by the sender. Resolve identities from
+  // RLS-protected room membership instead of trusting websocket metadata.
+  const loadAuthorizedMembers = useCallback(async () => {
+    const client = createClient();
+    const { data: memberRows, error: memberError } = await client
+      .from('room_members')
+      .select('user_id')
+      .eq('room_id', roomId);
+    if (memberError || deadRef.current) return;
+
+    const userIds = [...new Set((memberRows ?? []).map((row) => String(row.user_id)))];
+    if (userIds.length === 0) {
+      setMembers([]);
+      setMemberCount(1);
+      return;
+    }
+
+    const { data: profiles } = await client
+      .from('profiles')
+      .select('id, username, avatar_url, is_vip')
+      .in('id', userIds);
+    if (deadRef.current) return;
+
+    const profileById = new Map((profiles ?? []).map((profile) => [String(profile.id), profile]));
+    const authorized = userIds.map((userId) => {
+      const profile = profileById.get(userId);
+      return {
+        userId,
+        name: String(profile?.username ?? 'Member'),
+        avatarUrl: profile?.avatar_url ? String(profile.avatar_url) : undefined,
+        isVip: profile?.is_vip === true,
+      };
+    });
+    setMembers(authorized);
+    setMemberCount(Math.max(1, authorized.length));
+  }, [roomId]);
 
   useEffect(() => {
     deadRef.current = false;
@@ -102,10 +124,10 @@ export function useStudyRoom(
       if (timerRef.current) clearTimeout(timerRef.current);
       const delay = BACKOFF_MS[Math.min(retryRef.current, BACKOFF_MS.length - 1)];
       retryRef.current += 1;
-      timerRef.current = setTimeout(connect, delay);
+      timerRef.current = setTimeout(() => { void connect(); }, delay);
     }
 
-    function connect() {
+    async function connect() {
       if (deadRef.current) return;
 
       const generation = ++generationRef.current;
@@ -119,65 +141,109 @@ export function useStudyRoom(
       console.log(`[StudyRoom] connecting — channel="${channelName}" gen=${generation}`);
 
       // No presence.key override — let Supabase assign a unique key per client
-      const channel = createClient().channel(channelName, {
-        config: { broadcast: { self: false } },
+      const client = createClient();
+      const { data: { session } } = await client.auth.getSession();
+      if (deadRef.current || generation !== generationRef.current) return;
+      if (!session?.access_token) {
+        console.warn('[StudyRoom] realtime authentication unavailable');
+        scheduleReconnect();
+        return;
+      }
+      await client.realtime.setAuth(session.access_token);
+      if (deadRef.current || generation !== generationRef.current) return;
+
+      const channel = client.channel(channelName, {
+        config: { private: true, broadcast: { self: false } },
       });
 
       channel
-        .on('broadcast', { event: 'drawing' }, ({ payload }: { payload: { pageNumber: number; data: string } }) => {
-          if (generation !== generationRef.current) return;
-          onDrawingRef.current(payload.pageNumber, payload.data);
-        })
-        .on('broadcast', { event: 'blank_drawing' }, ({ payload }: { payload: { pageId: string; data: string } }) => {
-          if (generation !== generationRef.current) return;
-          onBlankDrawingRef.current?.(payload.pageId, payload.data);
-        })
-        .on('broadcast', { event: 'stroke' }, ({ payload }: { payload: { pageKey: string; stroke: RoomStrokePayload } }) => {
-          if (generation !== generationRef.current) return;
-          onStrokeRef.current?.(payload.pageKey, payload.stroke);
-        })
-        .on('broadcast', { event: 'voice_note_added' }, ({ payload }: { payload: { noteId: string } }) => {
-          if (generation !== generationRef.current) return;
-          console.log('[StudyRoom] received voice_note_added event:', payload);
-          onVoiceNoteAddedRef.current?.(payload.noteId);
-        })
-        .on('broadcast', { event: 'voice_note_deleted' }, ({ payload }: { payload: { noteId: string } }) => {
-          if (generation !== generationRef.current) return;
-          onVoiceNoteDeleteRef.current?.(payload.noteId);
-        })
-        .on('broadcast', { event: 'blank_page_added' }, ({ payload }: { payload: RoomBlankPagePayload }) => {
-          if (generation !== generationRef.current) return;
-          onBlankPageRef.current?.(payload);
-        })
-        .on('broadcast', { event: 'room_closed' }, () => {
-          if (generation !== generationRef.current) return;
-          onRoomClosedRef.current?.();
-        })
-        .on('broadcast', { event: 'doc_changed' }, ({ payload }: { payload: { uploaderName: string; fileName: string } }) => {
-          if (generation !== generationRef.current) return;
-          onDocChangeRef.current?.(payload.uploaderName, payload.fileName);
-        })
         .on('presence', { event: 'sync' }, () => {
           if (generation !== generationRef.current) return;
-          type PresenceEntry = { ts: number; userId?: string; name?: string; avatarUrl?: string; isVip?: boolean };
-          const state = channel.presenceState<PresenceEntry>();
-          const entries = Object.values(state).flat();
-          // Deduplicate by userId — same user in multiple tabs counts once
-          const byUserId = new Map<string, PresenceEntry>();
-          for (const e of entries) {
-            const uid = e.userId || `anon-${Math.random()}`;
-            if (!byUserId.has(uid) || (e.ts ?? 0) > (byUserId.get(uid)!.ts ?? 0)) {
-              byUserId.set(uid, e);
-            }
-          }
-          const unique = [...byUserId.values()];
-          setMembers(
-            unique
-              .filter((e) => e.name)
-              .map((e) => ({ userId: e.userId ?? '', name: e.name!, avatarUrl: e.avatarUrl || undefined, isVip: e.isVip ?? false }))
-          );
-          setMemberCount(unique.length || 1);
+          void loadAuthorizedMembers();
         })
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'room_strokes',
+            filter: `room_id=eq.${roomId}`,
+          },
+          (payload) => {
+            if (generation !== generationRef.current) return;
+            const row = payload.new as { page_key?: string; stroke?: RoomStrokePayload } | undefined;
+            if (!row?.page_key || !row.stroke) return;
+            onStrokeRef.current?.(row.page_key, row.stroke);
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'room_voice_notes', filter: `room_id=eq.${roomId}` },
+          (payload) => {
+            if (generation !== generationRef.current) return;
+            const noteId = (payload.new as { id?: string } | undefined)?.id;
+            if (noteId) onVoiceNoteAddedRef.current?.(noteId);
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'room_voice_notes', filter: `room_id=eq.${roomId}` },
+          (payload) => {
+            if (generation !== generationRef.current) return;
+            const noteId = (payload.old as { id?: string } | undefined)?.id;
+            if (noteId) onVoiceNoteDeleteRef.current?.(noteId);
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'room_blank_pages', filter: `room_id=eq.${roomId}` },
+          (payload) => {
+            if (generation !== generationRef.current) return;
+            const row = payload.new as {
+              id?: string; insert_after_page?: number; bg_theme?: string; created_at?: number;
+            } | undefined;
+            if (!row?.id) return;
+            onBlankPageRef.current?.({
+              id: row.id,
+              insertAfterPage: Number(row.insert_after_page ?? 0),
+              bgTheme: row.bg_theme === 'dark' ? 'dark' : 'white',
+              createdAt: Number(row.created_at ?? Date.now()),
+            });
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'room_document_events', filter: `room_id=eq.${roomId}` },
+          async (payload) => {
+            if (generation !== generationRef.current) return;
+            const row = payload.new as { user_id?: string; file_name?: string } | undefined;
+            if (!row?.user_id || !row.file_name || row.user_id === myPresenceRef.current?.userId) return;
+            const { data: profile } = await client
+              .from('profiles')
+              .select('username')
+              .eq('id', row.user_id)
+              .maybeSingle();
+            if (generation !== generationRef.current) return;
+            onDocChangeRef.current?.(String(profile?.username ?? 'A room member'), row.file_name);
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'study_rooms',
+            filter: `id=eq.${roomId}`,
+          },
+          (payload) => {
+            if (generation !== generationRef.current) return;
+            const nextStatus = (payload.new as { status?: string } | undefined)?.status;
+            const prevStatus = (payload.old as { status?: string } | undefined)?.status;
+            if (nextStatus === 'closed' && prevStatus !== 'closed') {
+              onRoomClosedRef.current?.();
+            }
+          },
+        )
         // Postgres Changes DELETE on room_members — DB row existence is the
         // source of truth for "is this user still here". Presence-untrack
         // from a closing tab can fail to flush before the runtime dies
@@ -188,20 +254,14 @@ export function useStudyRoom(
         .on(
           'postgres_changes',
           {
-            event: 'DELETE',
+            event: '*',
             schema: 'public',
             table: 'room_members',
             filter: `room_id=eq.${roomId}`,
           },
-          (payload) => {
+          () => {
             if (generation !== generationRef.current) return;
-            const removedUserId = (payload.old as { user_id?: string } | undefined)?.user_id;
-            if (!removedUserId) return;
-            setMembers((prev) => {
-              const next = prev.filter((m) => m.userId !== removedUserId);
-              if (next.length !== prev.length) setMemberCount((c) => Math.max(1, c - 1));
-              return next;
-            });
+            void loadAuthorizedMembers();
           },
         )
         .subscribe(async (status) => {
@@ -211,15 +271,8 @@ export function useStudyRoom(
 
           if (status === 'SUBSCRIBED') {
             retryRef.current = 0;
-            // Track with whatever presence we have now; re-tracked via the myPresence effect
-            const p = myPresenceRef.current;
-            await channel.track({
-              ts: Date.now(),
-              userId: p?.userId ?? '',
-              name: p?.name ?? '',
-              avatarUrl: p?.avatarUrl ?? '',
-              isVip: p?.isVip ?? false,
-            });
+            await channel.track({ onlineAt: new Date().toISOString() });
+            await loadAuthorizedMembers();
             if (connectedOnceRef.current) {
               console.log('[StudyRoom] reconnected — calling onReconnect');
               onReconnectRef.current?.();
@@ -235,7 +288,7 @@ export function useStudyRoom(
       channelRef.current = channel;
     }
 
-    connect();
+    void connect();
 
     return () => {
       deadRef.current = true;
@@ -243,74 +296,60 @@ export function useStudyRoom(
       channelRef.current?.unsubscribe();
       channelRef.current = null;
     };
-  }, [roomId]);
+  }, [roomId, loadAuthorizedMembers]);
 
   const broadcastDrawing = useCallback((pageNumber: number, data: string) => {
-    const ch = channelRef.current;
-    if (!ch) { console.warn('[StudyRoom] broadcastDrawing — channel not ready'); return; }
-    ch.send({ type: 'broadcast', event: 'drawing', payload: { pageNumber, data } })
-      .catch((err) => console.error('[StudyRoom] broadcast drawing error:', err));
+    void pageNumber; void data;
+    return Promise.resolve(true);
   }, []);
 
   const broadcastBlankDrawing = useCallback((pageId: string, data: string) => {
-    const ch = channelRef.current;
-    if (!ch) return;
-    ch.send({ type: 'broadcast', event: 'blank_drawing', payload: { pageId, data } })
-      .catch((err) => console.error('[StudyRoom] broadcast blank_drawing error:', err));
+    void pageId; void data;
+    return Promise.resolve(true);
   }, []);
 
   // Stroke delta — sent on every completed stroke. Recipients dedupe by
   // stroke.id, so a stroke that arrives both via realtime and via the
   // reconnect reconciliation fetch is applied only once.
   const broadcastStroke = useCallback((pageKey: string, stroke: RoomStrokePayload) => {
-    const ch = channelRef.current;
-    const chState = (ch as unknown as { state?: string })?.state ?? 'no channel';
-    if (!ch) {
-      console.warn('[StudyRoom] broadcastStroke — channel not ready', { pageKey, strokeId: stroke.id, chState });
-      return;
-    }
-    console.log('[StudyRoom] broadcastStroke send', { pageKey, strokeId: stroke.id, chState });
-    ch.send({ type: 'broadcast', event: 'stroke', payload: { pageKey, stroke } })
-      .then(() => console.log('[StudyRoom] broadcastStroke OK', { strokeId: stroke.id }))
-      .catch((err) => console.error('[StudyRoom] broadcastStroke error', { strokeId: stroke.id, err }));
+    void pageKey; void stroke;
+    return Promise.resolve(true);
   }, []);
 
   const broadcastVoiceNoteAdded = useCallback((noteId: string) => {
-    const ch = channelRef.current;
-    const state = (ch as unknown as { state?: string })?.state ?? 'no channel';
-    console.log('[StudyRoom] broadcastVoiceNoteAdded — channel state:', state, 'noteId:', noteId);
-    if (!ch) return;
-    ch.send({ type: 'broadcast', event: 'voice_note_added', payload: { noteId } })
-      .catch((err) => console.error('[StudyRoom] broadcast voice_note_added error:', err));
+    void noteId;
+    return Promise.resolve(true);
   }, []);
 
   const broadcastVoiceNoteDelete = useCallback((noteId: string) => {
-    const ch = channelRef.current;
-    if (!ch) return;
-    ch.send({ type: 'broadcast', event: 'voice_note_deleted', payload: { noteId } })
-      .catch((err) => console.error('[StudyRoom] broadcast voice_note_deleted error:', err));
+    void noteId;
+    return Promise.resolve(true);
   }, []);
 
   const broadcastBlankPageAdded = useCallback((page: RoomBlankPagePayload) => {
-    const ch = channelRef.current;
-    if (!ch) return;
-    ch.send({ type: 'broadcast', event: 'blank_page_added', payload: page })
-      .catch((err) => console.error('[StudyRoom] broadcast blank_page_added error:', err));
+    void page;
+    return Promise.resolve(true);
   }, []);
 
   const broadcastRoomClosed = useCallback(() => {
-    const ch = channelRef.current;
-    if (!ch) return;
-    ch.send({ type: 'broadcast', event: 'room_closed', payload: {} })
-      .catch(() => {});
+    return Promise.resolve(true);
   }, []);
 
   const broadcastDocChanged = useCallback((uploaderName: string, fileName: string) => {
-    const ch = channelRef.current;
-    if (!ch) return;
-    ch.send({ type: 'broadcast', event: 'doc_changed', payload: { uploaderName, fileName } })
-      .catch((err) => console.error('[StudyRoom] broadcast doc_changed error:', err));
-  }, []);
+    void uploaderName;
+    return (async () => {
+      const client = createClient();
+      const { data: { user } } = await client.auth.getUser();
+      if (!user || !fileName.trim()) return false;
+      const { error } = await client.from('room_document_events').insert({
+        room_id: roomId,
+        user_id: user.id,
+        file_name: fileName.trim().slice(0, 255),
+      });
+      if (error) console.error('[StudyRoom] document event error:', error.message);
+      return !error;
+    })();
+  }, [roomId]);
 
   // Synchronous, fire-and-forget channel teardown for tab-close paths.
   // Untrack first so other members' presence-sync sees us leave promptly

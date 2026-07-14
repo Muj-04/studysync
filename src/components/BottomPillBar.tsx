@@ -3,7 +3,7 @@ import { useRef, useState, useEffect } from 'react';
 import {
   MousePointer, StickyNote, Pencil, Highlighter, Type, ImagePlus, Bookmark,
   Mic, Trash2, Users, Eraser, X, FilePlus,
-  Maximize2, Minimize2, ChevronDown,
+  Maximize2, Minimize2, ChevronDown, Undo2, Redo2,
 } from 'lucide-react';
 import type { Tool, PenType } from '@/lib/drawing';
 import { PRESET_COLORS } from '@/lib/drawing';
@@ -21,7 +21,7 @@ import type { PDFPageImage } from '@/types';
  *   ──
  *   Clear · Study Room · Fullscreen
  *
- * Cursor and Undo are keyboard-only (Esc / Ctrl+Z).
+ * Cursor is keyboard-only (Esc). Undo is available here and via Ctrl+Z.
  */
 
 const AMBER = '#f59e0b';
@@ -64,7 +64,9 @@ interface Props {
   onVoiceNote?: () => void;
   isRecording?: boolean;
 
-  // Clear + Study Room
+  // Undo + Clear + Study Room
+  onUndo?: () => void;
+  onRedo?: () => void;
   onClearAllDrawings?: () => void;
   onCreateRoom?:       () => void;
 
@@ -156,6 +158,71 @@ function PillButton({
   );
 }
 
+function SplitPillButton({
+  label, icon, active, optionsOpen, indicatorColor, onActivate, onToggleOptions,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active?: boolean;
+  optionsOpen?: boolean;
+  indicatorColor?: string;
+  onActivate: () => void;
+  onToggleOptions: () => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      style={{
+        height: 34, display: 'flex', alignItems: 'stretch', flexShrink: 0,
+        borderRadius: 9999, overflow: 'hidden',
+        border: `1px solid ${active ? 'var(--accent)' : 'transparent'}`,
+        background: active ? 'var(--accent-muted)' : 'transparent',
+        color: active ? 'var(--accent)' : 'var(--text-2)',
+        transition: 'background 0.13s, color 0.13s, border-color 0.13s',
+      }}
+    >
+      <button
+        type="button"
+        title={label}
+        aria-label={label}
+        aria-pressed={active}
+        onClick={onActivate}
+        style={{
+          position: 'relative', width: 36, padding: 0, border: 'none',
+          background: 'transparent', color: 'inherit', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {icon}
+        {indicatorColor && (
+          <span aria-hidden style={{
+            position: 'absolute', left: '50%', bottom: 3, transform: 'translateX(-50%)',
+            width: 8, height: 2, borderRadius: 999, background: indicatorColor,
+            boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
+          }} />
+        )}
+      </button>
+      <button
+        type="button"
+        title={`${label} options`}
+        aria-label={`${label} options`}
+        aria-expanded={optionsOpen}
+        onClick={onToggleOptions}
+        style={{
+          width: 22, padding: 0, border: 'none', borderLeft: '1px solid var(--border-subtle)',
+          background: optionsOpen ? 'var(--bg-hover)' : 'transparent', color: 'inherit',
+          cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <ChevronDown size={10} strokeWidth={2.5} style={{
+          transform: optionsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s',
+        }} />
+      </button>
+    </div>
+  );
+}
+
 // ── Section + small helpers ───────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -174,11 +241,47 @@ function Hr() {
   return <div style={{ height: 1, background: 'var(--border-subtle)', margin: '8px 0' }} />;
 }
 
-function ColorRow({
-  color, setColor,
-}: { color: string; setColor: (c: string) => void }) {
+function Popover({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+    <div
+      data-tool-popover
+      style={{
+        position: 'absolute', left: 0,
+        bottom: '100%', marginBottom: 8,
+        minWidth: 220,
+        background: 'var(--bg-float)',
+        backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+        border: '1px solid var(--bg-float-border)',
+        boxShadow: 'var(--shadow-float)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        zIndex: 60,
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onTouchStart={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ColorRow({
+  color, setColor, onCustomPickerActiveChange,
+}: {
+  color: string;
+  setColor: (c: string) => void;
+  onCustomPickerActiveChange?: (active: boolean) => void;
+}) {
+  return (
+    <div
+      style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
+      onTouchStart={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
       {PRESET_COLORS.map((c) => (
         <button
           key={c}
@@ -197,7 +300,20 @@ function ColorRow({
       <input
         type="color"
         value={color}
-        onChange={(e) => setColor(e.target.value)}
+        onChange={(e) => {
+          setColor(e.target.value);
+          window.setTimeout(() => onCustomPickerActiveChange?.(false), 180);
+        }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onCustomPickerActiveChange?.(true);
+        }}
+        onMouseDown={(event) => event.stopPropagation()}
+        onTouchStart={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') onCustomPickerActiveChange?.(false);
+        }}
         title="Custom color"
         style={{
           width: 20, height: 20,
@@ -263,13 +379,14 @@ export default function BottomPillBar({
   onInsertBlankPage,
   onToggleBookmark, isBookmarked = false,
   onVoiceNote, isRecording = false,
-  onClearAllDrawings, onCreateRoom,
+  onUndo, onRedo, onClearAllDrawings, onCreateRoom,
   splitMode, activeSide, onSwitchSide,
   isFullscreen, onToggleFullscreen,
 }: Props) {
   const [drawOpen,      setDrawOpen]      = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
   const [imageMenuOpen, setImageMenuOpen] = useState(false);
+  const [customColorPickerActive, setCustomColorPickerActive] = useState(false);
 
   const blankFileRef = useRef<HTMLInputElement>(null);
   const pdfFileRef   = useRef<HTMLInputElement>(null);
@@ -281,20 +398,19 @@ export default function BottomPillBar({
   // Close popovers on outside-click / Escape
   useEffect(() => {
     if (!drawOpen && !highlightOpen && !imageMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       const target = e.target as HTMLElement | null;
-      // Click anywhere inside the pill-bar root (pills or popovers) — let
-      // the pills' own click handlers manage open/close.
-      if (target?.closest?.('[data-pill-root]')) return;
+      if (target?.closest?.('[data-tool-popover]')) return;
+      if (target?.closest?.('[data-draw-trigger], [data-highlight-trigger], [data-image-trigger]')) return;
       setDrawOpen(false); setHighlightOpen(false); setImageMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setDrawOpen(false); setHighlightOpen(false); setImageMenuOpen(false); }
     };
-    window.addEventListener('mousedown', onDown);
+    window.addEventListener('pointerdown', onDown, true);
     window.addEventListener('keydown', onKey);
     return () => {
-      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('keydown', onKey);
     };
   }, [drawOpen, highlightOpen, imageMenuOpen]);
@@ -322,30 +438,28 @@ export default function BottomPillBar({
   // Pop content: Draw + Highlight share the color/stroke section.
   // Each popover is anchored to its own position:relative parent wrapper,
   // so left:0 places it directly above its pill — no ref reads needed.
-  const Popover = ({
-    children,
-  }: { children: React.ReactNode }) => (
-    <div
-      style={{
-        position: 'absolute', left: 0,
-        bottom: '100%', marginBottom: 8,
-        minWidth: 220,
-        background: 'var(--bg-float)',
-        backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-        border: '1px solid var(--bg-float-border)',
-        boxShadow: 'var(--shadow-float)',
-        borderRadius: 10,
-        padding: '10px 12px',
-        zIndex: 60,
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {children}
-    </div>
-  );
-
   return (
     <>
+      {customColorPickerActive && (
+        <div
+          aria-hidden
+          style={{ position: 'fixed', inset: 0, zIndex: 29, cursor: 'default' }}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setCustomColorPickerActive(false);
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onTouchStart={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setCustomColorPickerActive(false);
+          }}
+        />
+      )}
       <div
         data-pill-root
         role="toolbar"
@@ -370,7 +484,7 @@ export default function BottomPillBar({
           label="Select / cursor (Esc)"
           icon={<MousePointer size={15} strokeWidth={1.8} />}
           active={tool === 'cursor'}
-          onClick={() => setTool('cursor')}
+          onClick={() => { setTool('cursor'); setDrawOpen(false); setHighlightOpen(false); }}
         />
 
         {/* Note */}
@@ -381,16 +495,22 @@ export default function BottomPillBar({
         />
 
         {/* Draw */}
-        <div style={{ position: 'relative' }}>
-          <PillButton
+        <div data-draw-trigger style={{ position: 'relative' }}>
+          <SplitPillButton
             label="Draw"
             icon={<Pencil size={15} strokeWidth={1.8} />}
             active={drawActive}
-            dropdown
-            onClick={() => {
+            optionsOpen={drawOpen}
+            indicatorColor={color}
+            onActivate={() => {
+              setHighlightOpen(false); setImageMenuOpen(false);
+              if (drawActive) setDrawOpen((open) => !open);
+              else { setTool('pen'); setPenType('normal'); setDrawOpen(false); }
+            }}
+            onToggleOptions={() => {
               if (!drawActive) { setTool('pen'); setPenType('normal'); }
               setHighlightOpen(false); setImageMenuOpen(false);
-              setDrawOpen((o) => !o);
+              setDrawOpen((open) => !open);
             }}
           />
           {drawOpen && (
@@ -422,19 +542,19 @@ export default function BottomPillBar({
               <SectionLabel>Tool</SectionLabel>
               <SubToolRow
                 active={tool === 'pen' && penType === 'normal'}
-                onClick={() => { setTool('pen'); setPenType('normal'); }}
+                onClick={() => { setTool('pen'); setPenType('normal'); setDrawOpen(false); }}
                 icon={<div style={{ width: 14, height: 2.5, borderRadius: 9999, background: 'currentColor' }} />}
                 label="Pen"
               />
               <SubToolRow
                 active={tool === 'pen' && penType === 'marker'}
-                onClick={() => { setTool('pen'); setPenType('marker'); }}
+                onClick={() => { setTool('pen'); setPenType('marker'); setDrawOpen(false); }}
                 icon={<div style={{ width: 14, height: 5, borderRadius: 2, background: 'currentColor', opacity: 0.65 }} />}
                 label="Marker"
               />
               <SubToolRow
                 active={tool === 'line'}
-                onClick={() => setTool('line')}
+                onClick={() => { setTool('line'); setPenType('normal'); setDrawOpen(false); }}
                 icon={
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -445,14 +565,22 @@ export default function BottomPillBar({
               />
               <SubToolRow
                 active={tool === 'eraser'}
-                onClick={() => setTool('eraser')}
+                onClick={() => { setTool('eraser'); setDrawOpen(false); }}
                 icon={<Eraser size={13} />}
                 label="Eraser"
               />
 
               <Hr />
               <SectionLabel>Color</SectionLabel>
-              <ColorRow color={color} setColor={(c) => { setColor(c); if (tool === 'eraser') setTool('pen'); }} />
+              <ColorRow
+                color={color}
+                setColor={(c) => {
+                  setColor(c);
+                  if (tool === 'eraser') { setTool('pen'); setPenType('normal'); }
+                  setDrawOpen(false);
+                }}
+                onCustomPickerActiveChange={setCustomColorPickerActive}
+              />
 
               <Hr />
               <SectionLabel>Size</SectionLabel>
@@ -462,22 +590,32 @@ export default function BottomPillBar({
         </div>
 
         {/* Highlight */}
-        <div style={{ position: 'relative' }}>
-          <PillButton
+        <div data-highlight-trigger style={{ position: 'relative' }}>
+          <SplitPillButton
             label="Highlight"
             icon={<Highlighter size={15} strokeWidth={1.8} />}
             active={highlightActive}
-            dropdown
-            onClick={() => {
+            optionsOpen={highlightOpen}
+            indicatorColor={color}
+            onActivate={() => {
+              setDrawOpen(false); setImageMenuOpen(false);
+              if (highlightActive) setHighlightOpen((open) => !open);
+              else { setTool('pen'); setPenType('highlighter'); setHighlightOpen(false); }
+            }}
+            onToggleOptions={() => {
               if (!highlightActive) { setTool('pen'); setPenType('highlighter'); }
               setDrawOpen(false); setImageMenuOpen(false);
-              setHighlightOpen((o) => !o);
+              setHighlightOpen((open) => !open);
             }}
           />
           {highlightOpen && (
             <Popover>
               <SectionLabel>Highlighter color</SectionLabel>
-              <ColorRow color={color} setColor={setColor} />
+              <ColorRow
+                color={color}
+                setColor={(c) => { setColor(c); setHighlightOpen(false); }}
+                onCustomPickerActiveChange={setCustomColorPickerActive}
+              />
               <Hr />
               <SectionLabel>Size</SectionLabel>
               <DragScrubber value={strokeSize} onChange={setStrokeSize} />
@@ -494,7 +632,7 @@ export default function BottomPillBar({
         />
 
         {/* Image */}
-        <div style={{ position: 'relative' }}>
+        <div data-image-trigger style={{ position: 'relative' }}>
           <PillButton
             label="Add to document"
             icon={<ImagePlus size={15} strokeWidth={1.8} />}
@@ -644,6 +782,20 @@ export default function BottomPillBar({
 
         {/* Divider */}
         <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
+
+        {/* Undo */}
+        <PillButton
+          label="Undo last stroke"
+          icon={<Undo2 size={15} strokeWidth={1.8} />}
+          disabled={!onUndo}
+          onClick={onUndo}
+        />
+        <PillButton
+          label="Redo last stroke"
+          icon={<Redo2 size={15} strokeWidth={1.8} />}
+          disabled={!onRedo}
+          onClick={onRedo}
+        />
 
         {/* Clear */}
         {onClearAllDrawings && !isBlankPage && !isPPTX && (
