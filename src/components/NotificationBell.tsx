@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Bell, Check, X, Users, BookOpen, MessageSquare } from 'lucide-react';
+import { Bell, Check, X, Users, BookOpen, MessageSquare, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useNotifications } from '@/hooks/useNotifications';
 import { respondFriendRequest } from '@/lib/supabase/db';
@@ -37,10 +37,17 @@ function Avatar({ name, url, size = 32 }: { name?: string | null; url?: string |
 export default function NotificationBell() {
   const { t, lang } = useLanguage();
   const router = useRouter();
-  const { notifications, unreadCount, markRead, markAllRead, deleteNotif } = useNotifications();
+  const { notifications, unreadCount, markRead, markAllRead, deleteNotif, deleteAll } = useNotifications();
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState<'all' | 'unread'>('all');
   const wrapRef = useRef<HTMLDivElement>(null);
   const [actionPending, setActionPending] = useState<string | null>(null);
+  const [deletePending, setDeletePending] = useState<string | null>(null);
+  const [deleteAllPending, setDeleteAllPending] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const visibleNotifications = view === 'all'
+    ? notifications
+    : notifications.filter((notification) => !notification.read);
 
   useEffect(() => {
     if (!open) return;
@@ -89,6 +96,31 @@ export default function NotificationBell() {
   const handleDeclineInvite = useCallback(async (notifId: string) => {
     await markRead(notifId);
   }, [markRead]);
+
+  const handleDelete = useCallback(async (notifId: string) => {
+    setDeletePending(notifId);
+    setDeleteError('');
+    try {
+      await deleteNotif(notifId);
+    } catch {
+      setDeleteError('Could not delete this notification. Please try again.');
+    } finally {
+      setDeletePending(null);
+    }
+  }, [deleteNotif]);
+
+  const handleDeleteAll = useCallback(async () => {
+    if (!window.confirm(t('notif_delete_all_confirm'))) return;
+    setDeleteAllPending(true);
+    setDeleteError('');
+    try {
+      await deleteAll();
+    } catch {
+      setDeleteError('Could not delete notifications. Please try again.');
+    } finally {
+      setDeleteAllPending(false);
+    }
+  }, [deleteAll, t]);
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -146,30 +178,78 @@ export default function NotificationBell() {
             flexShrink: 0,
           }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{t('notif_title')}</span>
-            {unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                style={{
-                  fontSize: 11.5, color: 'var(--accent)', background: 'none', border: 'none',
-                  cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px', borderRadius: 4,
-                  transition: 'background 0.12s',
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-muted)'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = 'none'; }}
-              >
-                {t('notif_mark_read')}
-              </button>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllRead}
+                  style={{
+                    fontSize: 11.5, color: 'var(--accent)', background: 'none', border: 'none',
+                    cursor: 'pointer', fontFamily: 'inherit', padding: '2px 6px', borderRadius: 4,
+                    transition: 'background 0.12s',
+                  }}
+                >
+                  {t('notif_mark_read')}
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleDeleteAll}
+                  disabled={deleteAllPending}
+                  style={{
+                    fontSize: 11.5, color: 'var(--red)', background: 'none', border: 'none',
+                    cursor: deleteAllPending ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                    padding: '2px 6px', borderRadius: 4, opacity: deleteAllPending ? 0.5 : 1,
+                  }}
+                >
+                  {t('notif_delete_all')}
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Read status is a filter, not a deletion rule. */}
+          <div style={{
+            display: 'flex', gap: 4, padding: '7px 12px',
+            borderBottom: '1px solid var(--border-subtle)', flexShrink: 0,
+          }}>
+            {(['all', 'unread'] as const).map((tab) => {
+              const active = view === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setView(tab)}
+                  style={{
+                    height: 27, padding: '0 11px', borderRadius: 5,
+                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: 11.5, fontWeight: active ? 650 : 500,
+                    color: active ? 'var(--accent)' : 'var(--text-3)',
+                    background: active ? 'var(--accent-muted)' : 'transparent',
+                  }}
+                >
+                  {tab === 'all' ? t('notif_all') : `${t('notif_unread')}${unreadCount ? ` (${unreadCount})` : ''}`}
+                </button>
+              );
+            })}
+          </div>
+
+          {deleteError && (
+            <div role="alert" style={{
+              padding: '8px 12px', background: 'rgba(239,68,68,0.1)',
+              borderBottom: '1px solid rgba(239,68,68,0.25)',
+              color: 'var(--red)', fontSize: 11.5, lineHeight: 1.4,
+            }}>
+              {deleteError}
+            </div>
+          )}
 
           {/* List */}
           <div style={{ overflowY: 'auto', flex: 1 }}>
-            {notifications.length === 0 ? (
+            {visibleNotifications.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 13 }}>
-                {t('notif_empty')}
+                {view === 'unread' ? t('notif_no_unread') : t('notif_empty')}
               </div>
             ) : (
-              notifications.map((n) => {
+              visibleNotifications.map((n) => {
                 const isPending = actionPending === n.id;
                 const d = n.data;
                 const senderName = (d.requester_name ?? d.accepter_name ?? d.inviter_name ?? d.sender_name ?? 'Someone') as string;
@@ -182,7 +262,7 @@ export default function NotificationBell() {
                       padding: '10px 14px',
                       borderBottom: '1px solid var(--border-subtle)',
                       background: n.read ? 'transparent' : 'var(--accent-muted)',
-                      opacity: isPending ? 0.6 : 1,
+                      opacity: isPending ? 0.6 : n.read ? 0.76 : 1,
                       transition: 'background 0.15s',
                     }}
                   >
@@ -299,27 +379,25 @@ export default function NotificationBell() {
                             </button>
                           </div>
                         )}
-                        {n.type === 'friend_accepted' && (
-                          <button
-                            onClick={() => deleteNotif(n.id)}
-                            style={{
-                              height: 22, padding: '0 8px', borderRadius: 4,
-                              background: 'none', color: 'var(--text-3)', border: 'none',
-                              fontSize: 11, cursor: 'pointer', fontFamily: 'inherit',
-                            }}
-                          >
-                            {t('notif_dismiss')}
-                          </button>
-                        )}
                       </div>
 
-                      {/* Unread dot */}
-                      {!n.read && (
-                        <div style={{
-                          width: 7, height: 7, borderRadius: '50%',
-                          background: 'var(--accent)', flexShrink: 0, marginTop: 6,
-                        }} />
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+                        {!n.read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)' }} />}
+                        <button
+                          onClick={() => handleDelete(n.id)}
+                          disabled={deletePending === n.id}
+                          title={t('notif_delete')}
+                          aria-label={t('notif_delete')}
+                          style={{
+                            width: 24, height: 24, borderRadius: 4, border: 'none',
+                            display: 'grid', placeItems: 'center', cursor: 'pointer',
+                            background: 'transparent', color: 'var(--text-3)',
+                            opacity: deletePending === n.id ? 0.45 : 1,
+                          }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

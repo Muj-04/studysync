@@ -114,7 +114,8 @@ export default function ChatTabContent({ myUserId }: Props) {
 
   useEffect(() => {
     if (!myUserId) return;
-    loadList();
+    const timeoutId = window.setTimeout(() => { void loadList(); }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [myUserId, loadList]);
 
   // Realtime: any new direct_message TO me bumps the list — re-fetch to
@@ -143,17 +144,18 @@ export default function ChatTabContent({ myUserId }: Props) {
   if (selectedFriendId && myUserId) {
     const sel = entries.find((e) => e.friend.userId === selectedFriendId);
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, background: 'var(--bg-app)' }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)',
+          minHeight: 58, padding: '8px 14px', borderBottom: '1px solid var(--border-subtle)',
+          background: 'var(--bg-panel)',
           flexShrink: 0,
         }}>
           <button
             onClick={() => { setSelectedFriendId(null); void loadList(); }}
             aria-label="Back to conversations"
             style={{
-              width: 28, height: 28, borderRadius: 6,
+              width: 30, height: 30, borderRadius: 8,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: 'transparent', border: 'none', cursor: 'pointer',
               color: 'var(--text-2)',
@@ -162,18 +164,24 @@ export default function ChatTabContent({ myUserId }: Props) {
             onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
             onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'transparent',     color: 'var(--text-2)' })}
           >
-            <ChevronLeft size={16} />
+            <ChevronLeft size={19} />
           </button>
-          <Avatar name={sel?.friend.username ?? null} url={sel?.friend.avatarUrl ?? null} size={32} />
-          <p style={{
-            margin: 0, fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
-          }}>
-            {sel?.friend.username ?? 'Friend'}
-          </p>
+          <Avatar name={sel?.friend.username ?? null} url={sel?.friend.avatarUrl ?? null} size={36} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{
+              margin: 0, fontSize: 13.5, fontWeight: 650, color: 'var(--text-1)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {sel?.friend.username ?? 'Friend'}
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: 10.5, color: 'var(--text-3)' }}>
+              Direct message
+            </p>
+          </div>
         </div>
 
         <ChatConversationView
+          key={selectedFriendId}
           friendId={selectedFriendId}
           myUserId={myUserId}
           onConversationRead={() => { void loadList(); }}
@@ -184,13 +192,13 @@ export default function ChatTabContent({ myUserId }: Props) {
 
   // ── List view ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, background: 'var(--bg-app)' }}>
       {/* Header row */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 14px 8px', flexShrink: 0,
+        padding: '16px 18px 12px', flexShrink: 0,
       }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>
+        <p style={{ fontSize: 14, fontWeight: 650, color: 'var(--text-1)', margin: 0 }}>
           Messages
         </p>
         <a
@@ -198,20 +206,20 @@ export default function ChatTabContent({ myUserId }: Props) {
           aria-label="New conversation"
           title="Pick a friend to message"
           style={{
-            width: 28, height: 28, borderRadius: 6,
+            width: 28, height: 28, borderRadius: 8,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'transparent', color: 'var(--text-2)', textDecoration: 'none',
+            background: 'var(--accent-muted)', color: 'var(--accent)', textDecoration: 'none',
             transition: 'background 0.12s, color 0.12s',
           }}
           onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-          onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'transparent',     color: 'var(--text-2)' })}
+          onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'var(--accent-muted)', color: 'var(--accent)' })}
         >
           <Plus size={16} />
         </a>
       </div>
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 14px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px 16px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-3)', fontSize: 13 }}>
             Loading…
@@ -232,26 +240,27 @@ export default function ChatTabContent({ myUserId }: Props) {
               key={e.friend.userId}
               onClick={() => setSelectedFriendId(e.friend.userId)}
               style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                padding: '10px 10px', borderRadius: 10, marginBottom: 4,
-                background: 'transparent', border: '1px solid transparent', cursor: 'pointer',
+                width: '100%', display: 'flex', alignItems: 'center', gap: 11,
+                minHeight: 66, padding: '10px 12px', borderRadius: 14, marginBottom: 8,
+                background: 'var(--bg-panel)', border: '1px solid var(--border)', cursor: 'pointer',
                 fontFamily: 'inherit', textAlign: 'left',
-                transition: 'background 0.12s, border-color 0.12s',
+                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.025)',
+                transition: 'background 0.12s, border-color 0.12s, transform 0.12s',
               }}
               onMouseOver={(ev) => Object.assign(ev.currentTarget.style, {
-                background: 'var(--bg-panel)', borderColor: 'var(--border-subtle)',
+                background: 'var(--bg-hover)', borderColor: 'var(--border-strong)', transform: 'translateY(-1px)',
               })}
               onMouseOut={(ev) => Object.assign(ev.currentTarget.style, {
-                background: 'transparent', borderColor: 'transparent',
+                background: 'var(--bg-panel)', borderColor: 'var(--border)', transform: 'translateY(0)',
               })}
             >
-              <Avatar name={e.friend.username} url={e.friend.avatarUrl} size={40} />
+              <Avatar name={e.friend.username} url={e.friend.avatarUrl} size={38} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
                 }}>
                   <p style={{
-                    margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
+                    margin: 0, fontSize: 13, fontWeight: 650, color: 'var(--text-1)',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>
                     {e.friend.username ?? 'Friend'}
@@ -266,15 +275,15 @@ export default function ChatTabContent({ myUserId }: Props) {
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 2,
                 }}>
                   <p style={{
-                    margin: 0, fontSize: 12, color: e.unread > 0 ? 'var(--text-1)' : 'var(--text-3)',
-                    fontWeight: e.unread > 0 ? 500 : 400,
+                    margin: 0, fontSize: 12, color: e.unread > 0 ? 'var(--text-1)' : 'var(--text-2)',
+                    fontWeight: e.unread > 0 ? 550 : 400,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
                   }}>
                     {e.lastText ?? 'No messages yet'}
                   </p>
                   {e.unread > 0 && (
                     <span style={{
-                      flexShrink: 0, minWidth: 18, height: 18, borderRadius: 9,
+                      flexShrink: 0, minWidth: 20, height: 20, borderRadius: 10,
                       background: 'var(--red)', color: '#fff',
                       fontSize: 10.5, fontWeight: 700,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',

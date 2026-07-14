@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import type { RefObject } from 'react';
 import type { BlankPage, PDFDocument } from '@/types';
 import type { DrawingCanvasHandle } from '@/components/BlankPageCanvas';
+import { MAX_UNDO_HISTORY } from '@/lib/drawing';
 
 // Same minimal structural shape used by useBlankPageDrawing — declared
 // locally so this hook doesn't have to reach into workspace's VirtualPage
@@ -27,6 +28,7 @@ interface Args {
 
   // Blank-page drawing state (sourced from useBlankPageDrawing in step 1)
   blankUndoStacksRef:        RefObject<Record<string, Array<string | undefined>>>;
+  blankRedoStacksRef:        RefObject<Record<string, Array<string | undefined>>>;
   resolveScrollBlankPageId:  () => string | null;
 
   // Blank-page persistence + lookup (sourced from useBlankPages)
@@ -37,6 +39,7 @@ interface Args {
   // pattern). Keys are `${docId}:${pdfPage}`. Used only in scroll mode —
   // single-page-mode PDF undo/clear continue to go through pdfDrawingRef.
   pdfUndoStacksRef:           RefObject<Record<string, Array<string | undefined>>>;
+  pdfRedoStacksRef:           RefObject<Record<string, Array<string | undefined>>>;
   lastInteractedPdfPageRef:   RefObject<{ docId: string; pdfPage: number } | null>;
   activeDocument:             PDFDocument | null;
   getPdfDrawing:              (docId: string, page: number) => string | undefined;
@@ -59,10 +62,12 @@ export function useUndoClear({
   blankDrawingRef,
   rightDocDrawingRef,
   blankUndoStacksRef,
+  blankRedoStacksRef,
   resolveScrollBlankPageId,
   updateCanvasData,
   docBlankPages,
   pdfUndoStacksRef,
+  pdfRedoStacksRef,
   lastInteractedPdfPageRef,
   activeDocument,
   getPdfDrawing,
@@ -72,12 +77,12 @@ export function useUndoClear({
   // resolveScrollBlankPageId's "current or last-touched" semantics so
   // pressing Undo right after a stroke still finds its target even if the
   // user scrolled away mid-stroke.
-  const resolveScrollPdfTarget = (): { docId: string; pdfPage: number } | null => {
+  const resolveScrollPdfTarget = useCallback((): { docId: string; pdfPage: number } | null => {
     if (currentVP?.type === 'pdf' && activeDocument) {
       return { docId: activeDocument.id, pdfPage: currentVP.pdfPage };
     }
     return lastInteractedPdfPageRef.current;
-  };
+  }, [currentVP, activeDocument, lastInteractedPdfPageRef]);
   // ── Undo handler — targets the correct canvas per context ────────────────
   const handleUndo = useCallback(() => {
     if (showSplit) {
@@ -103,6 +108,11 @@ export function useUndoClear({
         const key = `${activeDocument.id}:${currentVP.pdfPage}`;
         const pdfStack = pdfUndoStacksRef.current[key];
         if (pdfStack && pdfStack.length > 0) {
+          const current = getPdfDrawing(activeDocument.id, currentVP.pdfPage);
+          const redoStack = pdfRedoStacksRef.current[key] ?? [];
+          redoStack.push(current);
+          if (redoStack.length > MAX_UNDO_HISTORY) redoStack.shift();
+          pdfRedoStacksRef.current[key] = redoStack;
           const prev = pdfStack.pop();
           savePdfDrawing(activeDocument.id, currentVP.pdfPage, prev ?? '');
           return;
@@ -112,6 +122,11 @@ export function useUndoClear({
       if (blankId) {
         const stack = blankUndoStacksRef.current[blankId];
         if (stack && stack.length > 0) {
+          const current = docBlankPages.find((p) => p.id === blankId)?.canvasData;
+          const redoStack = blankRedoStacksRef.current[blankId] ?? [];
+          redoStack.push(current);
+          if (redoStack.length > MAX_UNDO_HISTORY) redoStack.shift();
+          blankRedoStacksRef.current[blankId] = redoStack;
           const prev = stack.pop();
           updateCanvasData(blankId, prev ?? '');
           return;
@@ -122,6 +137,11 @@ export function useUndoClear({
         const key = `${pdfTarget.docId}:${pdfTarget.pdfPage}`;
         const pdfStack = pdfUndoStacksRef.current[key];
         if (pdfStack && pdfStack.length > 0) {
+          const current = getPdfDrawing(pdfTarget.docId, pdfTarget.pdfPage);
+          const redoStack = pdfRedoStacksRef.current[key] ?? [];
+          redoStack.push(current);
+          if (redoStack.length > MAX_UNDO_HISTORY) redoStack.shift();
+          pdfRedoStacksRef.current[key] = redoStack;
           const prev = pdfStack.pop();
           savePdfDrawing(pdfTarget.docId, pdfTarget.pdfPage, prev ?? '');
           return;
@@ -135,7 +155,72 @@ export function useUndoClear({
     } else {
       pdfDrawingRef.current?.undo?.();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, resolveScrollBlankPageId, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef, pdfUndoStacksRef, lastInteractedPdfPageRef, activeDocument, savePdfDrawing]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, resolveScrollBlankPageId, resolveScrollPdfTarget, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef, blankRedoStacksRef, pdfUndoStacksRef, pdfRedoStacksRef, activeDocument, savePdfDrawing, getPdfDrawing, docBlankPages]);
+
+  const handleRedo = useCallback(() => {
+    if (showSplit) {
+      if (activeSide === 'left') {
+        pdfDrawingRef.current?.redo?.();
+      } else if (rightSideMode === 'blank') {
+        blankDrawingRef.current?.redo?.();
+      } else {
+        rightDocDrawingRef.current?.redo?.();
+      }
+      return;
+    }
+    if (viewMode === 'scroll') {
+      if (currentVP?.type === 'pdf' && activeDocument) {
+        const key = `${activeDocument.id}:${currentVP.pdfPage}`;
+        const redoStack = pdfRedoStacksRef.current[key];
+        if (redoStack && redoStack.length > 0) {
+          const current = getPdfDrawing(activeDocument.id, currentVP.pdfPage);
+          const undoStack = pdfUndoStacksRef.current[key] ?? [];
+          undoStack.push(current);
+          if (undoStack.length > MAX_UNDO_HISTORY) undoStack.shift();
+          pdfUndoStacksRef.current[key] = undoStack;
+          const next = redoStack.pop();
+          savePdfDrawing(activeDocument.id, currentVP.pdfPage, next ?? '');
+          return;
+        }
+      }
+      const blankId = resolveScrollBlankPageId();
+      if (blankId) {
+        const redoStack = blankRedoStacksRef.current[blankId];
+        if (redoStack && redoStack.length > 0) {
+          const current = docBlankPages.find((p) => p.id === blankId)?.canvasData;
+          const undoStack = blankUndoStacksRef.current[blankId] ?? [];
+          undoStack.push(current);
+          if (undoStack.length > MAX_UNDO_HISTORY) undoStack.shift();
+          blankUndoStacksRef.current[blankId] = undoStack;
+          const next = redoStack.pop();
+          updateCanvasData(blankId, next ?? '');
+          return;
+        }
+      }
+      const pdfTarget = resolveScrollPdfTarget();
+      if (pdfTarget) {
+        const key = `${pdfTarget.docId}:${pdfTarget.pdfPage}`;
+        const redoStack = pdfRedoStacksRef.current[key];
+        if (redoStack && redoStack.length > 0) {
+          const current = getPdfDrawing(pdfTarget.docId, pdfTarget.pdfPage);
+          const undoStack = pdfUndoStacksRef.current[key] ?? [];
+          undoStack.push(current);
+          if (undoStack.length > MAX_UNDO_HISTORY) undoStack.shift();
+          pdfUndoStacksRef.current[key] = undoStack;
+          const next = redoStack.pop();
+          savePdfDrawing(pdfTarget.docId, pdfTarget.pdfPage, next ?? '');
+          return;
+        }
+      }
+      pdfDrawingRef.current?.redo?.();
+      return;
+    }
+    if (currentVP?.type === 'blank') {
+      blankDrawingRef.current?.redo?.();
+    } else {
+      pdfDrawingRef.current?.redo?.();
+    }
+  }, [showSplit, activeSide, rightSideMode, viewMode, currentVP, activeDocument, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, pdfRedoStacksRef, getPdfDrawing, pdfUndoStacksRef, resolveScrollBlankPageId, resolveScrollPdfTarget, blankRedoStacksRef, docBlankPages, blankUndoStacksRef, updateCanvasData, savePdfDrawing]);
 
   // ── Clear handler — targets the correct canvas per context ────────────────
   const handleClear = useCallback(() => {
@@ -158,9 +243,10 @@ export function useUndoClear({
         if (prev) {
           const pdfStack = pdfUndoStacksRef.current[key] ?? [];
           pdfStack.push(prev);
-          if (pdfStack.length > 50) pdfStack.shift();
+          if (pdfStack.length > MAX_UNDO_HISTORY) pdfStack.shift();
           pdfUndoStacksRef.current[key] = pdfStack;
         }
+        pdfRedoStacksRef.current[key] = [];
         savePdfDrawing(activeDocument.id, currentVP.pdfPage, '');
         return;
       }
@@ -172,9 +258,10 @@ export function useUndoClear({
         if (prev) {
           const stack = blankUndoStacksRef.current[blankId] ?? [];
           stack.push(prev);
-          if (stack.length > 50) stack.shift();
+          if (stack.length > MAX_UNDO_HISTORY) stack.shift();
           blankUndoStacksRef.current[blankId] = stack;
         }
+        blankRedoStacksRef.current[blankId] = [];
         updateCanvasData(blankId, '');
         return;
       }
@@ -186,7 +273,7 @@ export function useUndoClear({
     } else {
       pdfDrawingRef.current?.clear();
     }
-  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages, resolveScrollBlankPageId, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef, pdfUndoStacksRef, activeDocument, getPdfDrawing, savePdfDrawing]);
+  }, [showSplit, activeSide, rightSideMode, currentVP, viewMode, updateCanvasData, docBlankPages, resolveScrollBlankPageId, pdfDrawingRef, blankDrawingRef, rightDocDrawingRef, blankUndoStacksRef, blankRedoStacksRef, pdfUndoStacksRef, pdfRedoStacksRef, activeDocument, getPdfDrawing, savePdfDrawing]);
 
-  return { handleUndo, handleClear };
+  return { handleUndo, handleRedo, handleClear };
 }

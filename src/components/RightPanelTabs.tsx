@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode } from 'react';
-import { X } from 'lucide-react';
 
 /**
  * Tab shell for the workspace right panel. Three tabs: Notes / AI
@@ -30,11 +29,10 @@ interface Props {
   notes:        ReactNode;
   aiAssistant:  ReactNode;
   chat:         ReactNode;
-  onClose?:     () => void;
 }
 
 export default function RightPanelTabs({
-  isOpen, activeTab, onTabChange, notes, aiAssistant, chat, onClose,
+  isOpen, activeTab, onTabChange, notes, aiAssistant, chat,
 }: Props) {
   return (
     <aside style={{
@@ -87,23 +85,6 @@ export default function RightPanelTabs({
           );
         })}
 
-        {onClose && (
-          <button
-            onClick={onClose}
-            aria-label="Close panel"
-            style={{
-              width: 32, flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'transparent', border: 'none', cursor: 'pointer',
-              color: 'var(--text-3)',
-              transition: 'background 0.12s, color 0.12s',
-            }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-            onMouseOut={(e)  => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)' })}
-          >
-            <X size={14} />
-          </button>
-        )}
       </div>
 
       {/* Tab content — all mounted, display:none on inactives to preserve state */}

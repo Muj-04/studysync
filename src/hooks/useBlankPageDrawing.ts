@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useRef } from 'react';
 import type { BlankPage } from '@/types';
+import { MAX_UNDO_HISTORY } from '@/lib/drawing';
 
 // Minimal structural shape — only the fields resolveScrollBlankPageId reads
 // from `currentVP`. Declared locally so this hook doesn't have to import
@@ -51,6 +52,7 @@ export function useBlankPageDrawing({
   // updateCanvasData() saw stale data and Undo/Clear silently no-op'd
   // visually. Reading docBlankPages directly fixes that ordering bug.
   const blankUndoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
+  const blankRedoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
 
   // The single source of truth for "which blank page is the toolbar
   // currently acting on in scroll mode". Updated on every stroke and every
@@ -69,8 +71,9 @@ export function useBlankPageDrawing({
     const stack = blankUndoStacksRef.current[pageId] ?? [];
     stack.push(prev);
     // Cap history to a reasonable depth so a long session doesn't grow without bound.
-    if (stack.length > 50) stack.shift();
+    if (stack.length > MAX_UNDO_HISTORY) stack.shift();
     blankUndoStacksRef.current[pageId] = stack;
+    blankRedoStacksRef.current[pageId] = [];
     lastInteractedBlankIdRef.current = pageId;
     updateCanvasData(pageId, data);
   }, [docBlankPages, updateCanvasData]);
@@ -89,6 +92,7 @@ export function useBlankPageDrawing({
 
   return {
     blankUndoStacksRef,
+    blankRedoStacksRef,
     getBlankDrawingScroll,
     saveBlankDrawingScroll,
     resolveScrollBlankPageId,
