@@ -102,12 +102,20 @@ export async function proxy(request: NextRequest) {
   ];
   const authPaths = ['/login', '/register'];
 
-  if (!user && protectedPaths.some((p) => pathname.startsWith(p))) {
-    return NextResponse.redirect(new URL('/login', request.url));
-  }
+  // Skip server-side auth redirect for Capacitor/Android WebView —
+  // the WebView may not forward cookies properly, so client-side
+  // auth check handles the redirect instead.
+  const ua = request.headers.get('user-agent') || '';
+  const isCapacitor = ua.includes('StudySync/');
 
-  if (user && authPaths.some((p) => pathname.startsWith(p))) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+  if (!isCapacitor) {
+    if (!user && protectedPaths.some((p) => pathname.startsWith(p))) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    if (user && authPaths.some((p) => pathname.startsWith(p))) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
   }
 
   return supabaseResponse;
