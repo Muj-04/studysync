@@ -225,6 +225,21 @@ function TagEditor({ docId, currentTags, allTags, onAdd, onRemove, onClose }: {
 
 function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    import('@/lib/pdfStore').then(({ getPdfBlob }) => {
+      getPdfBlob(doc.id).then((blob) => {
+        if (blob) {
+          sessionStorage.setItem('studysync_open_doc', doc.id);
+          window.location.href = '/workspace';
+        } else {
+          setChecking(false);
+        }
+      }).catch(() => setChecking(false));
+    }).catch(() => setChecking(false));
+  }, [doc.id]);
+
   const handleFile = (file: File) => {
     setPendingReopenFile(file).finally(() => {
       sessionStorage.setItem('reopen_doc_id', doc.id);
@@ -232,6 +247,17 @@ function ReopenModal({ doc, onClose }: { doc: LibraryDocument; onClose: () => vo
       window.location.href = '/workspace';
     });
   };
+
+  if (checking) {
+    return (
+      <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: 'var(--bg-float)', borderRadius: 12, padding: 28, textAlign: 'center' }}>
+          <p style={{ margin: 0, color: 'var(--text-2)', fontSize: 13 }}>Opening...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div style={{ background: 'var(--bg-float)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid var(--bg-float-border)', boxShadow: 'var(--shadow-float)', borderRadius: 12, padding: '28px', width: 400 }} onClick={(e) => e.stopPropagation()}>
