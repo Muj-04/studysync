@@ -1,10 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { FileText, Mic, Bookmark as BookmarkIcon, Play, ArrowRight, BookOpen, MessageSquare, Users } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
-import { fetchDashboardData, fetchSessionState, loadUserPreferences, getProfile, getStudyStreak } from '@/lib/supabase/db';
-import AvatarDropdown from '@/components/AvatarDropdown';
-import NotificationBell from '@/components/NotificationBell';
+import { FileText, Mic, Bookmark as BookmarkIcon, Play, ArrowRight, BookOpen, MessageSquare } from 'lucide-react';
+import { fetchDashboardData, fetchSessionState, loadUserPreferences, getStudyStreak } from '@/lib/supabase/db';
 import { applyPreferences } from '@/lib/preferences';
 import { storageSet, KEYS } from '@/lib/storage';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -54,24 +51,9 @@ export default function DashboardPage() {
   const [session, setSession] = useState<{ docId: string; virtualIndex: number } | null>(null);
   const [lastDocName, setLastDocName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userEmail, setUserEmail] = useState('');
-  const [userDisplayName, setUserDisplayName] = useState('');
-  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
-  const [userPlan, setUserPlan] = useState<'free' | 'premium' | 'pro'>('free');
-  const [isVip, setIsVip] = useState(false);
   const [studyStreak, setStudyStreak] = useState(0);
 
   useEffect(() => {
-    // Load user info
-    createClient().auth.getUser().then(async ({ data: { user } }) => {
-      setUserEmail(user?.email ?? '');
-      const profile = await getProfile();
-      setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
-      setUserAvatarUrl(profile?.avatarUrl ?? null);
-      if (profile?.plan) setUserPlan(profile.plan as 'free' | 'premium' | 'pro');
-      if (profile?.isVip) setIsVip(true);
-    });
-
     // Load and apply cross-device preferences from Supabase
     loadUserPreferences().then((prefs) => {
       if (!prefs) return;
@@ -111,78 +93,6 @@ export default function DashboardPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-app)', color: 'var(--text-1)', fontFamily: 'inherit' }}>
-
-      {/* ── Header ── */}
-      <header style={{
-        height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 24px', borderBottom: '1px solid var(--border-subtle)',
-        background: 'var(--bg-app)', position: 'sticky', top: 0, zIndex: 20,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-1)' }}>
-            StudySync
-          </span>
-          <nav style={{ display: 'flex', gap: 2 }}>
-            {[
-              { label: t('nav_dashboard'), href: '/dashboard', active: true },
-              { label: t('nav_workspace'), href: '/workspace', active: false },
-              { label: t('nav_library'),   href: '/library',   active: false },
-              { label: t('nav_community'), href: '/community', active: false },
-              { label: t('nav_settings'),  href: '/settings',  active: false },
-              { label: t('dash_pricing'),   href: '/pricing',   active: false },
-            ].map(({ label, href, active }) => (
-              <a
-                key={label}
-                href={href}
-                style={{
-                  fontSize: 13, fontWeight: 400,
-                  color: active ? 'var(--accent)' : 'var(--text-2)',
-                  textDecoration: 'none', padding: '4px 10px', borderRadius: 4,
-                  borderBottom: active ? '1.5px solid var(--accent)' : '1.5px solid transparent',
-                  transition: 'color 0.15s',
-                }}
-                onMouseOver={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-1)'; }}
-                onMouseOut={(e) => { if (!active) (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text-2)'; }}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {userPlan === 'free' && !isVip && (
-            <a
-              href="/pricing"
-              style={{
-                fontSize: 12, fontWeight: 600, color: '#0f172a',
-                background: '#ffffff', border: 'none', borderRadius: 4,
-                padding: '5px 12px', textDecoration: 'none', cursor: 'pointer',
-                transition: 'background 0.15s', flexShrink: 0,
-              }}
-              onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
-              onMouseOut={(e)  => { e.currentTarget.style.background = '#ffffff'; }}
-            >
-              {t('dash_upgrade')}
-            </a>
-          )}
-          <a
-            href="/friends"
-            title={t('nav_friends')}
-            style={{
-              width: 34, height: 34, borderRadius: 4,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-2)', textDecoration: 'none',
-              transition: 'background 0.12s, color 0.12s',
-            }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)' })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-2)' })}
-          >
-            <Users size={16} />
-          </a>
-          <NotificationBell />
-          <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
-        </div>
-      </header>
 
       <main style={{ maxWidth: 920, margin: '0 auto', padding: '32px 24px 60px' }}>
 

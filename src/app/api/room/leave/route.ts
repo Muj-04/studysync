@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
   if (!roomId) {
     return NextResponse.json({ error: 'missing roomId' }, { status: 400 });
   }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(roomId)) {
+    return NextResponse.json({ error: 'invalid roomId' }, { status: 400 });
+  }
 
   // Service-role client for both the auth-token validation and the
   // mutation. RoomClient now sends an explicit `Authorization: Bearer
@@ -66,22 +69,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  await admin.from('room_members')
+  const { error: deleteError } = await admin.from('room_members')
     .delete()
     .eq('room_id', roomId)
     .eq('user_id', userId);
-
-  // Mirror leaveRoom()'s "last member out closes the room" behaviour.
-  const { count } = await admin.from('room_members')
-    .select('user_id', { count: 'exact', head: true })
-    .eq('room_id', roomId);
-  if ((count ?? 0) === 0) {
-    await admin.from('study_rooms')
-      .update({ status: 'closed' })
-      .eq('id', roomId);
+  if (deleteError) {
+    console.error('[Room leave] member delete failed:', deleteError.message);
+    return NextResponse.json({ error: 'leave failed' }, { status: 500 });
   }
 
-  // 204 — sendBeacon ignores the response body but a clean status helps
-  // debugging when this endpoint is hit from explicit fetch().
-  return new NextResponse(null, { status: 204 });
+  // Mirror leaveRoom()'s "last member out closes the room" behaviour.
+  const { count, error: countError } = await admin.from('room_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('room_id', roomId);
+  if (countError) {
+    console.error('[Room leave] member count failed:', countError.message);
+    return NextResponse.json({ error: 'leave verification failed' }, { status: 500 });
+  }
+  const wasLastMember = (count ?? 0) === 0;
+  if (wasLastMember) {
+    const { error: closeError } = await admin.from('study_rooms')
+      .update({ status: 'closed' })
+      .eq('id', roomId);
+    if (closeError) {
+      console.error('[Room leave] room close failed:', closeError.message);
+      return NextResponse.json({ error: 'room close failed' }, { status: 500 });
+    }
+  }
+
+  return NextResponse.json({ wasLastMember });
 }

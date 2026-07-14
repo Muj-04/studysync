@@ -1,5 +1,10 @@
 import { createClient } from './client';
 import type { VoiceNote, TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
+import {
+  makeFallbackProfileHandle,
+  normalizeProfileHandle,
+  validateProfileHandle,
+} from '@/lib/profileHandle';
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -756,10 +761,18 @@ export async function exportAllUserData(): Promise<object> {
 
 export async function deleteUserAccount(): Promise<{ error: string | null }> {
   try {
-    const { error } = await sb().rpc('delete_user_account');
-    return { error: error?.message ?? null };
+    const client = sb();
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.access_token) return { error: 'Please sign in again before deleting your account.' };
+    const response = await fetch('/api/account/delete', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!response.ok) return { error: 'Account deletion was not completed. Please try again.' };
+    return { error: null };
   } catch (e) {
-    return { error: String(e) };
+    console.error('[DB] deleteUserAccount request failed:', e);
+    return { error: 'Account deletion failed. Please try again.' };
   }
 }
 
@@ -946,6 +959,7 @@ export async function updateRoomVoiceNoteTitle(noteId: string, title: string | u
 
 export async function getProfile(): Promise<{
   username: string | null;
+  handle: string;
   avatarUrl: string | null;
   plan: 'free' | 'premium' | 'pro';
   isVip: boolean;
@@ -953,11 +967,12 @@ export async function getProfile(): Promise<{
   const uid = await userId(); if (!uid) return null;
   const { data } = await sb()
     .from('profiles')
-    .select('username, avatar_url, plan, is_vip')
+    .select('username, handle, avatar_url, plan, is_vip')
     .eq('id', uid)
     .maybeSingle();
   return data ? {
     username: data.username ?? null,
+    handle: data.handle,
     avatarUrl: data.avatar_url ?? null,
     plan: (data.plan ?? 'free') as 'free' | 'premium' | 'pro',
     isVip: data.is_vip ?? false,
@@ -969,14 +984,50 @@ export async function updateUserPlan(plan: 'free' | 'premium' | 'pro'): Promise<
   await sb().from('profiles').update({ plan }).eq('id', uid);
 }
 
-export async function upsertProfile(profile: { username?: string; avatarUrl?: string }): Promise<void> {
-  const uid = await userId(); if (!uid) return;
+export async function isProfileHandleAvailable(value: string): Promise<boolean> {
+  const handle = normalizeProfileHandle(value);
+  if (validateProfileHandle(handle)) return false;
+  const { data, error } = await sb().rpc('is_handle_available', { p_handle: handle });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
+
+export async function upsertProfile(profile: { username?: string; handle?: string; avatarUrl?: string }): Promise<void> {
+  const uid = await userId();
+  if (!uid) throw new Error('You must be signed in to update your profile.');
   const { sanitizeText } = await import('@/lib/sanitize');
   const update: Record<string, string | null> = {};
-  if ('username' in profile) update.username = profile.username ? sanitizeText(profile.username).slice(0, 50) || null : null;
+  if ('username' in profile) {
+    const username = profile.username ? sanitizeText(profile.username).trim().slice(0, 50) : '';
+    if (!username) throw new Error('Display name cannot be empty.');
+    update.username = username;
+  }
+  if ('handle' in profile) {
+    const handle = normalizeProfileHandle(profile.handle ?? '');
+    const validationError = validateProfileHandle(handle);
+    if (validationError) throw new Error(validationError);
+    update.handle = handle;
+  }
   if ('avatarUrl' in profile) update.avatar_url = profile.avatarUrl || null;
-  const { error } = await sb().from('profiles').upsert({ id: uid, ...update }, { onConflict: 'id' });
-  if (error) console.error('[DB] upsertProfile error:', error.message);
+
+  const client = sb();
+  const { data: existing, error: readError } = await client
+    .from('profiles')
+    .select('handle')
+    .eq('id', uid)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+
+  const handle = typeof update.handle === 'string'
+    ? update.handle
+    : existing?.handle ?? makeFallbackProfileHandle(update.username, uid);
+  const { error } = await client
+    .from('profiles')
+    .upsert({ id: uid, handle, ...update }, { onConflict: 'id' });
+  if (error) {
+    if (error.code === '23505') throw new Error('This handle is already taken.');
+    throw new Error(error.message);
+  }
 }
 
 // Creates a profile row for OAuth users on first sign-in if one doesn't exist.
@@ -985,6 +1036,7 @@ export async function ensureProfile(): Promise<void> {
   const { data: { user } } = await sb().auth.getUser();
   if (!user) return;
   const existing = await sb().from('profiles').select('id').eq('id', user.id).maybeSingle();
+  if (existing.error) throw new Error(existing.error.message);
   if (existing.data) return; // already exists
   const meta = user.user_metadata ?? {};
   const username =
@@ -997,10 +1049,11 @@ export async function ensureProfile(): Promise<void> {
     (meta.avatar_url as string | undefined) ??
     (meta.picture as string | undefined) ??
     null;
+  const handle = makeFallbackProfileHandle(username, user.id);
   const { error } = await sb()
     .from('profiles')
-    .upsert({ id: user.id, username, avatar_url: avatarUrl }, { onConflict: 'id', ignoreDuplicates: true });
-  if (error) console.error('[DB] ensureProfile error:', error.message);
+    .upsert({ id: user.id, username, handle, avatar_url: avatarUrl }, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
 }
 
 // ── Referrals ─────────────────────────────────────────────────────────────────
@@ -1070,14 +1123,14 @@ export async function getReferralStats(): Promise<{
   const uid = await userId(); if (!uid) return null;
   const [profileRes, countRes] = await Promise.all([
     sb().from('profiles').select('referral_code, referral_expires_at').eq('id', uid).maybeSingle(),
-    sb().from('referrals').select('id', { count: 'exact', head: true }).eq('referrer_id', uid),
+    sb().rpc('get_my_referral_count'),
   ]);
   const code = (profileRes.data?.referral_code as string | null) ?? null;
   const expiresAt = (profileRes.data?.referral_expires_at as string | null) ?? null;
   return {
     referralCode: code,
     referralLink: code ? `${BASE_URL}/register?ref=${code}` : null,
-    referralCount: countRes.count ?? 0,
+    referralCount: Number(countRes.data ?? 0),
     rewardActive: expiresAt ? new Date(expiresAt) > new Date() : false,
     rewardExpiresAt: expiresAt,
   };
@@ -1147,9 +1200,8 @@ export async function joinRoom(roomId: string): Promise<{ error?: string }> {
   // count<max and both inserted, exceeding the cap and bypassing the
   // Premium/Pro room-size paywall.
   //
-  // Migration: supabase/migrations/2026-06-27_join_room_atomic.sql
-  // RPC returns: 'joined' | 'rejoined' | 'full' | 'closed' |
-  //              'not_found' | 'unauthenticated'.
+  // Hardened by supabase/migrations/20260710093000_secure_room_invitations.sql
+  // RPC also enforces plan and invitation checks server-side.
   // Session-state probe — confirms whether the client we're about to call
   // the RPC with actually has a valid JWT. A null/expired session here
   // explains the 403s on the subsequent room_members SELECT (auth.uid()
@@ -1161,7 +1213,6 @@ export async function joinRoom(roomId: string): Promise<{ error?: string }> {
     userId:       sess.session?.user?.id ?? null,
     expiresAt:    sess.session?.expires_at ?? null,
     expiresInSec: sess.session?.expires_at ? (sess.session.expires_at - Math.floor(Date.now() / 1000)) : null,
-    tokenPrefix:  sess.session?.access_token ? sess.session.access_token.slice(0, 12) + '…' : null,
   });
   const { data, error } = await client.rpc('join_room_atomic', { p_room_id: roomId });
   if (error) {
@@ -1173,20 +1224,34 @@ export async function joinRoom(roomId: string): Promise<{ error?: string }> {
   return { error: result };
 }
 
-export async function leaveRoom(roomId: string): Promise<{ wasLastMember: boolean }> {
-  const uid = await userId(); if (!uid) return { wasLastMember: false };
-  await sb().from('room_members').delete().eq('room_id', roomId).eq('user_id', uid);
-  const { count } = await sb().from('room_members')
-    .select('user_id', { count: 'exact', head: true }).eq('room_id', roomId);
-  if ((count ?? 0) === 0) {
-    await sb().from('study_rooms').update({ status: 'closed' }).eq('id', roomId);
-    return { wasLastMember: true };
+export async function leaveRoom(roomId: string): Promise<{ wasLastMember: boolean; error?: string }> {
+  const client = sb();
+  const { data: { session } } = await client.auth.getSession();
+  if (!session?.access_token) {
+    return { wasLastMember: false, error: 'unauthenticated' };
   }
-  return { wasLastMember: false };
+  try {
+    const response = await fetch('/api/room/leave', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ roomId }),
+    });
+    if (!response.ok) return { wasLastMember: false, error: `leave failed (${response.status})` };
+    const result = await response.json() as { wasLastMember?: boolean };
+    return { wasLastMember: result.wasLastMember === true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'leave failed';
+    console.error('[DB] leaveRoom request error:', message);
+    return { wasLastMember: false, error: message };
+  }
 }
 
 export async function closeRoom(roomId: string): Promise<void> {
-  await sb().from('study_rooms').update({ status: 'closed' }).eq('id', roomId);
+  const { error } = await sb().from('study_rooms').update({ status: 'closed' }).eq('id', roomId);
+  if (error) throw new Error(error.message);
 }
 
 export async function saveRoomDrawing(roomId: string, pageNumber: number, data: string): Promise<void> {
@@ -1308,7 +1373,6 @@ export async function insertRoomStroke(
     userId:       sess.session?.user?.id ?? null,
     expiresAt:    sess.session?.expires_at ?? null,
     expiresInSec: sess.session?.expires_at ? (sess.session.expires_at - Math.floor(Date.now() / 1000)) : null,
-    tokenPrefix:  sess.session?.access_token ? sess.session.access_token.slice(0, 12) + '…' : null,
     strokeId:     stroke.id,
   });
   const uid = sess.session?.user?.id ?? null;
@@ -1318,32 +1382,45 @@ export async function insertRoomStroke(
     });
     return null;
   }
-  const { data, error } = await client
-    .from('room_strokes')
-    .insert({
-      id:        stroke.id,
-      room_id:   roomId,
-      page_key:  pageKey,
-      user_id:   uid,
-      stroke,
-    })
-    .select('seq')
-    .single();
-  if (error) {
-    // Dump the full PostgrestError. .code distinguishes RLS (42501),
-    // FK violations (23503), not-null (23502), etc. .details + .hint
-    // come from the planner and are gold for diagnosing the actual cause.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await client
+      .from('room_strokes')
+      .insert({
+        id:        stroke.id,
+        room_id:   roomId,
+        page_key:  pageKey,
+        user_id:   uid,
+        stroke,
+      })
+      .select('seq')
+      .single();
+    if (!error) {
+      console.log('[DB] insertRoomStroke OK', { strokeId: stroke.id, seq: data.seq });
+      return { seq: Number(data.seq) };
+    }
+
+    const code = (error as { code?: string }).code;
+    if (code === '23505') {
+      const { data: existing } = await client
+        .from('room_strokes')
+        .select('seq')
+        .eq('id', stroke.id)
+        .maybeSingle();
+      if (existing) return { seq: Number(existing.seq) };
+    }
+
     console.error('[DB] insertRoomStroke ERROR', {
+      attempt: attempt + 1,
       message: error.message,
-      code:    (error as { code?: string }).code,
+      code,
       details: (error as { details?: string }).details,
       hint:    (error as { hint?: string }).hint,
       uid, roomId, pageKey, strokeId: stroke.id,
     });
-    return null;
+    if (code === '42501' || code === '23503' || code === '23502' || attempt === 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 300 * (2 ** attempt)));
   }
-  console.log('[DB] insertRoomStroke OK', { strokeId: stroke.id, seq: data.seq });
-  return { seq: Number(data.seq) };
+  return null;
 }
 
 // ── Friends ───────────────────────────────────────────────────────────────────
@@ -1477,17 +1554,22 @@ export async function getMyFriendships(): Promise<MyFriendship[]> {
   }));
 }
 
-export async function inviteToRoom(friendId: string, roomId: string, roomName: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  const { data: myProfile } = await sb().from('profiles').select('username, avatar_url').eq('id', uid).maybeSingle();
-  await sb().from('notifications').insert({
-    user_id: friendId, type: 'room_invite',
-    data: {
-      room_id: roomId, room_name: roomName, inviter_id: uid,
-      inviter_name: myProfile?.username ?? null,
-      inviter_avatar: myProfile?.avatar_url ?? null,
-    },
+export async function inviteToRoom(
+  friendId: string,
+  roomId: string,
+  roomName: string,
+): Promise<{ error?: string }> {
+  void roomName;
+  const { data, error } = await sb().rpc('invite_to_room', {
+    p_room_id: roomId,
+    p_invitee_id: friendId,
   });
+  if (error) {
+    console.error('[DB] inviteToRoom RPC error:', error.message);
+    return { error: error.message };
+  }
+  const result = String(data ?? '');
+  return result === 'invited' ? {} : { error: result || 'invite_failed' };
 }
 
 // ── Direct messages (1:1 friend chat) ────────────────────────────────────────
@@ -1735,9 +1817,8 @@ export async function getNotifications(): Promise<AppNotification[]> {
   const { data } = await sb()
     .from('notifications').select('id, type, data, read, created_at')
     .eq('user_id', uid)
-    .eq('read', false)
     .order('created_at', { ascending: false })
-    .limit(30);
+    .limit(100);
   return (data ?? []).map((r) => ({
     id: r.id, type: r.type, data: r.data as Record<string, unknown>,
     read: r.read, createdAt: r.created_at,
@@ -1754,7 +1835,17 @@ export async function markAllNotificationsRead(): Promise<void> {
 }
 
 export async function deleteNotification(id: string): Promise<void> {
-  await sb().from('notifications').delete().eq('id', id);
+  const uid = await userId();
+  if (!uid) throw new Error('You must be signed in to delete notifications.');
+  const { error } = await sb().from('notifications').delete().eq('id', id).eq('user_id', uid);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteAllNotifications(): Promise<void> {
+  const uid = await userId();
+  if (!uid) throw new Error('You must be signed in to delete notifications.');
+  const { error } = await sb().from('notifications').delete().eq('user_id', uid);
+  if (error) throw new Error(error.message);
 }
 
 // ── Document Tags ─────────────────────────────────────────────────────────────
@@ -2100,6 +2191,130 @@ export async function loadFlashcards(docId: string, pageNum: number): Promise<Fl
     answer: r.answer,
     createdAt: r.created_at,
   }));
+}
+
+export interface FlashcardDeck {
+  id: string;
+  name: string;
+  description: string;
+  docId: string | null;
+  docName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  cardCount: number;
+  dueCount: number;
+  masteredCount: number;
+  lastStudiedAt: string | null;
+}
+
+export interface StudyFlashcard extends Flashcard {
+  deckId: string;
+  nextReviewAt: string;
+  intervalDays: number;
+  reviewCount: number;
+  lastReviewedAt: string | null;
+}
+
+export async function fetchFlashcardDecks(): Promise<FlashcardDeck[]> {
+  const uid = await userId(); if (!uid) return [];
+  const [{ data: decks, error }, { data: cards }, { data: docs }] = await Promise.all([
+    sb().from('flashcard_decks').select('id, name, description, doc_id, created_at, updated_at').eq('user_id', uid).order('updated_at', { ascending: false }),
+    sb().from('flashcards').select('deck_id, next_review_at, interval_days, last_reviewed_at').eq('user_id', uid).not('deck_id', 'is', null),
+    sb().from('documents').select('id, name').eq('user_id', uid),
+  ]);
+  if (error) { console.error('[DB] fetchFlashcardDecks error:', error.message); return []; }
+  const now = Date.now();
+  const docNames = new Map((docs ?? []).map((d) => [d.id, d.name]));
+  return (decks ?? []).map((deck) => {
+    const deckCards = (cards ?? []).filter((card) => card.deck_id === deck.id);
+    const reviewed = deckCards.filter((card) => card.last_reviewed_at).map((card) => card.last_reviewed_at as string).sort().at(-1) ?? null;
+    return {
+      id: deck.id,
+      name: deck.name,
+      description: deck.description,
+      docId: deck.doc_id,
+      docName: deck.doc_id ? (docNames.get(deck.doc_id) ?? null) : null,
+      createdAt: deck.created_at,
+      updatedAt: deck.updated_at,
+      cardCount: deckCards.length,
+      dueCount: deckCards.filter((card) => new Date(card.next_review_at).getTime() <= now).length,
+      masteredCount: deckCards.filter((card) => card.interval_days >= 21).length,
+      lastStudiedAt: reviewed,
+    };
+  });
+}
+
+export async function createFlashcardDeck(input: {
+  name: string;
+  description?: string;
+  docId?: string | null;
+  cards: Array<{ question: string; answer: string }>;
+}): Promise<string> {
+  const uid = await userId(); if (!uid) throw new Error('You must be signed in.');
+  const { data: deck, error } = await sb().from('flashcard_decks').insert({
+    user_id: uid,
+    name: input.name.trim(),
+    description: input.description?.trim() ?? '',
+    doc_id: input.docId || null,
+  }).select('id').single();
+  if (error || !deck) throw new Error(error?.message ?? 'Could not create deck.');
+  const cards = input.cards.filter((card) => card.question.trim() && card.answer.trim());
+  if (cards.length) {
+    const { error: cardError } = await sb().from('flashcards').insert(cards.map((card) => ({
+      user_id: uid,
+      deck_id: deck.id,
+      doc_id: input.docId || `deck:${deck.id}`,
+      page_num: 0,
+      question: card.question.trim(),
+      answer: card.answer.trim(),
+    })));
+    if (cardError) {
+      await sb().from('flashcard_decks').delete().eq('id', deck.id).eq('user_id', uid);
+      throw new Error(cardError.message);
+    }
+  }
+  return deck.id;
+}
+
+export async function loadDeckFlashcards(deckId: string): Promise<StudyFlashcard[]> {
+  const uid = await userId(); if (!uid) return [];
+  const { data, error } = await sb().from('flashcards')
+    .select('id, deck_id, doc_id, page_num, question, answer, created_at, next_review_at, interval_days, review_count, last_reviewed_at')
+    .eq('user_id', uid).eq('deck_id', deckId).order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((card) => ({
+    id: card.id, deckId: card.deck_id, docId: card.doc_id, pageNum: card.page_num,
+    question: card.question, answer: card.answer, createdAt: card.created_at,
+    nextReviewAt: card.next_review_at, intervalDays: card.interval_days,
+    reviewCount: card.review_count, lastReviewedAt: card.last_reviewed_at,
+  }));
+}
+
+export async function reviewFlashcard(card: StudyFlashcard, rating: 'again' | 'hard' | 'good' | 'easy'): Promise<void> {
+  const uid = await userId(); if (!uid) throw new Error('You must be signed in.');
+  const now = new Date();
+  let interval = card.intervalDays;
+  if (rating === 'again') interval = 0;
+  if (rating === 'hard') interval = Math.max(1, Math.round(Math.max(interval, 1) * 1.2));
+  if (rating === 'good') interval = interval === 0 ? 1 : Math.max(2, Math.round(interval * 2));
+  if (rating === 'easy') interval = interval === 0 ? 4 : Math.max(4, Math.round(interval * 3));
+  const next = new Date(now);
+  if (rating === 'again') next.setMinutes(next.getMinutes() + 5);
+  else next.setDate(next.getDate() + interval);
+  const { error } = await sb().from('flashcards').update({
+    interval_days: interval,
+    review_count: card.reviewCount + 1,
+    last_reviewed_at: now.toISOString(),
+    next_review_at: next.toISOString(),
+  }).eq('id', card.id).eq('user_id', uid);
+  if (error) throw new Error(error.message);
+  await sb().from('flashcard_decks').update({ updated_at: now.toISOString() }).eq('id', card.deckId).eq('user_id', uid);
+}
+
+export async function deleteFlashcardDeck(deckId: string): Promise<void> {
+  const uid = await userId(); if (!uid) return;
+  const { error } = await sb().from('flashcard_decks').delete().eq('id', deckId).eq('user_id', uid);
+  if (error) throw new Error(error.message);
 }
 
 // ── Global Search ─────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import {
-  BookOpen, Files, Layers, Video, Users, MessageCircle, Settings, Sparkles, Clock,
+  LayoutDashboard, BookOpen, Files, Layers, Video, Users, MessageCircle, Settings, CreditCard, Sparkles, Clock,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { effectivePlanLimits, type Plan } from '@/lib/planLimits';
@@ -20,6 +20,7 @@ import { effectivePlanLimits, type Plan } from '@/lib/planLimits';
  */
 
 const STUDY_ITEMS = [
+  { href: '/dashboard',  label: 'Dashboard',  Icon: LayoutDashboard },
   { href: '/workspace',  label: 'Workspace',  Icon: Files },
   { href: '/library',    label: 'Library',    Icon: BookOpen },
   { href: '/flashcards', label: 'Flashcards', Icon: Layers },
@@ -92,6 +93,7 @@ export default function LeftRail() {
 
         <div style={{ height: 14 }} />
         <RailItem href="/settings" label="Settings" Icon={Settings} pathname={pathname} />
+        <RailItem href="/pricing" label="Pricing" Icon={CreditCard} pathname={pathname} />
       </nav>
 
       {/* Bottom usage widgets */}
@@ -195,7 +197,7 @@ function UsageWidget({ kind }: { kind: 'ai' | 'study' }) {
     const sb = createClient();
     let cancelled = false;
 
-    (async () => {
+    const load = async () => {
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return;
 
@@ -224,9 +226,16 @@ function UsageWidget({ kind }: { kind: 'ai' | 'study' }) {
         );
         setData({ value: Math.round(totalSec / 60), max: 7 * 60 }); // weekly cap = 7h baseline
       }
-    })().catch(() => {});
+    };
 
-    return () => { cancelled = true; };
+    load().catch(() => {});
+    const refreshAiUsage = () => { if (kind === 'ai') load().catch(() => {}); };
+    window.addEventListener('studysync:ai-usage', refreshAiUsage);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('studysync:ai-usage', refreshAiUsage);
+    };
   }, [kind]);
 
   if (kind === 'ai') {

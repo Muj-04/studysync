@@ -2,6 +2,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy, PDFPageProxy, PageViewport, RenderTask } from 'pdfjs-dist';
 import type { PDFDocument } from '@/types';
+import {
+  createTwoFingerGestureState,
+  handleTwoFingerPanZoom,
+  resetTwoFingerGesture,
+  seedTwoFingerGesture,
+} from '@/lib/touchGestures';
 
 let pdfjsCache: typeof import('pdfjs-dist') | null = null;
 
@@ -39,14 +45,12 @@ interface Props {
   searchHighlights?: HighlightRect[];
   /** Index of the currently active highlight (orange vs yellow). */
   searchActiveIndex?: number;
-  /** When true, the pinch-to-zoom gesture is suppressed (drawing mode is active). */
-  disablePinch?: boolean;
+  allowPinchZoom?: boolean;
 }
 
 export default function PDFViewer({
   document, zoom = 1, onZoomChange, onCanvasDimensions, overlay,
-  onPageReady, searchHighlights, searchActiveIndex,
-  disablePinch = false,
+  onPageReady, searchHighlights, searchActiveIndex, allowPinchZoom = false,
 }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
@@ -61,8 +65,8 @@ export default function PDFViewer({
   const onZoomChangeRef = useRef(onZoomChange);
   const onPageReadyRef  = useRef(onPageReady);
   const liveZoomRef     = useRef(zoom);
-  const disablePinchRef = useRef(disablePinch);
-  const lastPinchDistRef = useRef<number | null>(null);
+  const allowPinchZoomRef = useRef(allowPinchZoom);
+  const twoFingerGestureRef = useRef(createTwoFingerGestureState());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // null = not yet checked; true = has text; false = no text (scanned/image page)
@@ -76,7 +80,7 @@ export default function PDFViewer({
   useEffect(() => { onZoomChangeRef.current = onZoomChange; });
   useEffect(() => { onPageReadyRef.current  = onPageReady; });
   useEffect(() => { liveZoomRef.current     = zoom; });
-  useEffect(() => { disablePinchRef.current = disablePinch; });
+  useEffect(() => { allowPinchZoomRef.current = allowPinchZoom; });
   useEffect(() => { return () => { pdfRef.current?.destroy(); }; }, []);
 
   // Scroll active highlight into view when it changes
@@ -227,41 +231,40 @@ export default function PDFViewer({
     return () => el.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Pinch-to-zoom — suppressed when drawing is active
+  // Two-finger pan stays active even while drawing so iPad users can
+  // navigate without leaving the pen tool. Pinch zoom is only enabled by
+  // cursor mode callers, where the user is intentionally navigating.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onTouchStart = (e: TouchEvent) => {
-      if (disablePinchRef.current) { lastPinchDistRef.current = null; return; }
-      if (e.touches.length === 2) {
-        lastPinchDistRef.current = Math.hypot(
-          e.touches[0].clientX - e.touches[1].clientX,
-          e.touches[0].clientY - e.touches[1].clientY,
-        );
-      }
+      if (e.touches.length === 2) seedTwoFingerGesture(e, twoFingerGestureRef.current);
     };
     const onTouchMove = (e: TouchEvent) => {
-      if (disablePinchRef.current) { lastPinchDistRef.current = null; return; }
-      if (e.touches.length !== 2 || lastPinchDistRef.current === null) return;
-      e.preventDefault();
-      const dist  = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY,
-      );
-      const ratio = dist / lastPinchDistRef.current;
-      lastPinchDistRef.current = dist;
-      const next  = clampZoom(liveZoomRef.current * ratio);
-      liveZoomRef.current = next;
-      onZoomChangeRef.current?.(next);
+      if (e.touches.length !== 2) return;
+      handleTwoFingerPanZoom(e, twoFingerGestureRef.current, {
+        scrollEl: el,
+        getZoom: () => liveZoomRef.current,
+        onZoomChange: (next) => {
+          liveZoomRef.current = next;
+          onZoomChangeRef.current?.(next);
+        },
+        clampZoom,
+        allowPinchZoom: allowPinchZoomRef.current,
+      });
     };
-    const onTouchEnd = () => { lastPinchDistRef.current = null; };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) resetTwoFingerGesture(twoFingerGestureRef.current);
+    };
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove',  onTouchMove,  { passive: false });
     el.addEventListener('touchend',   onTouchEnd);
+    el.addEventListener('touchcancel', onTouchEnd);
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove',  onTouchMove);
       el.removeEventListener('touchend',   onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
     };
   }, []);
 

@@ -65,7 +65,6 @@ export default function ChatConversationView({
   // Initial load + mark inbound as read.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     getConversation(friendId).then(async (msgs) => {
       if (cancelled) return;
       setMessages(msgs);
@@ -148,13 +147,16 @@ export default function ChatConversationView({
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0,
+      background: 'var(--bg-app)',
+    }}>
       {/* Messages */}
       <div
         ref={scrollRef}
         style={{
-          flex: 1, overflowY: 'auto', padding: '12px 14px',
-          display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0,
+          flex: 1, overflowY: 'auto', padding: '16px 16px 22px',
+          display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0,
         }}
       >
         {loading ? (
@@ -173,24 +175,25 @@ export default function ChatConversationView({
                 key={m.id}
                 style={{
                   alignSelf: mine ? 'flex-end' : 'flex-start',
-                  maxWidth: '78%',
+                  maxWidth: '82%',
                   display: 'flex', flexDirection: 'column',
                   alignItems: mine ? 'flex-end' : 'flex-start',
-                  gap: 2,
+                  gap: 4,
                 }}
               >
                 <div style={{
-                  padding: '7px 11px',
-                  borderRadius: mine ? '10px 10px 2px 10px' : '10px 10px 10px 2px',
-                  background: mine ? 'var(--accent)' : 'var(--bg-elevated)',
+                  padding: '10px 13px',
+                  borderRadius: mine ? '16px 16px 5px 16px' : '16px 16px 16px 5px',
+                  background: mine ? 'var(--accent)' : 'var(--bg-panel)',
                   color: mine ? '#fff' : 'var(--text-1)',
-                  fontSize: 13, lineHeight: 1.45,
+                  fontSize: 13.5, lineHeight: 1.45,
                   wordBreak: 'break-word', whiteSpace: 'pre-wrap',
-                  border: mine ? 'none' : '1px solid var(--border-subtle)',
+                  border: mine ? 'none' : '1px solid var(--border)',
+                  boxShadow: mine ? 'none' : '0 1px 3px rgba(15, 23, 42, 0.08)',
                 }}>
                   {m.content}
                 </div>
-                <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+                <span style={{ fontSize: 10.5, color: 'var(--text-3)', padding: '0 5px' }}>
                   {fmtTime(m.createdAt)}
                 </span>
               </div>
@@ -201,10 +204,15 @@ export default function ChatConversationView({
 
       {/* Input */}
       <div style={{
-        display: 'flex', alignItems: 'flex-end', gap: 6,
-        padding: '10px 12px', borderTop: '1px solid var(--border-subtle)',
-        flexShrink: 0,
+        padding: '12px 14px 14px', borderTop: '1px solid var(--border-subtle)',
+        background: 'var(--bg-panel)', flexShrink: 0,
       }}>
+        <div style={{
+          display: 'flex', alignItems: 'flex-end', gap: 6,
+          width: '100%', padding: '4px 5px 4px 13px',
+          background: 'var(--bg-app)', border: '1px solid var(--border)',
+          borderRadius: 999,
+        }}>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -212,15 +220,12 @@ export default function ChatConversationView({
           placeholder="Type a message…"
           rows={1}
           style={{
-            flex: 1, resize: 'none',
-            minHeight: 36, maxHeight: 120,
-            padding: '8px 10px',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border)',
-            borderRadius: 4,
+            flex: 1, resize: 'none', border: 'none', outline: 'none',
+            minHeight: 30, maxHeight: 96,
+            padding: '7px 0 5px',
+            background: 'transparent',
             color: 'var(--text-1)',
-            fontSize: 13, fontFamily: 'inherit', lineHeight: 1.4,
-            outline: 'none',
+            fontSize: 12.5, fontFamily: 'inherit', lineHeight: 1.4,
           }}
         />
         <button
@@ -228,18 +233,19 @@ export default function ChatConversationView({
           disabled={!text.trim() || sending}
           aria-label="Send"
           style={{
-            width: 36, height: 36, borderRadius: 4,
+            width: 32, height: 32, borderRadius: '50%',
             background: text.trim() && !sending ? 'var(--accent)' : 'var(--bg-elevated)',
-            color: text.trim() && !sending ? '#fff' : 'var(--text-3)',
+            color: text.trim() && !sending ? '#fff' : 'var(--accent)',
             border: 'none',
             cursor: text.trim() && !sending ? 'pointer' : 'default',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 0.12s, color 0.12s',
+            transition: 'background 0.12s, color 0.12s, transform 0.12s',
             flexShrink: 0,
           }}
         >
           <Send size={14} />
         </button>
+        </div>
       </div>
     </div>
   );

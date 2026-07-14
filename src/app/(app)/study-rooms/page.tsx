@@ -3,28 +3,31 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Video, Search, Plus, MoreHorizontal, Link2, Trash2,
-  Users, BookOpen, Headphones, UserCheck, X,
+  Users, BookOpen, Headphones, UserCheck, X, Lock, Upload, FileText,
 } from 'lucide-react';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
-import { getActiveRooms, closeRoom, getFriends } from '@/lib/supabase/db';
+import {
+  getActiveRooms, closeRoom, getFriends, getProfile,
+  uploadRoomPdf, createRoom,
+} from '@/lib/supabase/db';
 import type { ActiveRoom, ActiveRoomMember } from '@/lib/supabase/db';
 import { createClient } from '@/lib/supabase/client';
+import { effectivePlanLimits, type PlanLimits } from '@/lib/planLimits';
+import { validatePdfOrPptx } from '@/lib/fileValidation';
 
 /**
  * Study Rooms listing/lobby page — Figma-matched.
  *
  *   Header card:  "Study Rooms" + subtitle · Search · + New Room
- *   Tabs:         All Rooms · My Subjects · Silent Study · Friends Active
+ *   Tabs:         My Rooms · My Subjects · Silent Study · Friends Active
  *   Grid:         Responsive room cards with gradient banners.
  *
  * Lives at /study-rooms — the LeftRail link used to 404 because this
  * route didn't exist. Per-room functionality (drawing, voice chat) is
  * still under /room/[roomId]; this page is purely the lobby.
  *
- * Rooms are invite-only today — non-members can see all rooms but
- * can't join them without a prior `room_members` row (created by the
- * host's createRoom call or a future invite flow). When public-join
- * is ready, edit `canJoinRoom` below — single edit point.
+ * Rooms are private and invite-only. Supabase RLS exposes a room only to
+ * its host, existing members, and users with a valid room invitation.
  */
 
 // ── Permission ───────────────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ function hostLabel(room: ActiveRoom, myUserId: string | null): string {
 
 type Tab = 'all' | 'subjects' | 'silent' | 'friends';
 const TABS: ReadonlyArray<{ id: Tab; label: string; icon: React.ElementType }> = [
-  { id: 'all',      label: 'All Rooms',      icon: Users      },
+  { id: 'all',      label: 'My Rooms',       icon: Users      },
   { id: 'subjects', label: 'My Subjects',    icon: BookOpen   },
   { id: 'silent',   label: 'Silent Study',   icon: Headphones },
   { id: 'friends',  label: 'Friends Active', icon: UserCheck  },
@@ -371,9 +374,19 @@ export default function StudyRoomsPage() {
   const [joinDeniedId, setJoinDeniedId] = useState<string | null>(null);
   const [copyId, setCopyId]             = useState<string | null>(null);
 
+  const [createOpen, setCreateOpen]       = useState(false);
+  const [createFile, setCreateFile]       = useState<File | null>(null);
+  const [createError, setCreateError]     = useState<string | null>(null);
+  const [createBusy, setCreateBusy]       = useState(false);
+  const [createDragging, setCreateDragging] = useState(false);
+  const [roomLimits, setRoomLimits]       = useState<PlanLimits | null>(null);
+  const createFileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
+    createClient().auth.getUser().then(async ({ data: { user } }) => {
       setMyUserId(user?.id ?? null);
+      const profile = user ? await getProfile() : null;
+      setRoomLimits(effectivePlanLimits(profile?.plan ?? 'free', profile?.isVip ?? false));
     });
     getActiveRooms().then((rs) => { setRooms(rs); setLoading(false); });
     getFriends().then((friends) => {
@@ -401,6 +414,63 @@ export default function StudyRoomsPage() {
     await closeRoom(roomId);
     setRooms((prev) => prev.filter((r) => r.id !== roomId));
   }, []);
+
+  const handleOpenCreate = useCallback(() => {
+    setCreateFile(null);
+    setCreateError(null);
+    setCreateDragging(false);
+    setCreateOpen(true);
+  }, []);
+
+  const handleCloseCreate = useCallback(() => {
+    if (createBusy) return;
+    setCreateOpen(false);
+    setCreateFile(null);
+    setCreateError(null);
+    setCreateDragging(false);
+  }, [createBusy]);
+
+  const handleCreateFile = useCallback(async (file?: File) => {
+    if (!file || createBusy) return;
+    setCreateError(null);
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setCreateFile(null);
+      setCreateError('Study Rooms currently support PDF files only.');
+      return;
+    }
+    const validation = await validatePdfOrPptx(file);
+    if (!validation.valid) {
+      setCreateFile(null);
+      setCreateError(validation.error ?? 'Please select a valid PDF.');
+      return;
+    }
+    setCreateFile(file);
+  }, [createBusy]);
+
+  const handleCreateRoom = useCallback(async () => {
+    if (!createFile || !roomLimits?.canCreateRooms || createBusy) return;
+    setCreateBusy(true);
+    setCreateError(null);
+
+    const roomId = crypto.randomUUID();
+    const documentName = createFile.name.replace(/\.pdf$/i, '').trim() || 'Study document';
+    let pdfPath: string | null = null;
+    try {
+      pdfPath = await uploadRoomPdf(roomId, createFile, documentName);
+      if (!pdfPath) throw new Error('The PDF could not be uploaded. Please try again.');
+
+      const created = await createRoom(roomId, documentName, pdfPath, roomLimits.maxRoomMembers);
+      if (!created) {
+        await createClient().storage.from('pdfs').remove([pdfPath]);
+        throw new Error('The room could not be created. Please try again.');
+      }
+
+      router.push(`/room/${roomId}`);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'The room could not be created.');
+      setCreateBusy(false);
+    }
+  }, [createBusy, createFile, roomLimits, router]);
 
   // Filter pipeline: tab → search
   const filtered = useMemo(() => {
@@ -497,6 +567,13 @@ export default function StudyRoomsPage() {
             }}>
               Join live virtual study sessions or create your own room to collaborate.
             </p>
+            <p style={{
+              margin: '5px 0 0', fontSize: 11.5, color: 'var(--text-3)',
+              lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: 5,
+            }}>
+              <Lock size={11} strokeWidth={2} aria-hidden />
+              Only rooms you host, have joined, or were invited to are visible here.
+            </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -532,21 +609,22 @@ export default function StudyRoomsPage() {
                 </button>
               )}
             </div>
-            <a
-              href="/workspace"
+            <button
+              type="button"
+              onClick={handleOpenCreate}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 height: 38, padding: '0 16px', borderRadius: 8,
                 background: 'var(--accent)', color: '#fff',
                 fontSize: 13, fontWeight: 600,
-                textDecoration: 'none', fontFamily: 'inherit',
+                border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 transition: 'background 0.13s',
               }}
               onMouseOver={(e) => { e.currentTarget.style.background = 'var(--accent-hover)'; }}
               onMouseOut={(e)  => { e.currentTarget.style.background = 'var(--accent)'; }}
             >
               <Plus size={14} /> New Room
-            </a>
+            </button>
           </div>
         </div>
 
@@ -633,6 +711,203 @@ export default function StudyRoomsPage() {
           </div>
         )}
       </main>
+
+      {createOpen && (
+        <div
+          role="presentation"
+          onClick={handleCloseCreate}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1300,
+            background: 'rgba(0,0,0,0.62)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-room-title"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 480,
+              background: 'var(--bg-float)',
+              border: '1px solid var(--bg-float-border)',
+              boxShadow: 'var(--shadow-float)', borderRadius: 12,
+              padding: 22, display: 'flex', flexDirection: 'column', gap: 18,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+              <div>
+                <h2 id="create-room-title" style={{ margin: 0, fontSize: 17, color: 'var(--text-1)' }}>
+                  Create Study Room
+                </h2>
+                <p style={{ margin: '5px 0 0', fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-3)' }}>
+                  Upload a PDF and you will enter the new private room immediately.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseCreate}
+                disabled={createBusy}
+                aria-label="Close create room dialog"
+                style={{
+                  width: 30, height: 30, borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'transparent', color: 'var(--text-2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: createBusy ? 'not-allowed' : 'pointer', opacity: createBusy ? 0.5 : 1,
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {!roomLimits ? (
+              <div style={{ padding: '26px 0', display: 'flex', justifyContent: 'center' }}>
+                <span className="spinner" style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  border: '3px solid var(--border)', borderTopColor: 'var(--accent)',
+                }} />
+              </div>
+            ) : !roomLimits.canCreateRooms ? (
+              <div style={{
+                padding: 18, borderRadius: 9, background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+              }}>
+                <p style={{ margin: '0 0 6px', fontSize: 13.5, fontWeight: 650, color: 'var(--text-1)' }}>
+                  Study Rooms require Premium or Pro
+                </p>
+                <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: 'var(--text-3)' }}>
+                  Upgrade your plan to create private rooms and collaborate in real time.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div
+                  onDragEnter={(e) => { e.preventDefault(); setCreateDragging(true); }}
+                  onDragOver={(e) => { e.preventDefault(); setCreateDragging(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); setCreateDragging(false); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setCreateDragging(false);
+                    void handleCreateFile(e.dataTransfer.files?.[0]);
+                  }}
+                  style={{
+                    border: `1.5px dashed ${createDragging ? 'var(--accent)' : 'var(--border-strong)'}`,
+                    background: createDragging ? 'var(--accent-muted)' : 'var(--bg-elevated)',
+                    borderRadius: 10, padding: '26px 20px', textAlign: 'center',
+                    transition: 'border-color 0.15s, background 0.15s',
+                  }}
+                >
+                  <div style={{
+                    width: 42, height: 42, margin: '0 auto 10px', borderRadius: 9,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: createFile ? 'var(--accent-muted)' : 'var(--bg-active)',
+                    color: createFile ? 'var(--accent)' : 'var(--text-2)',
+                  }}>
+                    {createFile ? <FileText size={20} /> : <Upload size={19} />}
+                  </div>
+                  {createFile ? (
+                    <>
+                      <p style={{ margin: '0 0 3px', fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)', overflowWrap: 'anywhere' }}>
+                        {createFile.name}
+                      </p>
+                      <p style={{ margin: '0 0 12px', fontSize: 11.5, color: 'var(--text-3)' }}>
+                        {(createFile.size / (1024 * 1024)).toFixed(1)} MB
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ margin: '0 0 4px', fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)' }}>
+                        Drop your PDF here
+                      </p>
+                      <p style={{ margin: '0 0 12px', fontSize: 11.5, color: 'var(--text-3)' }}>
+                        PDF only · maximum 50 MB
+                      </p>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    disabled={createBusy}
+                    onClick={() => createFileInputRef.current?.click()}
+                    style={{
+                      height: 32, padding: '0 13px', borderRadius: 7,
+                      border: '1px solid var(--border)', background: 'var(--bg-panel)',
+                      color: 'var(--text-2)', fontSize: 12, fontWeight: 600,
+                      cursor: createBusy ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    {createFile ? 'Choose a different PDF' : 'Browse files'}
+                  </button>
+                  <input
+                    ref={createFileInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    hidden
+                    disabled={createBusy}
+                    onChange={(e) => {
+                      void handleCreateFile(e.target.files?.[0]);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
+
+                {createError && (
+                  <p role="alert" style={{ margin: 0, fontSize: 12.5, color: 'var(--red)', lineHeight: 1.45 }}>
+                    {createError}
+                  </p>
+                )}
+              </>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                onClick={handleCloseCreate}
+                disabled={createBusy}
+                style={{
+                  height: 36, padding: '0 15px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'transparent',
+                  color: 'var(--text-2)', fontSize: 12.5, fontWeight: 600,
+                  cursor: createBusy ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Cancel
+              </button>
+              {roomLimits && !roomLimits.canCreateRooms ? (
+                <button
+                  type="button"
+                  onClick={() => router.push('/pricing')}
+                  style={{
+                    height: 36, padding: '0 16px', borderRadius: 8, border: 'none',
+                    background: 'var(--accent)', color: '#fff', fontSize: 12.5,
+                    fontWeight: 650, cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  View plans
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => { void handleCreateRoom(); }}
+                  disabled={!createFile || createBusy || !roomLimits}
+                  style={{
+                    height: 36, minWidth: 126, padding: '0 16px', borderRadius: 8, border: 'none',
+                    background: 'var(--accent)', color: '#fff', fontSize: 12.5,
+                    fontWeight: 650, cursor: !createFile || createBusy || !roomLimits ? 'not-allowed' : 'pointer',
+                    opacity: !createFile || createBusy || !roomLimits ? 0.55 : 1, fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  }}
+                >
+                  {createBusy && <span className="spinner" style={{
+                    width: 14, height: 14, borderRadius: '50%',
+                    border: '2px solid rgba(255,255,255,0.45)', borderTopColor: '#fff',
+                  }} />}
+                  {createBusy ? 'Creating…' : 'Create Room'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

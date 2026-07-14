@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
   ChevronUp, FilePlus, Search, CheckCircle, Share2,
-  Timer, Download, Minimize2, Users,
+  Timer, Download, Users,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
 import { usePDF } from '@/hooks/usePDF';
@@ -18,6 +18,7 @@ import { usePDFPageImages } from '@/hooks/usePDFPageImages';
 import { useStudySession } from '@/hooks/useStudySession';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
+import { useToolStrokeSize } from '@/hooks/useToolStrokeSize';
 import PDFUploader from '@/components/PDFUploader';
 import PDFWithDrawing from '@/components/PDFWithDrawing';
 import PDFScrollViewer from '@/components/PDFScrollViewer';
@@ -65,7 +66,7 @@ import {
 } from '@/lib/supabase/db';
 import { getPendingReopenFile, clearPendingReopenFile } from '@/lib/pendingReopenFile';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
-import type { Tool, PenType } from '@/lib/drawing';
+import { MAX_UNDO_HISTORY, type Tool, type PenType } from '@/lib/drawing';
 
 // ── Doc order helper ──────────────────────────────────────────────────────────
 
@@ -112,13 +113,15 @@ function SplitIcon() {
 // ── Reusable header icon button ───────────────────────────────────────────────
 
 function HdrBtn({
-  onClick, title, active = false, children,
+  onClick, title, active = false, tone = 'default', children,
 }: {
   onClick?: () => void;
   title?: string;
   active?: boolean;
+  tone?: 'default' | 'danger';
   children: React.ReactNode;
 }) {
+  const isDanger = tone === 'danger';
   return (
     <button
       onClick={onClick}
@@ -128,18 +131,30 @@ function HdrBtn({
         width: 42, height: 42,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         borderRadius: 4, flexShrink: 0,
-        background: active ? 'var(--bg-active)' : 'transparent',
-        border: `1px solid ${active ? 'var(--border-strong)' : 'transparent'}`,
-        color: active ? 'var(--text-1)' : 'var(--text-2)',
+        background: isDanger ? 'var(--red-muted)' : active ? 'var(--bg-active)' : 'transparent',
+        border: `1px solid ${isDanger ? 'var(--red-muted)' : active ? 'var(--border-strong)' : 'transparent'}`,
+        color: isDanger ? 'var(--red)' : active ? 'var(--text-1)' : 'var(--text-2)',
         cursor: 'pointer',
         transition: 'background 0.13s, color 0.13s, border-color 0.13s',
       }}
       onMouseOver={(e) => {
+        if (isDanger) {
+          Object.assign(e.currentTarget.style, {
+            background: 'var(--red)', color: '#fff', borderColor: 'var(--red)',
+          });
+          return;
+        }
         if (!active) Object.assign(e.currentTarget.style, {
           background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
         });
       }}
       onMouseOut={(e) => {
+        if (isDanger) {
+          Object.assign(e.currentTarget.style, {
+            background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'var(--red-muted)',
+          });
+          return;
+        }
         if (!active) Object.assign(e.currentTarget.style, {
           background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
         });
@@ -1195,14 +1210,14 @@ export default function WorkspacePage() {
   const [leftTool, setLeftTool]             = useState<Tool>('cursor');
   const [leftPenType, setLeftPenType]       = useState<PenType>('normal');
   const [leftColor, setLeftColor]           = useState('#ededf0');
-  const [leftStrokeSize, setLeftStrokeSize] = useState(5);
+  const { strokeSize: leftStrokeSize, setStrokeSize: setLeftStrokeSize } = useToolStrokeSize(leftTool, leftPenType);
   const [leftZoom, setLeftZoom]             = useState(1.0);
 
   // ── Right-side drawing state ──────────────────────────────────────────────
   const [rightTool, setRightTool]             = useState<Tool>('cursor');
   const [rightPenType, setRightPenType]       = useState<PenType>('normal');
   const [rightColor, setRightColor]           = useState('#ededf0');
-  const [rightStrokeSize, setRightStrokeSize] = useState(5);
+  const { strokeSize: rightStrokeSize, setStrokeSize: setRightStrokeSize } = useToolStrokeSize(rightTool, rightPenType);
   const [rightZoom, setRightZoom]             = useState(1.0);
 
   // ── Active side ───────────────────────────────────────────────────────────
@@ -1572,6 +1587,7 @@ export default function WorkspacePage() {
   // stamps the lastInteractedBlankIdRef that resolveScrollBlankPageId reads.
   const {
     blankUndoStacksRef,
+    blankRedoStacksRef,
     getBlankDrawingScroll,
     saveBlankDrawingScroll,
     resolveScrollBlankPageId,
@@ -1600,6 +1616,7 @@ export default function WorkspacePage() {
   // PDF analogue of the blank lastInteracted ref (used as a fallback if
   // the user scrolled away between their stroke and the Undo click).
   const pdfUndoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
+  const pdfRedoStacksRef = useRef<Record<string, Array<string | undefined>>>({});
   const lastInteractedPdfPageRef = useRef<{ docId: string; pdfPage: number } | null>(null);
 
   const savePdfDrawingScroll = useCallback((docId: string, page: number, data: string) => {
@@ -1608,8 +1625,9 @@ export default function WorkspacePage() {
     if (prev !== data) {
       const stack = pdfUndoStacksRef.current[key] ?? [];
       stack.push(prev);
-      if (stack.length > 50) stack.shift();
+      if (stack.length > MAX_UNDO_HISTORY) stack.shift();
       pdfUndoStacksRef.current[key] = stack;
+      pdfRedoStacksRef.current[key] = [];
       lastInteractedPdfPageRef.current = { docId, pdfPage: page };
     }
     saveDrawing(docId, page, data);
@@ -1628,12 +1646,12 @@ export default function WorkspacePage() {
   }, [activeDocument]);
 
   // ── Undo + Clear handlers (pure extraction — see useUndoClear) ───────────
-  const { handleUndo, handleClear } = useUndoClear({
+  const { handleUndo, handleRedo, handleClear } = useUndoClear({
     showSplit, activeSide, rightSideMode, viewMode, currentVP,
     pdfDrawingRef, blankDrawingRef, rightDocDrawingRef,
-    blankUndoStacksRef, resolveScrollBlankPageId,
+    blankUndoStacksRef, blankRedoStacksRef, resolveScrollBlankPageId,
     updateCanvasData, docBlankPages,
-    pdfUndoStacksRef, lastInteractedPdfPageRef, activeDocument,
+    pdfUndoStacksRef, pdfRedoStacksRef, lastInteractedPdfPageRef, activeDocument,
     getPdfDrawing: getDrawing, savePdfDrawing: saveDrawing,
   });
 
@@ -1693,6 +1711,10 @@ export default function WorkspacePage() {
         }
         if (e.key === 'z' || e.key === 'Z') {
           e.preventDefault();
+          if (e.shiftKey) {
+            handleRedo();
+            return;
+          }
           handleUndo();
           return;
         }
@@ -1726,7 +1748,7 @@ export default function WorkspacePage() {
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
-  }, [goVirtualNext, goVirtualPrev, handleLeftZoomChange, handleRightZoomChange, handleUndo,
+  }, [goVirtualNext, goVirtualPrev, handleLeftZoomChange, handleRightZoomChange, handleUndo, handleRedo,
       handleToggleBookmark, handleInsertBlankPage, showToast,
       setLeftTool, setRightTool, setLeftPenType, setRightPenType,
       isFullscreen, exitFullscreen]);
@@ -2250,19 +2272,6 @@ export default function WorkspacePage() {
 
                   <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
 
-                  {/* Split-view toggle moved to PdfTopToolbar above the doc
-                      so it sits with the other view controls (zoom +
-                      fullscreen). Only the right-panel toggle remains here. */}
-                  <HdrBtn
-                    onClick={() => setRightPanelOpen((o) => !o)}
-                    title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
-                    active={rightPanelOpen}
-                  >
-                    <PanelRight size={18} />
-                  </HdrBtn>
-
-                  <div style={{ width: 1, height: 16, background: 'var(--border)', flexShrink: 0 }} />
-
                   <HdrBtn onClick={() => setPomodoroOpen((o) => !o)} title={t('ws_pomodoro_title')} active={pomodoroOpen}>
                     <Timer size={17} />
                   </HdrBtn>
@@ -2332,6 +2341,14 @@ export default function WorkspacePage() {
                   <HdrBtn onClick={() => setShortcutsOpen(o => !o)} title={t('ws_shortcuts')}>
                     <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1 }}>?</span>
                   </HdrBtn>
+
+                  <HdrBtn
+                    onClick={() => setRightPanelOpen((open) => !open)}
+                    title={rightPanelOpen ? t('ws_collapse_tools') : t('ws_expand_tools')}
+                    tone="danger"
+                  >
+                    <PanelRight size={18} />
+                  </HdrBtn>
                 </>
               }
             />
@@ -2398,6 +2415,7 @@ export default function WorkspacePage() {
                         currentVirtualIndex={virtualIndex}
                         onPageChange={setVirtualIndex}
                         zoom={leftZoom}
+                        onZoomChange={handleLeftZoomChange}
                         getNotesForPage={getNotesForPage}
                         isRecording={isRecording}
                         recordingContext={recordingContext}
@@ -2632,6 +2650,8 @@ export default function WorkspacePage() {
                     setVoiceSheetOpen(true);
                   } : undefined}
                   isRecording={isRecording}
+                  onUndo={handleUndo}
+                  onRedo={handleRedo}
                   onClearAllDrawings={hasDocument && !isPPTX ? handleClearAllDrawings : undefined}
                   onCreateRoom={hasDocument && activeDocument?.type === 'pdf' ? handleCreateRoom : undefined}
                   splitMode={showSplit}
@@ -2645,57 +2665,6 @@ export default function WorkspacePage() {
                     + Esc-hinted so users can clearly find their way out.
                     Moved from bottom-right to avoid clashing with the
                     BottomPillBar (now visible in fullscreen too). */}
-                {isFullscreen && (
-                  <button
-                    onClick={toggleFullscreen}
-                    title="Exit fullscreen (Esc)"
-                    aria-label="Exit fullscreen"
-                    className="animate-scale-in"
-                    style={{
-                      position: 'absolute', top: 14, right: 14, zIndex: 31,
-                      height: 40, padding: '0 14px',
-                      borderRadius: 9999,
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      background: 'var(--bg-panel)',
-                      border: '1px solid var(--border-strong)',
-                      boxShadow: 'var(--shadow-float)',
-                      color: 'var(--text-1)',
-                      cursor: 'pointer', fontFamily: 'inherit',
-                      fontSize: 13, fontWeight: 600,
-                      transition: 'background 0.15s, border-color 0.15s, color 0.15s',
-                    }}
-                    onMouseOver={(e) => Object.assign(e.currentTarget.style, {
-                      background: 'var(--accent-muted)',
-                      borderColor: 'var(--accent)',
-                      color: 'var(--accent)',
-                    })}
-                    onMouseOut={(e) => Object.assign(e.currentTarget.style, {
-                      background: 'var(--bg-panel)',
-                      borderColor: 'var(--border-strong)',
-                      color: 'var(--text-1)',
-                    })}
-                  >
-                    <Minimize2 size={16} strokeWidth={1.8} />
-                    <span>Exit fullscreen</span>
-                    <kbd
-                      className="hidden md:inline-flex"
-                      style={{
-                        alignItems: 'center',
-                        padding: '2px 6px',
-                        fontSize: 10.5, fontWeight: 600, letterSpacing: '0.02em',
-                        fontFamily: 'var(--font-mono), monospace',
-                        color: 'var(--text-3)',
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 4,
-                        marginLeft: 2,
-                      }}
-                    >
-                      Esc
-                    </kbd>
-                  </button>
-                )}
-
                 {/* Restore bottom bar button */}
                 {!navBarVisible && (
                   <button
@@ -2762,7 +2731,6 @@ export default function WorkspacePage() {
           >
             <RightPanelTabs
               isOpen={rightPanelOpen}
-              onClose={() => setRightPanelOpen(false)}
               activeTab={rightPanelTab}
               onTabChange={setRightPanelTab}
               notes={

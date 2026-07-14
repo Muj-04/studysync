@@ -1,156 +1,151 @@
 'use client';
+
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
+import { ArrowLeft, BookOpen, CircleHelp, Mail, MailCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import styles from './forgot-password.module.css';
 
 const REDIRECT = 'https://pdf-study-workspace.vercel.app/reset-password';
 
-const glassInput: React.CSSProperties = {
-  width: '100%',
-  padding: '0.75rem 2.8rem 0.75rem 1rem',
-  background: 'transparent',
-  border: '2px solid rgba(255,255,255,0.2)',
-  borderRadius: '9999px',
-  color: '#fff',
-  fontSize: '0.875rem',
-  boxSizing: 'border-box',
-  transition: 'border-color 0.2s',
-  fontFamily: 'inherit',
-};
+function Brand() {
+  return (
+    <Link href="/" className={styles.brand} aria-label="StudySync home">
+      <span className={styles.brandMark}><BookOpen size={19} strokeWidth={2.1} /></span>
+      <span>StudySync</span>
+    </Link>
+  );
+}
+
+function Testimonial() {
+  return (
+    <div className={styles.testimonial}>
+      <Image
+        src="/forgot-password-students.png"
+        alt="Students studying together around a table"
+        fill
+        priority
+        sizes="(max-width: 920px) 0px, 44vw"
+        className={styles.testimonialImage}
+      />
+      <div className={styles.testimonialShade} />
+      <div className={styles.testimonialCopy}>
+        <div className={styles.stars} aria-label="Five star review">★★★★★</div>
+        <blockquote>
+          “StudySync completely changed how I prepare for finals. The AI flashcards<br className={styles.quoteBreak} />
+          and live study rooms saved me dozens of hours this semester.”
+        </blockquote>
+        <div className={styles.student}>
+          <span className={styles.studentAvatar} role="img" aria-label="Jessica Parker" />
+          <span>
+            <strong>Jessica Parker</strong>
+            <small>Pre-Med Student, Stanford</small>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail]     = useState('');
-  const [error, setError]     = useState('');
-  const [sent, setSent]       = useState(false);
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSend = async () => {
-    if (!email.trim()) { setError('Please enter your email address.'); return; }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
     setError('');
     setLoading(true);
-    const supabase = createClient();
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    const { error: resetError } = await createClient().auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: REDIRECT,
     });
     setLoading(false);
-    if (err) { setError(err.message); return; }
+
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
     setSent(true);
   };
 
-  const BG = "https://i.pinimg.com/originals/d7/b9/0c/d7b90cc80898e8823455a127945719af.jpg";
-
   return (
-    <>
-      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, backgroundImage: `url('${BG}')`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', zIndex: -2, pointerEvents: 'none' }} />
-      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.52)', zIndex: -1, pointerEvents: 'none' }} />
-      <div className="min-h-screen flex items-center justify-center p-4">
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 360,
-          padding: '2.5rem 2rem',
-          background: 'rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(15px)',
-          WebkitBackdropFilter: 'blur(15px)',
-          border: '2px solid rgba(255,255,255,0.2)',
-          borderRadius: '16px',
-          color: '#fff',
-        }}
-      >
-        <h1 style={{ textAlign: 'center', fontSize: '1.75rem', fontWeight: 600, marginBottom: 4 }}>
-          Reset Password
-        </h1>
-        <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>
-          {sent ? 'Check your inbox and follow the instructions.' : 'Enter your email and we\'ll send a reset link.'}
-        </p>
-
-        {error && (
-          <div style={{
-            marginBottom: '1rem', padding: '0.6rem 1rem',
-            background: 'rgba(229,72,77,0.18)', border: '1px solid rgba(229,72,77,0.4)',
-            borderRadius: 8, fontSize: '0.8rem', color: '#ff8a8e', textAlign: 'center',
-          }}>
-            {error}
-          </div>
-        )}
-
-        {sent ? (
-          /* ── Success state ── */
-          <div style={{
-            marginBottom: '1.5rem', padding: '0.9rem 1rem',
-            background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.4)',
-            borderRadius: 10, textAlign: 'center',
-          }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>📬</div>
-            <p style={{ fontSize: '0.85rem', color: '#6ee7b7', margin: 0, lineHeight: 1.5 }}>
-              We sent a reset link to{' '}
-              <span style={{ color: '#ffffff', fontWeight: 600 }}>{email.trim()}</span>
-            </p>
-            <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', margin: '4px 0 0', lineHeight: 1.5 }}>
-              It may take a minute to arrive.
+    <main className={styles.page}>
+      <section className={styles.storyPanel} aria-label="About StudySync">
+        <Brand />
+        <div className={styles.storyContent}>
+          <div>
+            <h1>Get back to your studies<br />in no time.</h1>
+            <p>
+              Don&apos;t worry, it happens to the best of us. Reset your<br className={styles.desktopBreak} />
+              password securely and regain access to all your notes<br className={styles.desktopBreak} />
+              and study rooms.
             </p>
           </div>
-        ) : (
-          /* ── Email input ── */
-          <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-            <input
-              type="email"
-              placeholder="Email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              style={glassInput}
-            />
-            <i className="bx bx-envelope" style={{
-              position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)',
-              fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none',
-            }} />
-          </div>
-        )}
+          <Testimonial />
+        </div>
+      </section>
 
-        {!sent && (
-          <button
-            onClick={handleSend}
-            disabled={loading}
-            style={{
-              display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
-              background: loading ? 'rgba(255,255,255,0.7)' : '#ffffff',
-              color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
-              border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-              marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center',
-              boxSizing: 'border-box',
-            }}
-          >
-            {loading ? 'Sending…' : 'Send Reset Link'}
-          </button>
-        )}
-
-        {sent && (
-          <Link
-            href="/login"
-            style={{
-              display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
-              background: 'rgba(255,255,255,0.15)', color: '#fff',
-              fontWeight: 600, fontSize: '0.9rem', textAlign: 'center',
-              textDecoration: 'none', marginBottom: '1.5rem', boxSizing: 'border-box',
-              border: '1.5px solid rgba(255,255,255,0.25)',
-            }}
-          >
-            Back to Login
+      <section className={styles.formPanel}>
+        <div className={styles.formCard}>
+          <Link href="/login" className={styles.backLink}>
+            <ArrowLeft size={17} strokeWidth={1.8} />
+            Back to log in
           </Link>
-        )}
 
-        {!sent && (
-          <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
-            Remember your password?{' '}
-            <Link href="/login" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}>
-              Login
-            </Link>
+          <div className={styles.mailIcon} aria-hidden>
+            {sent ? <MailCheck size={23} strokeWidth={1.9} /> : <Mail size={23} strokeWidth={1.9} />}
+          </div>
+
+          <h2>{sent ? 'Check your inbox' : 'Reset password'}</h2>
+          <p className={styles.formIntro}>
+            {sent
+              ? <>We sent a password reset link to <strong>{email.trim()}</strong>. Follow the instructions in the email to continue.</>
+              : <>Enter the email associated with your account and we&apos;ll send<br className={styles.desktopBreak} /> you a link to reset your password.</>}
           </p>
-        )}
-      </div>
-      </div>
-    </>
+
+          {error && <div className={styles.errorMessage} role="alert">{error}</div>}
+
+          {!sent ? (
+            <form
+              className={styles.form}
+              onSubmit={(event) => { event.preventDefault(); void handleSend(); }}
+              noValidate
+            >
+              <label htmlFor="reset-email">Email address</label>
+              <input
+                id="reset-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                aria-invalid={!!error}
+                disabled={loading}
+              />
+              <button type="submit" disabled={loading}>
+                {loading ? 'Sending…' : 'Send Reset Link'}
+              </button>
+            </form>
+          ) : (
+            <div className={styles.sentActions}>
+              <button type="button" onClick={() => { setSent(false); setError(''); }}>
+                Send another link
+              </button>
+              <Link href="/login">Back to log in</Link>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <button type="button" className={styles.helpButton} aria-label="Help" title="Help">
+        <CircleHelp size={34} strokeWidth={1.5} />
+      </button>
+    </main>
   );
 }

@@ -36,6 +36,11 @@ function getAdmin() {
   );
 }
 
+async function recordSuccessfulRequest(admin: ReturnType<typeof getAdmin>, userId: string, month: string) {
+  const { error } = await admin.rpc('increment_ai_usage', { p_user_id: userId, p_month: month });
+  if (error) console.error('[AI usage] increment failed:', error.message);
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -138,12 +143,7 @@ export async function POST(req: NextRequest) {
       });
       const raw = (msg.content[0] as { type: string; text: string }).text ?? '[]';
       // Increment counter for all non-VIP plans (fire-and-forget)
-      if (!isVip) {
-        admin.from('ai_usage').upsert(
-          { user_id: user.id, month, count: currentCount + 1 },
-          { onConflict: 'user_id,month' },
-        ).then(() => {});
-      }
+      await recordSuccessfulRequest(admin, user.id, month);
       return NextResponse.json({ result: raw });
     } else if (action === 'summary') {
       prompt =
@@ -183,12 +183,7 @@ export async function POST(req: NextRequest) {
     const result = (message.content[0] as { type: string; text: string }).text ?? '';
 
     // Increment counter for all non-VIP plans (fire-and-forget — don't block response)
-    if (!isVip) {
-      admin.from('ai_usage').upsert(
-        { user_id: user.id, month, count: currentCount + 1 },
-        { onConflict: 'user_id,month' },
-      ).then(() => {});
-    }
+    await recordSuccessfulRequest(admin, user.id, month);
 
     return NextResponse.json({ result });
   } catch (err) {

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification } from '@/lib/supabase/db';
+import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, deleteAllNotifications } from '@/lib/supabase/db';
 import type { AppNotification } from '@/lib/supabase/db';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { activeDmChatRef } from '@/lib/activeDmChat';
@@ -108,5 +108,11 @@ export function useNotifications() {
     });
   }, []);
 
-  return { notifications, unreadCount, loading, markRead, markAllRead, removeNotification, deleteNotif };
+  const deleteAll = useCallback(async () => {
+    await deleteAllNotifications();
+    setNotifications([]);
+    setUnreadCount(0);
+  }, []);
+
+  return { notifications, unreadCount, loading, markRead, markAllRead, removeNotification, deleteNotif, deleteAll };
 }
