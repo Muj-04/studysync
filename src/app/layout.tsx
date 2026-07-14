@@ -17,16 +17,22 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${geistMono.variable} h-full`}>
+    <html lang="en" className={`${geistMono.variable} h-full`} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){
+var S=function(s){return String(s).replace(/[^\\x00-\\x7f]/g,'')};
+var HA=Headers.prototype.append,HS=Headers.prototype.set;
+Headers.prototype.append=function(k,v){return HA.call(this,S(k),S(v))};
+Headers.prototype.set=function(k,v){return HS.call(this,S(k),S(v))};
+})()` }} />
         {/* Prevent flash of wrong theme / accent / font-size / colors on load */}
         <script dangerouslySetInnerHTML={{ __html: `try{
 var r=document.documentElement;
@@ -69,7 +75,7 @@ var ln=g('studysync_language');if(ln==='ar'){r.setAttribute('lang','ar');r.setAt
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(function(){});` }} />
       </head>
-      <body className="min-h-full flex flex-col antialiased">
+      <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>

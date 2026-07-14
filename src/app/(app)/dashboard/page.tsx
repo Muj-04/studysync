@@ -184,12 +184,14 @@ export default function DashboardPage() {
                       </p>
                     </div>
                   ) : docs.map((doc) => (
-                    <div
+                    <a
                       key={doc.id}
+                      href="/workspace"
+                      onClick={() => { sessionStorage.setItem('studysync_open_doc', doc.id); }}
                       style={{
                         display: 'flex', alignItems: 'flex-start', gap: 10,
-                        padding: '10px 10px', borderRadius: 4, marginBottom: 2, cursor: 'default',
-                        transition: 'background 0.1s',
+                        padding: '10px 10px', borderRadius: 4, marginBottom: 2, cursor: 'pointer',
+                        transition: 'background 0.1s', textDecoration: 'none', color: 'inherit',
                       }}
                       onMouseOver={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                       onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -229,7 +231,7 @@ export default function DashboardPage() {
                           )}
                         </div>
                       </div>
-                    </div>
+                    </a>
                   ))}
                 </div>
               </div>

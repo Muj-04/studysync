@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, BookOpen, Eye, EyeOff, FileText, Layers, Loader2, MessageSquare, Mic, PenLine, Sparkles } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -53,6 +53,8 @@ function WorkspacePreview() {
 }
 
 export default function LoginPage() {
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -69,7 +71,10 @@ export default function LoginPage() {
   useEffect(() => {
     setWasKicked(new URLSearchParams(window.location.search).get('kicked') === '1');
     const savedEmail = localStorage.getItem('studysync_login_email');
-    if (savedEmail) setEmail(savedEmail);
+    if (savedEmail) {
+      setEmail(savedEmail);
+      if (emailRef.current) emailRef.current.value = savedEmail;
+    }
     createClient().auth.getUser().then(({ data: { user } }) => {
       if (user) window.location.replace('/dashboard');
     }).catch(() => {});
@@ -98,21 +103,26 @@ export default function LoginPage() {
     } catch { /* referral processing must not block login */ }
   };
 
-  const validate = () => {
-    const cleanEmail = email.trim();
+  const validate = (rawEmail: string, rawPassword: string) => {
+    const cleanEmail = rawEmail.trim();
     let valid = true;
     if (!cleanEmail) { setEmailError('Enter your email address.'); valid = false; }
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) { setEmailError('Enter a valid email address.'); valid = false; }
-    if (!password) { setPasswordError('Enter your password.'); valid = false; }
+    if (!rawPassword) { setPasswordError('Enter your password.'); valid = false; }
     return valid;
   };
 
   const handleLogin = async () => {
-    if (loading || !validate()) return;
+    if (loading) return;
+    // Read the DOM values directly as well as React state. Capacitor WebViews
+    // can update autofilled inputs without reliably dispatching an input event.
+    const rawEmail = emailRef.current?.value ?? email;
+    const rawPassword = passwordRef.current?.value ?? password;
+    if (!validate(rawEmail, rawPassword)) return;
     setError(''); setLoading(true);
-    const cleanEmail = email.trim().replace(/[^\x20-\x7e]/g, '');
+    const cleanEmail = rawEmail.trim().replace(/[^\x20-\x7e]/g, '');
     try {
-      const { error: authError } = await createClient().auth.signInWithPassword({ email: cleanEmail, password });
+      const { error: authError } = await createClient().auth.signInWithPassword({ email: cleanEmail, password: rawPassword });
       if (authError) {
         setError(/invalid login credentials/i.test(authError.message) ? 'Incorrect email or password. Please try again.' : authError.message);
         return;
@@ -178,7 +188,7 @@ export default function LoginPage() {
           <form onSubmit={(event) => { event.preventDefault(); handleLogin(); }} noValidate>
             <label htmlFor="login-email">Email</label>
             <input
-              id="login-email" type="email" inputMode="email" autoComplete="email"
+              ref={emailRef} id="login-email" name="email" type="email" inputMode="email" autoComplete="email"
               value={email} placeholder="you@university.edu"
               aria-invalid={!!emailError} aria-describedby={emailError ? 'email-error' : undefined}
               onChange={(event) => { setEmail(event.target.value); setEmailError(''); setError(''); }}
@@ -189,7 +199,7 @@ export default function LoginPage() {
             <label htmlFor="login-password">Password</label>
             <div className="password-wrap">
               <input
-                id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password"
+                ref={passwordRef} id="login-password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password"
                 value={password} placeholder="Enter your password"
                 aria-invalid={!!passwordError} aria-describedby={passwordError ? 'password-error' : undefined}
                 onChange={(event) => { setPassword(event.target.value); setPasswordError(''); setError(''); }}
