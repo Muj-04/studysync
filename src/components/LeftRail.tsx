@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Files, Layers, Video, Users, MessageCircle, Settings, CreditCard, Sparkles, Clock,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { effectivePlanLimits, type Plan } from '@/lib/planLimits';
@@ -32,14 +33,41 @@ const COLLABORATE_ITEMS = [
   { href: '/community',   label: 'Community',   Icon: MessageCircle },
 ] as const;
 
+const COLLAPSED_STORAGE_KEY = 'studysync_main_sidebar_collapsed';
+
 export default function LeftRail() {
   const pathname = usePathname() ?? '';
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        setCollapsed(window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === 'true');
+      } catch {
+        // Keep the sidebar expanded when browser storage is unavailable.
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(COLLAPSED_STORAGE_KEY, String(next));
+      } catch {
+        // The interaction should still work even if persistence is unavailable.
+      }
+      return next;
+    });
+  };
 
   return (
     <aside
       className="left-rail"
       style={{
-        width: 220,
+        width: collapsed ? 64 : 220,
         flexShrink: 0,
         background: 'var(--bg-sidebar)',
         borderRight: '1px solid var(--border-subtle)',
@@ -50,90 +78,151 @@ export default function LeftRail() {
         top: 0,
         zIndex: 50,
         fontFamily: 'var(--font-body)',
+        transition: 'width 0.2s ease',
       }}
     >
       {/* Brand */}
-      <a
-        href="/dashboard"
+      <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
-          padding: '18px 18px 22px',
-          textDecoration: 'none',
+          justifyContent: collapsed ? 'center' : 'space-between',
+          gap: 8,
+          padding: collapsed ? '14px 10px 10px' : '18px 12px 22px 18px',
           flexShrink: 0,
         }}
       >
-        <div
+        <a
+          href="/dashboard"
+          aria-label="StudySync dashboard"
           style={{
-            width: 30,
-            height: 30,
-            borderRadius: 7,
-            background: 'var(--accent)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff',
-            fontSize: 15,
-            fontWeight: 700,
-            letterSpacing: '-0.02em',
+            gap: 10,
+            minWidth: 0,
+            textDecoration: 'none',
           }}
         >
-          S
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 7,
+              background: 'var(--accent)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: '-0.02em',
+              flexShrink: 0,
+            }}
+          >
+            S
+          </div>
+          {!collapsed && (
+            <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>
+              StudySync
+            </span>
+          )}
+        </a>
+
+        {!collapsed && (
+          <CollapseButton collapsed={collapsed} onClick={toggleCollapsed} />
+        )}
+      </div>
+
+      {collapsed && (
+        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 10, flexShrink: 0 }}>
+          <CollapseButton collapsed={collapsed} onClick={toggleCollapsed} />
         </div>
-        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>
-          StudySync
-        </span>
-      </a>
+      )}
 
       {/* Scrollable nav */}
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '0 12px', minHeight: 0 }}>
-        <RailSection label="Study"        items={STUDY_ITEMS}        pathname={pathname} />
-        <RailSection label="Collaborate"  items={COLLABORATE_ITEMS}  pathname={pathname} />
+      <nav
+        aria-label="Main navigation"
+        style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: collapsed ? '0 10px' : '0 12px', minHeight: 0 }}
+      >
+        <RailSection label="Study"        items={STUDY_ITEMS}        pathname={pathname} collapsed={collapsed} />
+        <RailSection label="Collaborate"  items={COLLABORATE_ITEMS}  pathname={pathname} collapsed={collapsed} />
 
-        <div style={{ height: 14 }} />
-        <RailItem href="/settings" label="Settings" Icon={Settings} pathname={pathname} />
-        <RailItem href="/pricing" label="Pricing" Icon={CreditCard} pathname={pathname} />
+        <div style={{ height: collapsed ? 8 : 14 }} />
+        <RailItem href="/settings" label="Settings" Icon={Settings} pathname={pathname} collapsed={collapsed} />
+        <RailItem href="/pricing" label="Pricing" Icon={CreditCard} pathname={pathname} collapsed={collapsed} />
       </nav>
 
       {/* Bottom usage widgets */}
       <div style={{
-        padding: '12px 14px 16px',
+        padding: collapsed ? '12px 10px 16px' : '12px 14px 16px',
         borderTop: '1px solid var(--border-subtle)',
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
         flexShrink: 0,
       }}>
-        <UsageWidget kind="ai" />
-        <UsageWidget kind="study" />
+        <UsageWidget kind="ai" collapsed={collapsed} />
+        <UsageWidget kind="study" collapsed={collapsed} />
       </div>
     </aside>
   );
 }
 
+function CollapseButton({ collapsed, onClick }: { collapsed: boolean; onClick: () => void }) {
+  const label = collapsed ? 'Expand main sidebar' : 'Collapse main sidebar';
+  const Icon = collapsed ? PanelLeftOpen : PanelLeftClose;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-expanded={!collapsed}
+      title={label}
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 7,
+        border: '1px solid var(--border-subtle)',
+        background: 'var(--bg-hover)',
+        color: 'var(--text-2)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      <Icon size={16} />
+    </button>
+  );
+}
+
 function RailSection({
-  label, items, pathname,
+  label, items, pathname, collapsed,
 }: {
   label: string;
   items: ReadonlyArray<{ href: string; label: string; Icon: React.ElementType }>;
   pathname: string;
+  collapsed: boolean;
 }) {
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{
-        padding: '14px 10px 6px',
-        fontSize: 10.5,
-        fontWeight: 600,
-        letterSpacing: '0.08em',
-        textTransform: 'uppercase',
-        color: 'var(--text-3)',
-      }}>
-        {label}
-      </div>
+    <div style={{ marginBottom: collapsed ? 10 : 8 }}>
+      {!collapsed && (
+        <div style={{
+          padding: '14px 10px 6px',
+          fontSize: 10.5,
+          fontWeight: 600,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: 'var(--text-3)',
+        }}>
+          {label}
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {items.map((it) => (
-          <RailItem key={it.href} {...it} pathname={pathname} />
+          <RailItem key={it.href} {...it} pathname={pathname} collapsed={collapsed} />
         ))}
       </div>
     </div>
@@ -141,22 +230,26 @@ function RailSection({
 }
 
 function RailItem({
-  href, label, Icon, pathname,
+  href, label, Icon, pathname, collapsed,
 }: {
   href: string;
   label: string;
   Icon: React.ElementType;
   pathname: string;
+  collapsed: boolean;
 }) {
   const active = pathname === href || pathname.startsWith(href + '/');
   return (
     <a
       href={href}
+      aria-label={label}
+      title={collapsed ? label : undefined}
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 11,
-        padding: '8px 10px',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        gap: collapsed ? 0 : 11,
+        padding: collapsed ? '9px 0' : '8px 10px',
         borderRadius: 7,
         textDecoration: 'none',
         color: active ? 'var(--accent)' : 'var(--text-2)',
@@ -178,8 +271,8 @@ function RailItem({
         }
       }}
     >
-      <Icon size={16} strokeWidth={active ? 2.25 : 2} />
-      <span>{label}</span>
+      <Icon size={collapsed ? 18 : 16} strokeWidth={active ? 2.25 : 2} />
+      {!collapsed && <span>{label}</span>}
     </a>
   );
 }
@@ -190,7 +283,7 @@ function RailItem({
 // Study Time — sums study_sessions.duration_seconds for this calendar week.
 // Both queries are RLS-scoped to the caller; we don't need plan/billing here.
 
-function UsageWidget({ kind }: { kind: 'ai' | 'study' }) {
+function UsageWidget({ kind, collapsed }: { kind: 'ai' | 'study'; collapsed: boolean }) {
   const [data, setData] = useState<{ value: number; max: number } | null>(null);
 
   useEffect(() => {
@@ -251,6 +344,7 @@ function UsageWidget({ kind }: { kind: 'ai' | 'study' }) {
         sub="This month"
         ratio={ratio}
         barColor="var(--accent)"
+        collapsed={collapsed}
       />
     );
   }
@@ -269,12 +363,13 @@ function UsageWidget({ kind }: { kind: 'ai' | 'study' }) {
       sub="This week"
       ratio={ratio}
       barColor="var(--green)"
+      collapsed={collapsed}
     />
   );
 }
 
 function Widget({
-  Icon, label, right, sub, ratio, barColor,
+  Icon, label, right, sub, ratio, barColor, collapsed,
 }: {
   Icon: React.ElementType;
   label: string;
@@ -282,7 +377,43 @@ function Widget({
   sub: string;
   ratio: number;
   barColor: string;
+  collapsed: boolean;
 }) {
+  if (collapsed) {
+    return (
+      <div
+        title={`${label}: ${right} (${sub})`}
+        aria-label={`${label}: ${right}, ${sub}`}
+        style={{
+          height: 36,
+          borderRadius: 7,
+          background: 'var(--bg-hover)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <Icon size={16} style={{ color: barColor }} />
+        <div style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 3,
+          background: 'var(--border-subtle)',
+        }}>
+          <div style={{
+            height: '100%',
+            width: `${Math.max(0, Math.min(100, ratio * 100))}%`,
+            background: barColor,
+          }} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
