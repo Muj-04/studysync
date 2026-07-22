@@ -18,7 +18,7 @@ import styles from './LandingHero.module.css';
 
 const PDF_LINES = [88, 96, 78, 92, 84, 64, 91, 76, 94, 69];
 
-function ProductPreview() {
+export function ProductPreview() {
   return (
     <div className={styles.productWrap} aria-label="StudySync workspace preview">
       <div className={styles.productGlow} />
