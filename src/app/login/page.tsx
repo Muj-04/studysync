@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AlertCircle, BookOpen, Eye, EyeOff, FileText, Layers, Loader2, Sparkles, Users } from 'lucide-react';
-import { ProductPreview } from '@/components/LandingHero';
 import { createClient } from '@/lib/supabase/client';
 import {
   checkActiveSession, registerSession, getOrCreateSessionId,
@@ -20,6 +19,42 @@ function GoogleIcon() {
       <path fill="#FBBC05" d="M10.9 28.4A14.5 14.5 0 0 1 10.2 24c0-1.5.3-3 .7-4.4v-5.9h-8A24 24 0 0 0 .5 24c0 3.9.9 7.5 2.4 10.3l8-5.9z" />
       <path fill="#EA4335" d="M24.5 9.6c3.5 0 6.7 1.2 9.2 3.6l6.9-6.9C36.4 2.4 31 0 24.5 0 15 0 6.9 5.1 2.9 13.7l8 5.9c1.9-5.8 7.3-10 13.6-10z" />
     </svg>
+  );
+}
+
+function LoginWorkspacePreview() {
+  return (
+    <div className="workspace-preview" aria-label="StudySync workspace preview">
+      <div className="workspace-preview-bar">
+        <div className="workspace-preview-dots"><i /><i /><i /></div>
+        <span>studysync.app/workspace</span>
+        <small>● Synced</small>
+      </div>
+      <div className="workspace-preview-body">
+        <aside>
+          <b><BookOpen size={11} /> StudySync</b>
+          <span className="active"><FileText size={11} /> PDFs &amp; notes</span>
+          <span><Layers size={11} /> Flashcards</span>
+          <span><Users size={11} /> Study groups</span>
+          <span><Sparkles size={11} /> AI assistant</span>
+        </aside>
+        <section>
+          <div className="workspace-welcome"><div><small>Welcome back, Alex 👋</small><strong>Ready to keep studying?</strong></div><em>12 day streak</em></div>
+          <div className="workspace-actions">
+            <span><FileText size={11} /> New note</span><span><Layers size={11} /> New flashcard</span><span><Users size={11} /> Study group</span><span><FileText size={11} /> Upload PDF</span>
+          </div>
+          <div className="workspace-content">
+            <div className="recent-study">
+              <b>Recent study activity</b>
+              <p><FileText size={11} /> Biochemistry — Enzymes <time>2h ago</time></p>
+              <p><Layers size={11} /> Anatomy — Upper Limb <time>Yesterday</time></p>
+              <p><Users size={11} /> Physics study group <time>2 days ago</time></p>
+            </div>
+            <div className="workspace-ai"><Sparkles size={14} /><b>AI study assistant</b><span>Summary ready</span><small>Turn this PDF into flashcards</small></div>
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
 
@@ -140,8 +175,7 @@ export default function LoginPage() {
       <section className="login-story">
         <Link href="/" className="login-brand"><span><BookOpen size={19} strokeWidth={2.4} /></span>StudySync</Link>
         <div className="story-copy">
-          <div className="story-eyebrow"><Sparkles size={14} /> One workspace for focused learning</div>
-          <h1>Your notes, flashcards,<br />and study groups <span>in one place.</span></h1>
+          <h1>Your notes,<br />flashcards,<br />and study groups<br /><span>in one place.</span></h1>
           <p>Organize your academic life, understand difficult material, and prepare for exams with StudySync.</p>
         </div>
         <div className="login-visual">
@@ -155,13 +189,13 @@ export default function LoginPage() {
               sizes="(max-width: 900px) 0px, 34vw"
             />
           </div>
-          <div className="login-product-preview"><ProductPreview /></div>
+          <div className="login-product-preview"><LoginWorkspacePreview /></div>
         </div>
         <div className="story-features">
-          <span><FileText size={13} /> PDF notes</span>
-          <span><Layers size={13} /> Flashcards</span>
-          <span><Users size={13} /> Study groups</span>
-          <span><Sparkles size={13} /> AI assistant</span>
+          <span><FileText size={15} /><b>All in one</b><small>PDFs, notes, flashcards, and more.</small></span>
+          <span><Users size={15} /><b>Study together</b><small>Create groups and collaborate easily.</small></span>
+          <span><Sparkles size={15} /><b>Smarter studying</b><small>Tools that help you learn faster.</small></span>
+          <span><Layers size={15} /><b>Anywhere</b><small>Access your work across devices.</small></span>
         </div>
       </section>
 
@@ -231,24 +265,29 @@ export default function LoginPage() {
       )}
 
       <style>{`
-        .login-shell { min-height: 100dvh; display: grid; grid-template-columns: minmax(540px, 1.12fr) minmax(500px, .88fr); background: #f9f7fd; color: #171a28; font-family: var(--font-body); }
-        .login-story { position: relative; min-height: 100dvh; padding: 40px clamp(38px, 4.4vw, 72px) 26px; overflow: hidden; display: flex; flex-direction: column; background: radial-gradient(circle at 16% 24%, rgba(133,83,239,.14), transparent 31%), radial-gradient(circle at 82% 68%, rgba(111,78,214,.11), transparent 35%), linear-gradient(145deg, #fbfaff 0%, #f4f1ff 60%, #faf9fd 100%); border-right: 1px solid rgba(82,60,122,.13); }
+        .login-shell { min-height: 100dvh; display: grid; grid-template-columns: minmax(560px, 56%) minmax(500px, 44%); background: #fff; color: #171a28; font-family: var(--font-body); }
+        .login-story { position: relative; min-height: 100dvh; box-sizing: border-box; padding: 40px clamp(46px, 5.2vw, 96px) 30px; overflow: hidden; display: flex; flex-direction: column; background: radial-gradient(circle at 16% 24%, rgba(133,83,239,.13), transparent 31%), radial-gradient(circle at 82% 68%, rgba(111,78,214,.1), transparent 35%), linear-gradient(145deg, #fbfaff 0%, #f4f1ff 60%, #faf9fd 100%); border-right: 1px solid rgba(82,60,122,.1); }
         .login-story::after { content: ''; position: absolute; width: 520px; height: 520px; left: -220px; bottom: -260px; border-radius: 50%; background: rgba(117,64,223,.1); filter: blur(22px); }
         .login-brand, .mobile-brand { display: inline-flex; align-items: center; gap: 10px; color: #171a28; text-decoration: none; font-size: 18px; font-weight: 800; letter-spacing: -.025em; width: fit-content; }
         .login-brand > span, .mobile-brand > span { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: linear-gradient(135deg, #8954ef, #6432d3); color: #fff; box-shadow: 0 8px 20px rgba(107,57,213,.26); }
-        .story-copy { margin-top: clamp(42px, 6vh, 70px); position: relative; z-index: 3; }
-        .story-eyebrow { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 17px; padding: 6px 11px; border: 1px solid rgba(116,65,232,.2); border-radius: 999px; color: #6c38d3; background: rgba(255,255,255,.72); font-size: 11px; font-weight: 750; }
-        .story-copy h1 { margin: 0; max-width: 660px; color: #171a28; font-size: clamp(40px, 3.65vw, 66px); line-height: 1.055; letter-spacing: -.052em; font-weight: 820; }
+        .story-copy { margin-top: clamp(48px, 6vh, 72px); position: relative; z-index: 3; }
+        .story-copy h1 { margin: 0; max-width: 620px; color: #171a28; font-size: clamp(41px, 3.25vw, 61px); line-height: 1.055; letter-spacing: -.052em; font-weight: 820; }
         .story-copy h1 span { display: inline-block; color: transparent; background: linear-gradient(105deg, #8b55ef 8%, #6331d0 80%); background-clip: text; -webkit-background-clip: text; }
-        .story-copy p { margin: 20px 0 0; max-width: 580px; color: #666b7b; font-size: 15px; line-height: 1.7; }
-        .login-visual { position: relative; z-index: 2; width: min(100%, 860px); height: clamp(420px, 47vh, 540px); margin: auto auto 0; }
-        .login-students { position: absolute; z-index: 1; top: 0; left: 50%; width: min(66%, 590px); transform: translateX(-50%); pointer-events: none; -webkit-mask-image: radial-gradient(ellipse 72% 76% at 50% 54%, #000 62%, transparent 100%); mask-image: radial-gradient(ellipse 72% 76% at 50% 54%, #000 62%, transparent 100%); }
+        .story-copy p { margin: 20px 0 0; max-width: 540px; color: #666b7b; font-size: 15px; line-height: 1.65; }
+        .login-visual { position: relative; z-index: 2; width: min(100%, 900px); height: clamp(500px, 48vh, 570px); margin: 14px auto 0; }
+        .login-students { position: absolute; z-index: 1; top: -20px; left: 50%; width: min(76%, 690px); transform: translateX(-50%); pointer-events: none; -webkit-mask-image: radial-gradient(ellipse 76% 78% at 50% 54%, #000 65%, transparent 100%); mask-image: radial-gradient(ellipse 76% 78% at 50% 54%, #000 65%, transparent 100%); }
         .login-students img { display: block; width: 100%; height: auto; mix-blend-mode: multiply; filter: saturate(.94) drop-shadow(0 16px 25px rgba(73,48,120,.08)); }
         .login-product-preview { position: absolute; z-index: 2; right: 0; bottom: 0; left: 0; }
-        .story-features { position: relative; z-index: 3; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-top: 18px; color: #5f586d; font-size: 10.5px; font-weight: 650; }.story-features span { display: flex; align-items: center; gap: 5px; }.story-features svg { color: #7541db; flex-shrink: 0; }
-        .login-form-side { min-height: 100dvh; display: grid; place-items: center; padding: 48px clamp(30px, 4.5vw, 76px); background: radial-gradient(circle at 52% 38%, rgba(129,76,228,.1), transparent 34%), linear-gradient(160deg, #fdfcff 0%, #f8f6fd 55%, #f4f1fb 100%); }
-        .login-card { width: 100%; max-width: 500px; box-sizing: border-box; padding: clamp(36px, 3.5vw, 52px); border: 1px solid rgba(94,72,132,.1); border-radius: 22px; background: rgba(255,255,255,.95); box-shadow: 0 30px 78px rgba(56,39,87,.11), 0 2px 8px rgba(56,39,87,.04); backdrop-filter: blur(18px); }.mobile-brand { display: none; }
-        .login-card h2 { margin: 0; font-size: clamp(32px, 2.5vw, 42px); color: #171a28; letter-spacing: -.045em; }.login-subtitle { margin: 9px 0 34px; color: #777b89; font-size: 14px; }
+        .workspace-preview { overflow: hidden; height: 310px; border: 1px solid rgba(98,74,139,.13); border-radius: 16px; background: rgba(255,255,255,.97); box-shadow: 0 25px 60px rgba(74,50,118,.13); color: #30323f; }
+        .workspace-preview-bar { height: 30px; padding: 0 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #eeeaf4; background: #fff; color: #9a94a4; font-size: 8px; }.workspace-preview-bar > span { flex: 1; text-align: center; }.workspace-preview-bar small { color: #55a876; font-size: 7px; }.workspace-preview-dots { display: flex; gap: 4px; }.workspace-preview-dots i { width: 6px; height: 6px; border-radius: 50%; background: #ffb36b; }.workspace-preview-dots i:nth-child(2) { background: #f3d166; }.workspace-preview-dots i:nth-child(3) { background: #71c894; }
+        .workspace-preview-body { height: calc(100% - 30px); display: grid; grid-template-columns: 150px 1fr; }.workspace-preview-body aside { padding: 17px 12px; display: flex; flex-direction: column; gap: 7px; border-right: 1px solid #eeeaf4; background: #fbfafe; font-size: 9px; }.workspace-preview-body aside b, .workspace-preview-body aside span { display: flex; align-items: center; gap: 7px; padding: 7px 8px; border-radius: 6px; }.workspace-preview-body aside b { margin-bottom: 5px; color: #6939d0; }.workspace-preview-body aside span { color: #7d7887; }.workspace-preview-body aside .active { color: #6f3bd8; background: #f0eafd; }
+        .workspace-preview-body section { padding: 20px 22px; }.workspace-welcome { display: flex; justify-content: space-between; align-items: center; }.workspace-welcome div { display: flex; flex-direction: column; gap: 4px; }.workspace-welcome small { color: #3b3d48; font-weight: 750; font-size: 11px; }.workspace-welcome strong { color: #96909e; font-size: 8px; font-weight: 500; }.workspace-welcome em { padding: 6px 8px; border-radius: 6px; background: #f3edff; color: #7540df; font-size: 7px; font-style: normal; font-weight: 700; }
+        .workspace-actions { display: grid; grid-template-columns: repeat(4,1fr); gap: 7px; margin: 16px 0; }.workspace-actions span { min-width: 0; padding: 9px 7px; display: flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #e7e1ef; border-radius: 7px; color: #4f4a59; font-size: 7.5px; font-weight: 650; white-space: nowrap; }.workspace-actions svg { color: #7641de; }
+        .workspace-content { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(130px,.7fr); gap: 10px; }.recent-study, .workspace-ai { min-width: 0; padding: 13px; border: 1px solid #eeeaf4; border-radius: 9px; background: #fff; }.recent-study > b { display: block; margin-bottom: 7px; font-size: 8.5px; }.recent-study p { margin: 0; padding: 7px 0; display: flex; align-items: center; gap: 6px; border-top: 1px solid #f1edf5; color: #5c5865; font-size: 7.5px; }.recent-study p svg { color: #7540df; }.recent-study time { margin-left: auto; color: #a09aa8; }.workspace-ai { display: flex; flex-direction: column; gap: 7px; color: #716a7d; background: linear-gradient(145deg,#faf8ff,#f2ecff); font-size: 7px; }.workspace-ai > svg { color: #7540df; }.workspace-ai b { color: #4d4658; font-size: 8px; }.workspace-ai span { width: fit-content; padding: 4px 6px; border-radius: 4px; background: #fff; color: #7540df; font-weight: 700; }
+        .story-features { position: relative; z-index: 3; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 18px; margin-top: 22px; color: #5f586d; }.story-features span { position: relative; display: grid; grid-template-columns: 20px 1fr; align-items: center; column-gap: 6px; }.story-features svg { grid-row: 1 / span 2; align-self: start; color: #7541db; }.story-features b { font-size: 11px; }.story-features small { grid-column: 2; margin-top: 3px; color: #777181; font-size: 9px; line-height: 1.45; }
+        .login-form-side { min-height: 100dvh; display: grid; place-items: center; padding: 48px clamp(38px, 5vw, 96px); background: radial-gradient(circle at 52% 43%, rgba(129,76,228,.055), transparent 35%), #fff; }
+        .login-card { width: 100%; max-width: 440px; box-sizing: border-box; }.mobile-brand { display: none; }
+        .login-card h2 { margin: 0; font-size: clamp(34px, 2.2vw, 42px); color: #171a28; letter-spacing: -.045em; }.login-subtitle { margin: 9px 0 44px; color: #777b89; font-size: 14px; }
         .login-card form > label { display: block; margin: 0 0 8px; color: #343745; font-size: 12.5px; font-weight: 700; }
         .login-card input[type='email'], .login-card input[type='password'], .login-card input[type='text'] { width: 100%; height: 52px; box-sizing: border-box; padding: 0 15px; margin-bottom: 20px; border: 1px solid #ddd9e4; border-radius: 10px; background: #fff; color: #262834; font: inherit; font-size: 13.5px; outline: 0; box-shadow: 0 2px 5px rgba(56,39,87,.06); transition: border-color .15s, box-shadow .15s; }
         .login-card input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }.login-card input.invalid { border-color: #ef4444; margin-bottom: 5px; }
@@ -263,8 +302,8 @@ export default function LoginPage() {
         .notice { margin: -18px 0 20px; padding: 10px 12px; border-radius: 8px; display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; }.notice.error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }.notice.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
         .conflict-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(15,23,42,.58); backdrop-filter: blur(5px); }.conflict-dialog { width: min(390px, 100%); box-sizing: border-box; padding: 28px; border-radius: 14px; background: #fff; color: #172033; text-align: center; box-shadow: 0 24px 65px rgba(0,0,0,.24); }.conflict-icon { width: 44px; height: 44px; margin: 0 auto 14px; display: grid; place-items: center; border-radius: 50%; background: #fee2e2; color: #dc2626; font-weight: 800; }.conflict-dialog h3 { margin: 0 0 8px; font-size: 17px; }.conflict-dialog p { margin: 0 0 22px; color: #64748b; font-size: 13px; line-height: 1.55; }.danger-button { background: #ef4444; color: #fff; margin-bottom: 9px; }.cancel-button { background: #f1f5f9; color: #475569; }
         .spin { animation: login-spin .8s linear infinite; } @keyframes login-spin { to { transform: rotate(360deg); } }
-        @media (max-width: 1100px) and (min-width: 901px) { .login-shell { grid-template-columns: minmax(470px, 1fr) minmax(430px, .92fr); }.login-story { padding-left: 34px; padding-right: 34px; }.story-copy h1 { font-size: 46px; }.login-visual { height: 430px; }.story-features { grid-template-columns: repeat(2, minmax(0,1fr)); }.login-card { padding: 38px; } }
-        @media (max-width: 900px) { .login-shell { grid-template-columns: 1fr; }.login-story { display: none; }.login-form-side { padding: 36px 24px; }.mobile-brand { display: inline-flex; margin-bottom: 48px; }.login-card { max-width: 500px; }.login-card h2 { font-size: 32px; } }
+        @media (max-width: 1200px) and (min-width: 901px) { .login-shell { grid-template-columns: minmax(510px, 55%) minmax(420px,45%); }.login-story { padding-left: 38px; padding-right: 38px; }.story-copy h1 { font-size: 46px; }.login-visual { height: 420px; }.login-students { width: 76%; }.workspace-preview { height: 275px; }.workspace-preview-body { grid-template-columns: 115px 1fr; }.workspace-preview-body section { padding: 16px; }.story-features { gap: 8px; }.story-features small { display: none; } }
+        @media (max-width: 900px) { .login-shell { grid-template-columns: 1fr; }.login-story { display: none; }.login-form-side { padding: 36px 24px; background: radial-gradient(circle at 50% 25%, rgba(129,76,228,.1), transparent 36%), #faf8ff; }.mobile-brand { display: inline-flex; margin-bottom: 48px; }.login-card { max-width: 460px; padding: 34px; border: 1px solid rgba(94,72,132,.1); border-radius: 20px; background: rgba(255,255,255,.96); box-shadow: 0 25px 60px rgba(56,39,87,.1); }.login-card h2 { font-size: 32px; } }
         @media (max-width: 480px) { .login-form-side { place-items: start center; padding: 18px 12px 32px; }.login-card { padding: 28px 20px; border-radius: 18px; }.mobile-brand { margin-bottom: 38px; }.login-subtitle { margin-bottom: 30px; }.form-options { font-size: 11.5px; } }
         @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 1.8s; } }
       `}</style>
