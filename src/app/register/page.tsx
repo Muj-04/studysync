@@ -197,7 +197,10 @@ export default function RegisterPage() {
 
         <div className={styles.storyCopy}>
           <div className={styles.eyebrow}><Sparkles size={14} /> Built for focused students</div>
-          <h1>Create your<br /><span>StudySync</span> account</h1>
+          <h1>
+            Create your
+            <span className={styles.headlineSecond}><em>StudySync</em> account</span>
+          </h1>
           <p>Join students who keep their documents, notes, flashcards, and study groups together in one focused workspace.</p>
 
           <div className={styles.benefitList}>
@@ -211,11 +214,11 @@ export default function RegisterPage() {
         <div className={styles.illustrationWrap}>
           <div className={styles.illustrationGlow} />
           <Image
-            src="/landing/studysync-students.png"
-            alt="Students learning together with PDFs, flashcards, and a laptop"
+            src="/register/studysync-devices.png"
+            alt="StudySync dashboard displayed on a laptop beside a mobile flashcard"
             width={1536}
             height={1024}
-            sizes="(max-width: 900px) 70vw, 48vw"
+            sizes="(max-width: 900px) 86vw, 48vw"
             className={styles.illustration}
             priority
           />
