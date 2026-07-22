@@ -1,12 +1,28 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
+import {
+  AtSign,
+  BookOpen,
+  BrainCircuit,
+  Eye,
+  EyeOff,
+  Layers3,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  Users,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
   PROFILE_HANDLE_MAX_LENGTH,
   normalizeProfileHandle,
   validateProfileHandle,
 } from '@/lib/profileHandle';
+import styles from './RegisterPage.module.css';
 
 const OAUTH_REDIRECT = 'https://pdf-study-workspace.vercel.app/auth/callback';
 
@@ -23,25 +39,14 @@ function OAuthButtons() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
-      {/* Google */}
+    <div className={styles.oauthArea}>
       <button
         type="button"
         disabled={loadingProvider !== null}
         onClick={() => signIn('google')}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-          width: '100%', height: 44, borderRadius: 9999,
-          background: loadingProvider === 'google' ? 'rgba(255,255,255,0.85)' : '#ffffff',
-          border: 'none', cursor: loadingProvider !== null ? 'not-allowed' : 'pointer',
-          color: '#1f1f1f', fontSize: '0.875rem', fontWeight: 600, fontFamily: 'inherit',
-          transition: 'background 0.15s, opacity 0.15s',
-          opacity: loadingProvider !== null && loadingProvider !== 'google' ? 0.5 : 1,
-        }}
-        onMouseOver={(e) => { if (!loadingProvider) e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
-        onMouseOut={(e) => { if (!loadingProvider) e.currentTarget.style.background = '#ffffff'; }}
+        className={styles.googleButton}
       >
-        <svg width="18" height="18" viewBox="0 0 48 48" style={{ flexShrink: 0 }}>
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
           <path fill="#4285F4" d="M47.532 24.552c0-1.636-.132-3.2-.378-4.704H24.48v8.898h12.984c-.558 3.018-2.256 5.574-4.806 7.29l7.776 6.048c4.536-4.188 7.098-10.356 7.098-17.532z"/>
           <path fill="#34A853" d="M24.48 48c6.498 0 11.952-2.154 15.936-5.838l-7.776-6.048c-2.16 1.446-4.926 2.298-8.16 2.298-6.282 0-11.604-4.242-13.512-9.954H2.934l-1.26 5.814v.006C5.598 42.9 14.418 48 24.48 48z"/>
           <path fill="#FBBC05" d="M10.968 28.458a14.46 14.46 0 0 1-.756-4.458c0-1.548.27-3.048.756-4.458v-5.82H2.934A23.94 23.94 0 0 0 .48 24c0 3.87.924 7.53 2.454 10.278l8.034-5.82z"/>
@@ -50,30 +55,14 @@ function OAuthButtons() {
         {loadingProvider === 'google' ? 'Redirecting…' : 'Continue with Google'}
       </button>
 
-      {/* Divider */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.18)' }} />
-        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap' }}>
-          or continue with email
-        </span>
-        <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.18)' }} />
+      <div className={styles.divider}>
+        <span />
+        or sign up with email
+        <span />
       </div>
     </div>
   );
 }
-
-const glassInput: React.CSSProperties = {
-  width: '100%',
-  padding: '0.75rem 2.8rem 0.75rem 1rem',
-  background: 'transparent',
-  border: '2px solid rgba(255,255,255,0.2)',
-  borderRadius: '9999px',
-  color: '#fff',
-  fontSize: '0.875rem',
-  boxSizing: 'border-box',
-  transition: 'border-color 0.2s',
-  fontFamily: 'inherit',
-};
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
@@ -198,154 +187,159 @@ export default function RegisterPage() {
     setMessage('Account created! Check your email to confirm, then log in.');
   };
 
-  const BG = "https://i.pinimg.com/originals/d7/b9/0c/d7b90cc80898e8823455a127945719af.jpg";
-
   return (
-    <>
-      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, backgroundImage: `url('${BG}')`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', zIndex: -2, pointerEvents: 'none' }} />
-      <div aria-hidden="true" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.52)', zIndex: -1, pointerEvents: 'none' }} />
-      <div className="min-h-screen flex items-center justify-center p-4">
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 360,
-          padding: '2.5rem 2rem',
-          background: 'rgba(255,255,255,0.1)',
-          backdropFilter: 'blur(15px)',
-          WebkitBackdropFilter: 'blur(15px)',
-          border: '2px solid rgba(255,255,255,0.2)',
-          borderRadius: '16px',
-          color: '#fff',
-        }}
-      >
-        <h1 style={{ textAlign: 'center', fontSize: '2rem', fontWeight: 600, marginBottom: 4 }}>
-          Register
-        </h1>
-        <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginBottom: '2rem' }}>
-          Create your account to get started
-        </p>
+    <main className={styles.page}>
+      <section className={styles.storyPanel} aria-label="Why students choose StudySync">
+        <Link href="/" className={styles.brand} aria-label="StudySync home">
+          <span><BookOpen size={18} strokeWidth={2.4} /></span>
+          StudySync
+        </Link>
 
-        {error && (
-          <div style={{
-            marginBottom: '1rem', padding: '0.6rem 1rem',
-            background: 'rgba(229,72,77,0.18)', border: '1px solid rgba(229,72,77,0.4)',
-            borderRadius: 8, fontSize: '0.8rem', color: '#ff8a8e', textAlign: 'center',
-          }}>
-            {error}
+        <div className={styles.storyCopy}>
+          <div className={styles.eyebrow}><Sparkles size={14} /> Built for focused students</div>
+          <h1>Create your<br /><span>StudySync</span> account</h1>
+          <p>Join students who keep their documents, notes, flashcards, and study groups together in one focused workspace.</p>
+
+          <div className={styles.benefitList}>
+            <div><span><Layers3 size={18} /></span><p><strong>Everything in sync</strong>PDFs, notes, flashcards, and progress stay organized.</p></div>
+            <div><span><Users size={18} /></span><p><strong>Study together</strong>Create or join live rooms and collaborate with friends.</p></div>
+            <div><span><BrainCircuit size={18} /></span><p><strong>AI that helps</strong>Summarize, explain, create flashcards, and quiz yourself.</p></div>
+            <div><span><ShieldCheck size={18} /></span><p><strong>Your data, secure</strong>Your account keeps your private study work separated.</p></div>
           </div>
-        )}
-
-        {message && (
-          <div style={{
-            marginBottom: '1rem', padding: '0.6rem 1rem',
-            background: 'rgba(52,211,153,0.18)', border: '1px solid rgba(52,211,153,0.4)',
-            borderRadius: 8, fontSize: '0.8rem', color: '#6ee7b7', textAlign: 'center',
-          }}>
-            {message}
-          </div>
-        )}
-
-        <OAuthButtons />
-
-        {/* Display name */}
-        <div style={{ position: 'relative', marginBottom: '1rem' }}>
-          <input
-            type="text"
-            placeholder="Display name"
-            autoComplete="name"
-            maxLength={50}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            style={glassInput}
-          />
-          <i className="bx bx-user" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
         </div>
 
-        {/* Unique account handle */}
-        <div style={{ marginBottom: '1rem' }}>
-          <div style={{ position: 'relative' }}>
-            <input
-              type="text"
-              placeholder="Handle (for example: study_sam)"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              maxLength={PROFILE_HANDLE_MAX_LENGTH}
-              value={handle}
-              onChange={(e) => {
-                const nextHandle = e.target.value.toLowerCase();
-                setHandle(nextHandle);
-                setHandleStatus(validateProfileHandle(nextHandle) ? 'idle' : 'checking');
-              }}
-              aria-describedby="handle-status"
-              style={glassInput}
-            />
-            <span style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }}>@</span>
+        <div className={styles.illustrationWrap}>
+          <div className={styles.illustrationGlow} />
+          <Image
+            src="/landing/studysync-students.png"
+            alt="Students learning together with PDFs, flashcards, and a laptop"
+            width={1536}
+            height={1024}
+            sizes="(max-width: 900px) 70vw, 48vw"
+            className={styles.illustration}
+            priority
+          />
+        </div>
+      </section>
+
+      <section className={styles.formSide}>
+        <div className={styles.formGlow} />
+        <div className={styles.card}>
+          <Link href="/" className={styles.mobileBrand} aria-label="StudySync home">
+            <span><BookOpen size={17} /></span>StudySync
+          </Link>
+          <h2>Create your account</h2>
+          <p className={styles.subtitle}>Let&apos;s get your study space ready.</p>
+
+          {error && <div className={styles.errorNotice} role="alert">{error}</div>}
+          {message && <div className={styles.successNotice} role="status">{message}</div>}
+
+          <OAuthButtons />
+
+          <div className={styles.fields}>
+            <div className={styles.field}>
+              <UserRound size={17} aria-hidden="true" />
+              <input
+                type="text"
+                placeholder="Display name"
+                aria-label="Display name"
+                autoComplete="name"
+                maxLength={50}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                className={styles.input}
+              />
+            </div>
+
+            <div>
+              <div className={styles.field}>
+                <AtSign size={17} aria-hidden="true" />
+                <input
+                  type="text"
+                  placeholder="Handle (for example: study_sam)"
+                  aria-label="Unique account handle"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  maxLength={PROFILE_HANDLE_MAX_LENGTH}
+                  value={handle}
+                  onChange={(event) => {
+                    const nextHandle = event.target.value.toLowerCase();
+                    setHandle(nextHandle);
+                    setHandleStatus(validateProfileHandle(nextHandle) ? 'idle' : 'checking');
+                  }}
+                  aria-describedby="handle-status"
+                  className={styles.input}
+                />
+              </div>
+              <p
+                id="handle-status"
+                aria-live="polite"
+                className={
+                  handleStatus === 'available'
+                    ? styles.handleAvailable
+                    : handleStatus === 'taken' || handleStatus === 'error'
+                      ? styles.handleError
+                      : styles.handleHint
+                }
+              >
+                {handleStatus === 'checking' && 'Checking availability…'}
+                {handleStatus === 'available' && 'Handle is available'}
+                {handleStatus === 'taken' && 'This handle is already taken'}
+                {handleStatus === 'error' && 'Could not check availability'}
+                {handleStatus === 'idle' && '3–24 lowercase letters, numbers, or underscores'}
+              </p>
+            </div>
+
+            <div className={styles.field}>
+              <Mail size={17} aria-hidden="true" />
+              <input
+                type="email"
+                placeholder="Email address"
+                aria-label="Email address"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className={styles.input}
+              />
+            </div>
+
+            <div className={styles.field}>
+              <LockKeyhole size={17} aria-hidden="true" />
+              <input
+                type={showPass ? 'text' : 'password'}
+                placeholder="Password (minimum 6 characters)"
+                aria-label="Password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className={styles.passwordInput}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass((visible) => !visible)}
+                className={styles.passwordToggle}
+                aria-label={showPass ? 'Hide password' : 'Show password'}
+              >
+                {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
+            </div>
           </div>
-          <p id="handle-status" aria-live="polite" style={{ margin: '5px 12px 0', fontSize: '0.72rem', color: handleStatus === 'available' ? '#6ee7b7' : handleStatus === 'taken' || handleStatus === 'error' ? '#ff8a8e' : 'rgba(255,255,255,0.5)' }}>
-            {handleStatus === 'checking' && 'Checking availability…'}
-            {handleStatus === 'available' && 'Handle is available'}
-            {handleStatus === 'taken' && 'This handle is already taken'}
-            {handleStatus === 'error' && 'Could not check availability'}
-            {handleStatus === 'idle' && '3–24 lowercase letters, numbers, or underscores'}
-          </p>
-        </div>
 
-        {/* Email */}
-        <div style={{ position: 'relative', marginBottom: '1rem' }}>
-          <input
-            type="email"
-            placeholder="Email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={glassInput}
-          />
-          <i className="bx bx-envelope" style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)', pointerEvents: 'none' }} />
-        </div>
-
-        {/* Password */}
-        <div style={{ position: 'relative', marginBottom: '1.75rem' }}>
-          <input
-            type={showPass ? 'text' : 'password'}
-            placeholder="Password (min 6 chars)"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={glassInput}
-          />
           <button
             type="button"
-            onClick={() => setShowPass((v) => !v)}
-            style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}
-            aria-label={showPass ? 'Hide password' : 'Show password'}
+            onClick={handleRegister}
+            disabled={loading || !!message}
+            className={styles.submitButton}
           >
-            <i className={`bx ${showPass ? 'bx-lock-open-alt' : 'bx-lock-alt'}`} style={{ fontSize: '1.25rem', color: 'rgba(255,255,255,0.55)' }} />
+            {loading ? 'Creating account…' : 'Create Account'}
           </button>
+
+          <p className={styles.loginPrompt}>
+            Already have an account? <Link href="/login">Log in</Link>
+          </p>
         </div>
-
-        <button
-          onClick={handleRegister}
-          disabled={loading || !!message}
-          style={{
-            display: 'block', width: '100%', padding: '0.8rem', borderRadius: '9999px',
-            background: (loading || !!message) ? 'rgba(255,255,255,0.7)' : '#ffffff',
-            color: '#0f172a', fontWeight: 600, fontSize: '0.9rem',
-            border: 'none', cursor: (loading || !!message) ? 'not-allowed' : 'pointer',
-            marginBottom: '1.5rem', fontFamily: 'inherit', textAlign: 'center', boxSizing: 'border-box',
-          }}
-        >
-          {loading ? 'Creating account…' : 'Create Account'}
-        </button>
-
-        <p style={{ textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
-          Already have an account?{' '}
-          <Link href="/login" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none' }}>
-            Login
-          </Link>
-        </p>
-      </div>
-      </div>
-    </>
+      </section>
+    </main>
   );
 }
