@@ -331,10 +331,10 @@ export default function LandingPage() {
       {/* ══ FEATURES ══ */}
       <section id="features" style={{
         position: 'relative', zIndex: 1,
-        padding: 'clamp(80px, 10vw, 120px) clamp(20px, 5vw, 64px)',
-        maxWidth: 1100, margin: '0 auto',
+        padding: 'clamp(64px, 7vw, 88px) clamp(20px, 5vw, 64px) clamp(56px, 6vw, 76px)',
+        maxWidth: 1180, margin: '0 auto',
       }}>
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+        <div style={{ textAlign: 'center', marginBottom: 44 }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#a78bfa', margin: '0 0 14px' }}>
             Everything you need
           </p>
@@ -346,7 +346,7 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        <div className="landing-feature-grid">
           {FEATURES.map((f) => <FeatureCard key={f.title} {...f} />)}
         </div>
       </section>
@@ -354,7 +354,7 @@ export default function LandingPage() {
       {/* ══ PRICING ══ */}
       <section id="pricing" style={{
         position: 'relative', zIndex: 1,
-        padding: 'clamp(80px, 10vw, 120px) clamp(20px, 5vw, 64px)',
+        padding: 'clamp(60px, 7vw, 86px) clamp(20px, 5vw, 64px) clamp(72px, 8vw, 100px)',
       }}>
         {/* Divider glow */}
         <div style={{
@@ -362,7 +362,7 @@ export default function LandingPage() {
           background: 'linear-gradient(90deg, transparent, rgba(124,58,237,0.4), transparent)',
         }} />
 
-        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+        <div style={{ textAlign: 'center', marginBottom: 46 }}>
           <p style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#a78bfa', margin: '0 0 14px' }}>
             Simple pricing
           </p>
@@ -533,8 +533,17 @@ export default function LandingPage() {
         .nav-links-desktop {
           display: flex;
         }
+        .landing-feature-grid {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 16px;
+        }
+        @media (max-width: 900px) {
+          .landing-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
         @media (max-width: 600px) {
           .nav-links-desktop { display: none !important; }
+          .landing-feature-grid { grid-template-columns: 1fr; }
         }
       `}</style>
     </div>
