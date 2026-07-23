@@ -109,51 +109,10 @@
   line-height: 1.7;
 }
 
-.benefitList {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 17px 28px;
-  margin-top: 34px;
-}
-
-.benefitList > div {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  min-width: 0;
-}
-
-.benefitList > div > span {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  border: 1px solid rgba(121, 70, 223, 0.11);
-  border-radius: 10px;
-  color: #7541db;
-  background: rgba(255, 255, 255, 0.68);
-  box-shadow: 0 9px 25px rgba(75, 49, 128, 0.07);
-}
-
-.benefitList p {
-  margin: 0;
-  color: #7a7e8c;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.benefitList strong {
-  display: block;
-  margin-bottom: 2px;
-  color: #343745;
-  font-size: 13px;
-}
-
 .illustrationWrap {
   position: absolute;
   left: clamp(22px, 3.5vw, 64px);
-  bottom: 5.5%;
+  bottom: -1.5%;
   z-index: 1;
   width: min(94%, 920px);
   margin: 0;
@@ -384,8 +343,6 @@
 @media (max-width: 1050px) {
   .page { grid-template-columns: minmax(0, 0.88fr) minmax(410px, 1.12fr); }
   .storyPanel { padding-left: 36px; padding-right: 36px; }
-  .benefitList { grid-template-columns: 1fr; gap: 11px; }
-  .benefitList > div:nth-child(4) { display: none; }
   .illustrationWrap { left: 18px; width: 96%; }
   .formSide { padding-left: 28px; padding-right: 28px; }
 }
@@ -393,7 +350,7 @@
 @media (max-width: 820px) {
   .page { display: block; min-height: 100vh; background: linear-gradient(145deg, #f6f2ff, #fbfaff); }
   .storyPanel { min-height: auto; padding: 28px 24px 42px; }
-  .storyPanel::after, .benefitList, .illustrationWrap { display: none; }
+  .storyPanel::after, .illustrationWrap { display: none; }
   .storyCopy { max-width: 620px; margin: 42px auto 0; text-align: center; }
   .storyCopy h1 { font-size: clamp(2.55rem, 8.8vw, 4rem); }
   .headlineSecond { white-space: normal; }
@@ -405,7 +362,6 @@
 @media (max-height: 860px) and (min-width: 821px) {
   .storyCopy { margin-top: 28px; }
   .storyCopy > p { margin-top: 14px; }
-  .benefitList { gap: 10px 20px; margin-top: 20px; }
   .illustrationWrap { width: min(68%, 650px); bottom: -5%; }
   .card { padding-top: 32px; padding-bottom: 32px; }
 }
