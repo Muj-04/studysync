@@ -5,16 +5,12 @@ import Link from 'next/link';
 import {
   AtSign,
   BookOpen,
-  BrainCircuit,
   Eye,
   EyeOff,
-  Layers3,
   LockKeyhole,
   Mail,
-  ShieldCheck,
   Sparkles,
   UserRound,
-  Users,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -202,13 +198,6 @@ export default function RegisterPage() {
             <span className={styles.headlineSecond}><em>StudySync</em> account</span>
           </h1>
           <p>Join students who keep their documents, notes, flashcards, and study groups together in one focused workspace.</p>
-
-          <div className={styles.benefitList}>
-            <div><span><Layers3 size={18} /></span><p><strong>Everything in sync</strong>PDFs, notes, flashcards, and progress stay organized.</p></div>
-            <div><span><Users size={18} /></span><p><strong>Study together</strong>Create or join live rooms and collaborate with friends.</p></div>
-            <div><span><BrainCircuit size={18} /></span><p><strong>AI that helps</strong>Summarize, explain, create flashcards, and quiz yourself.</p></div>
-            <div><span><ShieldCheck size={18} /></span><p><strong>Your data, secure</strong>Your account keeps your private study work separated.</p></div>
-          </div>
         </div>
 
         <div className={styles.illustrationWrap}>
