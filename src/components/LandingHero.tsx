@@ -20,7 +20,7 @@ const PDF_LINES = [88, 96, 78, 92, 84, 64, 91, 76, 94, 69];
 
 function ProductPreview() {
   return (
-    <div className={styles.productWrap} aria-label="StudySync workspace preview">
+    <div className={styles.productWrap} role="img" aria-label="StudySync workspace preview showing PDF notes, highlights, flashcards, study rooms, and the AI assistant">
       <div className={styles.productGlow} />
       <div className={styles.browserFrame}>
         <div className={styles.browserBar}>
@@ -37,10 +37,11 @@ function ProductPreview() {
 
         <div className={styles.workspaceBody}>
           <div className={styles.workspaceRail}>
-            <span className={styles.railActive}><FileText size={13} /></span>
-            <span title="Flashcards"><Layers3 size={13} /></span>
-            <span title="Study groups"><Users size={13} /></span>
-            <span title="AI assistant"><Sparkles size={13} /></span>
+            <span className={styles.railActive}><FileText size={13} /><small>PDF workspace</small></span>
+            <span><MessageSquareText size={13} /><small>Notes</small></span>
+            <span><Layers3 size={13} /><small>Flashcards</small></span>
+            <span><Users size={13} /><small>Study Rooms</small></span>
+            <span><Sparkles size={13} /><small>AI Assistant</small></span>
           </div>
 
           <div className={styles.pageStrip}>
@@ -109,7 +110,7 @@ export default function LandingHero() {
           <div className={styles.eyebrow}><Sparkles size={14} /> One workspace for focused learning</div>
           <h1 id="landing-hero-title">
             Your PDFs, notes,<br />flashcards, and study groups<br />
-            <span>in one place.</span>
+            {' '}<span>in one place.</span>
           </h1>
           <p>
             Turn every document into an active study space. Read, annotate, organize,
@@ -128,17 +129,29 @@ export default function LandingHero() {
               sizes="(max-width: 760px) 92vw, (max-width: 1100px) 72vw, 48vw"
               className={styles.illustration}
             />
-            <span className={`${styles.floatingTag} ${styles.tagPdf}`}><FileText size={12} /> PDF ready</span>
-            <span className={`${styles.floatingTag} ${styles.tagRoom}`}><Users size={12} /> 3 friends online</span>
           </div>
+
+          <span className={`${styles.floatingTag} ${styles.tagSummary}`} aria-hidden="true">
+            <Sparkles size={14} /><span><strong>AI Summary</strong><small>On-demand insights</small></span>
+          </span>
+          <span className={`${styles.floatingTag} ${styles.tagHighlights}`} aria-hidden="true">
+            <Highlighter size={14} /><span><strong>Highlights</strong><small>Saved by page</small></span>
+          </span>
+          <span className={`${styles.floatingTag} ${styles.tagFlashcards}`} aria-hidden="true">
+            <Layers3 size={14} /><span><strong>Flashcards</strong><small>Study as you read</small></span>
+          </span>
+          <span className={`${styles.floatingTag} ${styles.tagRoom}`} aria-hidden="true">
+            <Users size={14} /><span><strong>Study Rooms</strong><small>Learn together</small></span>
+          </span>
+
           <ProductPreview />
         </div>
 
         <div className={styles.valueRow}>
-          <span><Layers3 size={15} /> Notes & flashcards</span>
-          <span><Users size={15} /> Live study rooms</span>
-          <span><Bot size={15} /> AI study support</span>
-          <span><ShieldCheck size={15} /> Your work, synced</span>
+          <span><FileText size={16} /><span><strong>All in one</strong><small>PDFs, notes, and flashcards</small></span></span>
+          <span><Bot size={16} /><span><strong>Smarter studying</strong><small>AI summaries and explanations</small></span></span>
+          <span><Users size={16} /><span><strong>Study together</strong><small>Private live study rooms</small></span></span>
+          <span><ShieldCheck size={16} /><span><strong>Focused workspace</strong><small>Your study tools stay organized</small></span></span>
         </div>
       </div>
 
@@ -148,18 +161,19 @@ export default function LandingHero() {
           <div className={styles.cardLogo}><BookOpen size={20} /></div>
           <div className={styles.cardPill}>Your study space is ready</div>
           <h2>Study smarter from your next session.</h2>
-          <p>Sign in to continue your work, or create a free account and add your first PDF.</p>
+          <p>Create your free workspace and add your first PDF when you&apos;re ready.</p>
 
-          <Link href="/login" className={styles.primaryAction}>
-            Log in to StudySync <ArrowRight size={17} />
+          <Link href="/register" className={styles.primaryAction}>
+            Get Started Free <ArrowRight size={17} />
           </Link>
-          <Link href="/register" className={styles.secondaryAction}>
-            Create a free account
+          <Link href="/login" className={styles.secondaryAction}>
+            Sign in to your account
           </Link>
 
-          <div className={styles.cardDivider}><span />Everything you need to begin<span /></div>
+          <div className={styles.cardDivider}><span />No credit card required<span /></div>
           <ul>
             <li><Check size={14} /> Upload and annotate PDFs</li>
+            <li><Check size={14} /> Ask AI for summaries and explanations</li>
             <li><Check size={14} /> Create notes and flashcards</li>
             <li><Check size={14} /> Join friends in live study rooms</li>
           </ul>
