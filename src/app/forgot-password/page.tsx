@@ -3,7 +3,20 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, CircleHelp, Mail, MailCheck } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpen,
+  CircleHelp,
+  Cloud,
+  FileText,
+  Layers3,
+  Lock,
+  Mail,
+  MailCheck,
+  ShieldCheck,
+  Sparkles,
+  StickyNote,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import styles from './forgot-password.module.css';
 
@@ -18,32 +31,35 @@ function Brand() {
   );
 }
 
-function Testimonial() {
+function RecoveryVisual() {
   return (
-    <div className={styles.testimonial}>
+    <div className={styles.recoveryVisual} role="img" aria-label="StudySync password recovery illustration">
+      <div className={styles.recoveryGlow} aria-hidden="true" />
       <Image
-        src="/forgot-password-students.png"
-        alt="Students studying together around a table"
+        src="/landing/studysync-students.png"
+        alt="Students studying with a laptop and study notes"
         fill
         priority
-        sizes="(max-width: 920px) 0px, 44vw"
-        className={styles.testimonialImage}
+        sizes="(max-width: 920px) 0px, 48vw"
+        className={styles.recoveryIllustration}
       />
-      <div className={styles.testimonialShade} />
-      <div className={styles.testimonialCopy}>
-        <div className={styles.stars} aria-label="Five star review">★★★★★</div>
-        <blockquote>
-          “StudySync completely changed how I prepare for finals. The AI flashcards<br className={styles.quoteBreak} />
-          and live study rooms saved me dozens of hours this semester.”
-        </blockquote>
-        <div className={styles.student}>
-          <span className={styles.studentAvatar} role="img" aria-label="Jessica Parker" />
-          <span>
-            <strong>Jessica Parker</strong>
-            <small>Pre-Med Student, Stanford</small>
-          </span>
+
+      <div className={styles.recoveryMailCard} aria-hidden="true">
+        <div className={styles.recoveryCardHeader}>
+          <span className={styles.recoveryCardIcon}><Mail size={14} /></span>
+          <strong>Recovery email</strong>
+          <span className={styles.recoveryCardStatus}>Ready</span>
         </div>
+        <strong className={styles.recoveryCardTitle}>Reset link prepared</strong>
+        <span className={styles.recoveryCardLine} />
+        <span className={`${styles.recoveryCardLine} ${styles.recoveryCardLineShort}`} />
+        <span className={styles.recoveryCardHint}>Secure access to your study space</span>
       </div>
+
+      <span className={`${styles.studyIcon} ${styles.pdfIcon}`} aria-hidden="true"><FileText size={18} /></span>
+      <span className={`${styles.studyIcon} ${styles.noteIcon}`} aria-hidden="true"><StickyNote size={17} /></span>
+      <span className={`${styles.studyIcon} ${styles.flashcardIcon}`} aria-hidden="true"><Layers3 size={18} /></span>
+      <span className={styles.lockBadge} aria-hidden="true"><Lock size={20} /></span>
     </div>
   );
 }
@@ -80,15 +96,21 @@ export default function ForgotPasswordPage() {
       <section className={styles.storyPanel} aria-label="About StudySync">
         <Brand />
         <div className={styles.storyContent}>
-          <div>
-            <h1>Get back to your studies<br />in no time.</h1>
-            <p>
-              Don&apos;t worry, it happens to the best of us. Reset your<br className={styles.desktopBreak} />
-              password securely and regain access to all your notes<br className={styles.desktopBreak} />
-              and study rooms.
+          <div className={styles.storyCopy}>
+            <h1>Forgot your<br />password?</h1>
+            <p className={styles.storySubtitle}>No worries, your study space is still waiting.</p>
+            <p className={styles.storyDescription}>
+              Reset your password securely and continue accessing your PDFs, notes, flashcards, and study rooms.
             </p>
           </div>
-          <Testimonial />
+
+          <RecoveryVisual />
+
+          <div className={styles.storyBenefits} aria-label="StudySync benefits">
+            <span><ShieldCheck size={17} /><span><strong>Your data is safe</strong><small>Private notes and personal data.</small></span></span>
+            <span><Cloud size={17} /><span><strong>Your progress stays</strong><small>Your study progress remains intact.</small></span></span>
+            <span><Sparkles size={17} /><span><strong>Recover with ease</strong><small>Get back to focused studying.</small></span></span>
+          </div>
         </div>
       </section>
 
