@@ -143,7 +143,10 @@ export default function RegisterPage() {
     const { data, error: err } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
-      options: { data: { username: displayName, handle: normalizedHandle } },
+      options: {
+        data: { username: displayName, handle: normalizedHandle },
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
     setLoading(false);
     if (err) {

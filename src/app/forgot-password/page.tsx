@@ -20,8 +20,6 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import styles from './forgot-password.module.css';
 
-const REDIRECT = 'https://pdf-study-workspace.vercel.app/reset-password';
-
 function Brand() {
   return (
     <Link href="/" className={styles.brand} aria-label="StudySync home">
@@ -80,7 +78,7 @@ export default function ForgotPasswordPage() {
     setError('');
     setLoading(true);
     const { error: resetError } = await createClient().auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: REDIRECT,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     setLoading(false);
 
