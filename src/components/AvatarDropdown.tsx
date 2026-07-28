@@ -33,6 +33,8 @@ const VIP_BADGE: React.CSSProperties = {
 export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }: Props) {
   const { t, lang } = useLanguage();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const initials = getInitials(displayName || email);
@@ -47,11 +49,28 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
   }, [open]);
 
   const handleLogout = async () => {
-    await createClient().auth.signOut();
-    await clearLocalUserData();
-    // Use replace (not assign) so the protected page is dropped from history —
-    // pressing back after logout must not reveal the cached view.
-    window.location.replace('/login');
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    setLogoutError('');
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (session) throw new Error('The session is still active. Please try again.');
+
+      await clearLocalUserData();
+      // Use replace (not assign) so the protected page is dropped from history —
+      // pressing back after logout must not reveal the cached view.
+      window.location.replace('/login');
+    } catch {
+      setLogoutError('Could not log out. Check your connection and try again.');
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -143,13 +162,20 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
 
           {/* Menu items */}
           <div style={{ padding: '6px' }}>
+            {logoutError && (
+              <p role="alert" style={{ margin: '2px 8px 7px', color: '#dc2626', fontSize: 11, lineHeight: 1.4 }}>
+                {logoutError}
+              </p>
+            )}
             <button
               onClick={handleLogout}
+              disabled={loggingOut}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 9,
                 padding: '8px 10px', borderRadius: 4,
                 fontSize: 13, fontWeight: 500, color: '#ef4444',
-                background: 'none', border: 'none', cursor: 'pointer',
+                background: 'none', border: 'none', cursor: loggingOut ? 'wait' : 'pointer',
+                opacity: loggingOut ? 0.65 : 1,
                 fontFamily: 'inherit', textAlign: 'left',
                 transition: 'background 0.12s',
               }}
@@ -157,7 +183,7 @@ export default function AvatarDropdown({ email, displayName, avatarUrl, isVip }:
               onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
               <LogOut size={13} style={{ flexShrink: 0 }} />
-              {t('avatar_logout')}
+              {loggingOut ? 'Logging out…' : t('avatar_logout')}
             </button>
           </div>
         </div>
