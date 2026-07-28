@@ -11,11 +11,19 @@ export default function AuthCallbackPage() {
     const run = async () => {
       const supabase = createClient();
 
-      // Exchange the OAuth code in the URL for a session.
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      if (code) {
-        await supabase.auth.exchangeCodeForSession(code);
+      // createBrowserClient automatically exchanges PKCE callback codes during
+      // initialization. Wait for that single exchange instead of consuming the
+      // one-time code a second time.
+      const { error: initializationError } = await supabase.auth.initialize();
+      if (initializationError) {
+        window.location.replace('/login?verification=failed');
+        return;
+      }
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        window.location.replace('/login?verification=failed');
+        return;
       }
 
       // Ensure a profile row exists (no-op if already created by DB trigger).

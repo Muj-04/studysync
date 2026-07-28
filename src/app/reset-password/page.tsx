@@ -38,48 +38,56 @@ export default function ResetPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
+    // Read callback parameters before creating the browser client. Supabase
+    // automatically exchanges a PKCE code during client initialization and
+    // then removes that one-time code from the address bar.
+    const initialUrl = new URL(window.location.href);
+    const hashParams = new URLSearchParams(initialUrl.hash.slice(1));
+    const redirectError = initialUrl.searchParams.get('error_description')
+      ?? hashParams.get('error_description');
+    const hasRecoveryParameters = initialUrl.searchParams.has('code')
+      || hashParams.has('access_token')
+      || hashParams.get('type') === 'recovery';
+
+    if (redirectError || !hasRecoveryParameters) {
+      const timer = window.setTimeout(() => setStatus('invalid'), 0);
+      return () => window.clearTimeout(timer);
+    }
+
     const supabase = createClient();
 
-    const run = async () => {
-      // PKCE flow: code is in the query string
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-
-      if (code) {
-        const { error: exchErr } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchErr) { setStatus('invalid'); return; }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!cancelled && event === 'PASSWORD_RECOVERY' && session) {
         setStatus('ready');
-        return;
       }
+    });
 
+    const run = async () => {
       // Implicit flow: hash tokens — Supabase client parses them automatically.
       // Listen for the PASSWORD_RECOVERY event which fires once the session is set.
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-        if (event === 'PASSWORD_RECOVERY') {
-          setStatus('ready');
-          subscription.unsubscribe();
-        }
-      });
+      const { error: initializationError } = await supabase.auth.initialize();
+      if (cancelled) return;
 
-      // Also check if we already have a valid session (page reload after exchange)
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setStatus('ready');
+      if (initializationError) {
+        setStatus('invalid');
         subscription.unsubscribe();
         return;
       }
 
-      // Give a short window for the hash-based event to fire, then mark invalid
-      const timer = setTimeout(() => {
-        supabase.auth.getSession().then(({ data: { session: s } }) => {
-          if (!s) { setStatus('invalid'); subscription.unsubscribe(); }
-        });
-      }, 2500);
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (cancelled) return;
 
-      return () => { clearTimeout(timer); subscription.unsubscribe(); };
+      setStatus(!sessionError && session ? 'ready' : 'invalid');
     };
 
-    run();
+    void run();
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleSubmit = async () => {
@@ -90,8 +98,14 @@ export default function ResetPasswordPage() {
     setSubmitting(true);
     const supabase = createClient();
     const { error: err } = await supabase.auth.updateUser({ password });
+    if (err) { setSubmitting(false); setError(err.message); return; }
+
+    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
     setSubmitting(false);
-    if (err) { setError(err.message); return; }
+    if (signOutError) {
+      setError('Password updated, but the recovery session could not be closed. Please log out and try again.');
+      return;
+    }
     setStatus('done');
   };
 
