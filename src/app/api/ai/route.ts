@@ -1,3 +1,4 @@
+import { reserveAiRequest, refundAiRequest } from '@/lib/aiQuota';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
@@ -34,11 +35,6 @@ function getAdmin() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
-}
-
-async function recordSuccessfulRequest(admin: ReturnType<typeof getAdmin>, userId: string, month: string) {
-  const { error } = await admin.rpc('increment_ai_usage', { p_user_id: userId, p_month: month });
-  if (error) console.error('[AI usage] increment failed:', error.message);
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -80,25 +76,7 @@ export async function POST(req: NextRequest) {
   const plan        = (profile?.plan ?? 'free') as Plan;
   const monthlyLimit = effectivePlanLimits(plan, isVip).aiRequestsPerMonth;
 
-  const { data: usageRow } = await admin
-    .from('ai_usage')
-    .select('count')
-    .eq('user_id', user.id)
-    .eq('month', month)
-    .maybeSingle();
-
-  const currentCount = usageRow?.count ?? 0;
-
-  if (!isVip && currentCount >= monthlyLimit) {
-    const next = nextUpgradePlan(plan);
-    const upgradeHint = next
-      ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerMonth} requests/month.`
-      : '';
-    return NextResponse.json(
-      { error: `Monthly AI limit reached (${currentCount}/${monthlyLimit} on ${PLAN_LABELS[plan]} plan).${upgradeHint}` },
-      { status: 429 },
-    );
-  }
+  let reservation: string | null = null;
 
   // Process the AI request
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -115,7 +93,7 @@ export async function POST(req: NextRequest) {
       if (!chatMessage || typeof chatMessage !== 'string') {
         return NextResponse.json({ error: 'Missing message' }, { status: 400 });
       }
-      const pageContext = text?.trim()
+      const pageContext = typeof text === 'string' && text.trim()
         ? `Current page content:\n${(text as string).slice(0, 6000)}\n\n`
         : 'No document is open.\n\n';
       prompt =
@@ -136,15 +114,6 @@ export async function POST(req: NextRequest) {
         'No markdown fences, no extra text, just the raw JSON array.\n\n' +
         text.slice(0, 6000);
 
-      const msg = await client.messages.create({
-        model: 'claude-haiku-4-5',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      const raw = (msg.content[0] as { type: string; text: string }).text ?? '[]';
-      // Increment counter for all non-VIP plans (fire-and-forget)
-      await recordSuccessfulRequest(admin, user.id, month);
-      return NextResponse.json({ result: raw });
     } else if (action === 'summary') {
       prompt =
         'Summarize the following text in 3–5 concise bullet points. ' +
@@ -174,6 +143,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
+    reservation = await reserveAiRequest(admin, user.id, month, monthlyLimit);
+    if (!reservation) {
+      const next = nextUpgradePlan(plan);
+      const upgradeHint = next ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerMonth} requests/month.` : '';
+      return NextResponse.json({ error: `Monthly AI limit reached (${monthlyLimit}/${monthlyLimit} on ${PLAN_LABELS[plan]} plan).${upgradeHint}` }, { status: 429 });
+    }
+
     const message = await client.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 1024,
@@ -183,10 +159,11 @@ export async function POST(req: NextRequest) {
     const result = (message.content[0] as { type: string; text: string }).text ?? '';
 
     // Increment counter for all non-VIP plans (fire-and-forget — don't block response)
-    await recordSuccessfulRequest(admin, user.id, month);
+
 
     return NextResponse.json({ result });
   } catch (err) {
+    if (reservation) await refundAiRequest(admin, reservation).catch(console.error);
     const message = err instanceof Error ? err.message.slice(0, 200) : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
   }
