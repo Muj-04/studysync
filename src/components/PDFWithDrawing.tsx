@@ -1,5 +1,6 @@
 'use client';
 import { forwardRef, useRef, useEffect, useState, useCallback, useImperativeHandle } from 'react';
+import { createDrawingHydration } from '@/lib/drawingHydration';
 import PDFViewer from './PDFViewer';
 import PDFSearchBar from './PDFSearchBar';
 import TextNotesLayer from './TextNotesLayer';
@@ -286,6 +287,14 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     const canvasDimsRef = useRef(canvasDims);
     canvasDimsRef.current = canvasDims;
 
+    const hydration = useRef(createDrawingHydration());
+    const canvasIdentity = useRef('');
+    const lastEmittedData = useRef<string | undefined>(undefined);
+    const emitDrawing = useCallback((data: string) => {
+      lastEmittedData.current = data;
+      onSave(data);
+    }, [onSave]);
+
     const lineStateRef  = useRef<LineState>({ phase: 'idle' });
     const undoStack     = useRef<string[]>([]);
     const redoStack     = useRef<string[]>([]);
@@ -374,7 +383,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     useEffect(() => {
       setSelectedImageId(null);
       setDragImages(null);
-    }, [document.currentPage]);
+    }, [document.id, document.currentPage]);
 
     const handleCanvasDimensions = useCallback((w: number, h: number) => {
       setCanvasDims((prev) => (prev?.w === w && prev?.h === h ? prev : { w, h }));
@@ -383,6 +392,12 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     useEffect(() => {
       const canvas = drawCanvasRef.current;
       if (!canvas || !canvasDims) return;
+      const identity = `${document.id}:${document.url}:${document.currentPage}:${canvasDims.w}:${canvasDims.h}`;
+      const changedPage = canvasIdentity.current !== identity;
+      if (!changedPage && savedData === lastEmittedData.current) return;
+      canvasIdentity.current = identity;
+      lastEmittedData.current = savedData;
+      hydration.current.invalidate();
       cancelLine();
       isDrawing.current = false;
       lastPos.current = null;
@@ -398,9 +413,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       if (savedData) {
-        const img = new Image();
-        img.onload = () => ctx.drawImage(img, 0, 0, w, h);
-        img.src = savedData;
+        hydration.current.load(savedData, (img) => ctx.drawImage(img, 0, 0, w, h));
       }
       const remote = remoteCanvasRef.current;
       if (remote) {
@@ -412,8 +425,12 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         rCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         rCtx.clearRect(0, 0, w, h);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [document.currentPage, canvasDims?.w, canvasDims?.h]);
+    }, [document.id, document.url, document.currentPage, canvasDims, savedData, cancelLine]);
+
+    useEffect(() => {
+      const loader = hydration.current;
+      return () => loader.invalidate();
+    }, []);
 
     const getPos = (e: { clientX: number; clientY: number }) => {
       const canvas = drawCanvasRef.current!;
@@ -428,10 +445,11 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
 
     const saveCanvas = useCallback(() => {
       const canvas = drawCanvasRef.current;
-      if (canvas) onSave(canvas.toDataURL('image/png'));
-    }, [onSave]);
+      if (canvas) emitDrawing(canvas.toDataURL('image/png'));
+    }, [emitDrawing]);
 
     const startDraw = (pos: { x: number; y: number }, shiftKey = false) => {
+      hydration.current.invalidate();
       const canvas = drawCanvasRef.current;
       const ctx = canvas?.getContext('2d');
       if (!canvas || !ctx || !canvasDimsRef.current) return;
@@ -538,6 +556,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     };
 
     const clearCanvas = useCallback(() => {
+      hydration.current.invalidate();
       cancelLine();
       const canvas = drawCanvasRef.current;
       const ctx = canvas?.getContext('2d');
@@ -546,8 +565,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
       redoStack.current = [];
       ctx.clearRect(0, 0, dims.w, dims.h);
-      onSave(canvas.toDataURL('image/png'));
-    }, [onSave, cancelLine]);
+      emitDrawing(canvas.toDataURL('image/png'));
+    }, [emitDrawing, cancelLine]);
 
     const undoCanvas = useCallback(() => {
       const stack = undoStack.current;
@@ -561,10 +580,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       const dims = canvasDimsRef.current;
       if (!canvas || !ctx || !dims) return;
       redoStack.current = [...redoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
-      const img = new Image();
-      img.onload = () => { ctx.clearRect(0, 0, dims.w, dims.h); ctx.drawImage(img, 0, 0, dims.w, dims.h); onSave(prev); };
-      img.src = prev;
-    }, [cancelLine, onSave]);
+      hydration.current.load(prev, (img) => { ctx.clearRect(0, 0, dims.w, dims.h); ctx.drawImage(img, 0, 0, dims.w, dims.h); emitDrawing(prev); });
+    }, [cancelLine, emitDrawing]);
 
     const redoCanvas = useCallback(() => {
       const stack = redoStack.current;
@@ -578,10 +595,8 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       const dims = canvasDimsRef.current;
       if (!canvas || !ctx || !dims) return;
       undoStack.current = [...undoStack.current, canvas.toDataURL('image/png')].slice(-MAX_UNDO_HISTORY);
-      const img = new Image();
-      img.onload = () => { ctx.clearRect(0, 0, dims.w, dims.h); ctx.drawImage(img, 0, 0, dims.w, dims.h); onSave(next); };
-      img.src = next;
-    }, [cancelLine, onSave]);
+      hydration.current.load(next, (img) => { ctx.clearRect(0, 0, dims.w, dims.h); ctx.drawImage(img, 0, 0, dims.w, dims.h); emitDrawing(next); });
+    }, [cancelLine, emitDrawing]);
 
     const loadData = useCallback((data: string) => {
       const canvas = remoteCanvasRef.current;
@@ -771,12 +786,12 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         ctx.globalAlpha = 1;
         ctx.drawImage(el, img.x * dims.w, img.y * dims.h, img.width * dims.w, img.height * dims.h);
         ctx.restore();
-        onSave(canvas.toDataURL('image/png'));
+        emitDrawing(canvas.toDataURL('image/png'));
       };
       el.src = img.src;
       setSelectedImageId(null);
       onSavePageImagesRef.current?.(imgs.filter((i) => i.id !== selId));
-    }, [onSave]);
+    }, [emitDrawing]);
 
     const handleDeleteImage = useCallback(() => {
       const selId = selectedImageIdRef.current;
