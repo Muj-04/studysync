@@ -1,3 +1,4 @@
+export { getConversation, markMessagesRead } from './messages';
 import { deleteLocalDocument } from '@/lib/documentLocalData';
 export { saveTextNotes, saveBookmarks, saveKeyTerms, saveBlankPages, saveFlashcards } from './annotations';
 import { createClient } from './client';
@@ -1581,32 +1582,6 @@ export async function sendDirectMessage(
   return mapDirectMessage(data as DirectMessageRow);
 }
 
-export async function getConversation(
-  friendId: string,
-  limit:    number = 100,
-): Promise<DirectMessage[]> {
-  const uid = await userId(); if (!uid) return [];
-  // RLS already restricts visibility to rows where caller is sender or
-  // recipient. Filtering on the pair narrows to this specific conversation.
-  const { data, error } = await sb()
-    .from('direct_messages')
-    .select('id, sender_id, recipient_id, content, read, created_at')
-    .or(`and(sender_id.eq.${uid},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${uid})`)
-    .order('created_at', { ascending: true })
-    .limit(limit);
-  if (error) { console.error('[DB] getConversation error:', error.message); return []; }
-  return (data ?? []).map((r) => mapDirectMessage(r as DirectMessageRow));
-}
-
-export async function markMessagesRead(friendId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  // Only flips rows the trigger + UPDATE policy allow: caller is recipient.
-  await sb().from('direct_messages')
-    .update({ read: true })
-    .eq('sender_id', friendId)
-    .eq('recipient_id', uid)
-    .eq('read', false);
-}
 
 // ── Study Rooms — listing ─────────────────────────────────────────────────────
 

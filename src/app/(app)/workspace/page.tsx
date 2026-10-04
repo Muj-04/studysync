@@ -2330,7 +2330,7 @@ export default function WorkspacePage() {
                                 setExportMenuOpen(false);
                                 if (!activeDocument) return;
                                 const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
-                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
+                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id, pageOrder: virtualSequence.map((page) => page.type === 'pdf' ? String(page.pdfPage) : page.blankPage.id) };
                                 if (ext === 'pdf') exportAsPDF(data);
                                 else exportAsDocx(data);
                               }}

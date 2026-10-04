@@ -1,36 +1,6 @@
+import { isAllowedOrigin, protectedPaths, safeReturnPath } from './lib/accessPolicy';
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-
-const PRODUCTION_ORIGIN = 'https://pdf-study-workspace.vercel.app';
-
-/**
- * Vercel preview URLs for this project have the shape:
- *   per-commit:    https://pdf-study-workspace-<hash>-muj-04s-projects.vercel.app
- *   branch alias:  https://pdf-study-workspace-git-<branch>-muj-04s-projects.vercel.app
- *
- * The regex below requires the exact project slug at the start AND the exact
- * team slug (`muj-04s-projects`) at the end, so a third party cannot forge a
- * matching subdomain — Vercel team slugs are globally unique. The middle
- * segment is constrained to lowercase letters, digits, and hyphens, which
- * covers both per-commit hashes and `git-<branch>` aliases without
- * permitting wildcards that could match arbitrary content.
- */
-const PREVIEW_ORIGIN_RE = /^https:\/\/pdf-study-workspace-[a-z0-9-]+-muj-04s-projects\.vercel\.app$/;
-
-/**
- * Local dev — `npm run dev` serves at http://localhost:<port>. Only honoured
- * when the runtime is in non-production mode so a deployed instance can never
- * be tricked into allowlisting localhost via header manipulation.
- */
-const LOCALHOST_ORIGIN_RE = /^http:\/\/localhost(:\d+)?$/;
-
-function isAllowedOrigin(origin: string | null): boolean {
-  if (!origin) return false;
-  if (origin === PRODUCTION_ORIGIN) return true;
-  if (PREVIEW_ORIGIN_RE.test(origin)) return true;
-  if (process.env.NODE_ENV !== 'production' && LOCALHOST_ORIGIN_RE.test(origin)) return true;
-  return false;
-}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -38,7 +8,7 @@ export async function proxy(request: NextRequest) {
   // ── CORS for /api routes ────────────────────────────────────────────────────
   if (pathname.startsWith('/api/')) {
     const origin = request.headers.get('origin');
-    const originAllowed = isAllowedOrigin(origin);
+    const originAllowed = isAllowedOrigin(origin, process.env.NODE_ENV === 'production');
 
     // Preflight — echo the request's Origin back when it's allowlisted so
     // the browser sees a same-origin response. Reject preflights from
@@ -91,15 +61,6 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const protectedPaths = [
-    '/workspace',
-    '/dashboard',
-    '/library',
-    '/community',
-    '/friends',
-    '/settings',
-    '/room',
-  ];
   const authPaths = ['/login', '/register'];
 
   // Skip server-side auth redirect for Capacitor/Android WebView —
@@ -109,12 +70,12 @@ export async function proxy(request: NextRequest) {
   const isCapacitor = ua.includes('StudySync/');
 
   if (!isCapacitor) {
-    if (!user && protectedPaths.some((p) => pathname.startsWith(p))) {
+    if (!user && protectedPaths.some((p) => (pathname === p || pathname.startsWith(`${p}/`)))) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    if (user && authPaths.some((p) => pathname.startsWith(p))) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+    if (user && authPaths.some((p) => (pathname === p || pathname.startsWith(`${p}/`)))) {
+      return NextResponse.redirect(new URL(safeReturnPath(request.nextUrl.searchParams.get('redirect')), request.url));
     }
   }
 
