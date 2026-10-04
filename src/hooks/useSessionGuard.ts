@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import {
   getOrCreateSessionId,
   registerSession,
+  getProfile,
   updateSessionLastSeen,
 } from '@/lib/supabase/db';
 import { clearLocalUserData } from '@/lib/clearLocalUserData';
@@ -19,13 +20,19 @@ export function useSessionGuard({ onKicked }: { onKicked?: () => void } = {}) {
     sessionIdRef.current = sessionId;
 
     const supabase = createClient();
+    let disposed = false;
+    let enforcing = false;
     let removeChannel: (() => void) | null = null;
 
     supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user) return;
+      if (!user || disposed) return;
+      const profile = await getProfile();
+      if (disposed || !profile || profile.plan === 'free' || profile.isVip) return;
+      enforcing = true;
 
       // Register (or re-confirm) this session
       await registerSession(sessionId, navigator.userAgent.slice(0, 200));
+      if (disposed) return;
 
       // Watch for another device registering — payload.new.session_id will differ
       const channel = supabase
@@ -40,9 +47,9 @@ export function useSessionGuard({ onKicked }: { onKicked?: () => void } = {}) {
           },
           (payload) => {
             const newId = (payload.new as { session_id: string }).session_id;
-            if (newId !== sessionIdRef.current && !kickedRef.current) {
+            if (!disposed && newId !== sessionIdRef.current && !kickedRef.current) {
               kickedRef.current = true;
-              supabase.auth.signOut()
+              supabase.auth.signOut({ scope: 'local' })
                 .then(() => clearLocalUserData())
                 .then(() => onKicked?.());
             }
@@ -51,14 +58,15 @@ export function useSessionGuard({ onKicked }: { onKicked?: () => void } = {}) {
         .subscribe();
 
       removeChannel = () => supabase.removeChannel(channel);
-    });
+    }).catch(console.error);
 
     const interval = setInterval(
-      () => updateSessionLastSeen(sessionIdRef.current),
+      () => { if (enforcing && !disposed) void updateSessionLastSeen(sessionIdRef.current).catch(console.error); },
       LAST_SEEN_INTERVAL_MS,
     );
 
     return () => {
+      disposed = true;
       clearInterval(interval);
       removeChannel?.();
     };
