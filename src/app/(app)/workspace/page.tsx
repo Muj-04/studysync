@@ -1033,9 +1033,10 @@ export default function WorkspacePage() {
     getPendingReopenFile().then(async (file) => {
       if (!file) return;
       await clearPendingReopenFile();
+      const reopenId = sessionStorage.getItem('reopen_doc_id') ?? undefined;
       sessionStorage.removeItem('reopen_doc_id');
       sessionStorage.removeItem('reopen_doc_name');
-      addDocument(file).catch(console.error);
+      addDocument(file, reopenId).catch(console.error);
     }).catch(console.error);
   }, [addDocument]);
 
@@ -1086,11 +1087,7 @@ export default function WorkspacePage() {
     if (!modal) return;
     setReopenModal(null);
     pendingOpenRef.current = null;
-    // Pre-seed the DOC_MAP so addDocument uses the canonical Supabase ID
-    const map = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-    map[file.name] = modal.docId;
-    storageSet(KEYS.DOC_MAP, map);
-    addDocument(file).catch(console.error);
+    addDocument(file, modal.docId).catch(console.error);
   }, [reopenModal, addDocument]);
 
   // ── Document order ────────────────────────────────────────────────────────
@@ -1801,11 +1798,9 @@ export default function WorkspacePage() {
     }
     let anyRestored = false;
     for (const f of files) {
-      const { isRestored } = await addDocument(f);
+      const { isRestored, id: docId } = await addDocument(f);
       if (isRestored) anyRestored = true;
       if (userIdRef.current) {
-        const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-        const docId = docMap[f.name];
         if (docId) {
           upsertDocument({
             id: docId,
