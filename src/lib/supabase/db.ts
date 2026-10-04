@@ -1,3 +1,4 @@
+import { deleteLocalDocument } from '@/lib/documentLocalData';
 export { saveTextNotes, saveBookmarks, saveKeyTerms, saveBlankPages, saveFlashcards } from './annotations';
 import { createClient } from './client';
 import type { VoiceNote, TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
@@ -33,19 +34,11 @@ async function ensureDoc(uid: string, docId: string): Promise<void> {
 
 // ── Documents ────────────────────────────────────────────────────────────────
 
-// Returns the canonical document ID for this user+name (cross-device stable).
-// If a row with the same name already exists (opened on another device first),
-// that existing ID is returned and used — the local UUID is discarded.
+// Persist metadata by stable document ID, never by a potentially duplicated filename.
 export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }): Promise<string> {
   const uid = await userId(); if (!uid) return doc.id;
 
-  // Look up by (user_id, name) — stable across devices regardless of local UUID
-  const { data: existing } = await sb()
-    .from('documents').select('id')
-    .eq('user_id', uid).eq('name', doc.name)
-    .maybeSingle();
-
-  const canonicalId = existing?.id ?? doc.id;
+  const canonicalId = doc.id;
 
   const { error } = await sb().from('documents').upsert({
     id: canonicalId, user_id: uid, name: doc.name, type: doc.type,
@@ -71,20 +64,23 @@ export async function deleteDocument(docId: string) {
 }
 
 export async function deleteAllVoiceNotesForDocument(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  const { data } = await sb().from('voice_notes').select('id').match({ user_id: uid, document_id: docId });
+  const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
+  const { data, error: readError } = await sb().from('voice_notes').select('id').match({ user_id: uid, document_id: docId });
+  if (readError) throw readError;
   if (data?.length) {
     const exts = ['webm', 'ogg', 'mp4'];
     const paths = data.flatMap((r) => exts.map((e) => `${uid}/${docId}/${r.id}.${e}`));
-    await sb().storage.from('voice-notes').remove(paths);
-    await sb().from('voice_notes').delete().match({ user_id: uid, document_id: docId });
+    const { error: storageError } = await sb().storage.from('voice-notes').remove(paths);
+    if (storageError) throw storageError;
+    const { error } = await sb().from('voice_notes').delete().match({ user_id: uid, document_id: docId });
+    if (error) throw error;
   }
 }
 
 export async function deleteAllDataForDocument(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
+  const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
   await deleteAllVoiceNotesForDocument(docId);
-  await Promise.all([
+  const results = await Promise.all([
     sb().from('drawings').delete().match({ user_id: uid, document_id: docId }),
     sb().from('text_notes').delete().match({ user_id: uid, document_id: docId }),
     sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId }),
@@ -96,7 +92,9 @@ export async function deleteAllDataForDocument(docId: string): Promise<void> {
     // session_state: one row per user keyed on user_id; delete only if it points to this doc
     sb().from('session_state').delete().match({ user_id: uid, doc_id: docId }),
   ]);
-  await sb().from('documents').delete().eq('id', docId);
+  for (const result of results) if (result.error) throw result.error;
+  const { error } = await sb().from('documents').delete().match({ id: docId, user_id: uid });
+  if (error) throw error;
   // Remove from in-process cache so a re-add starts fresh
   registeredDocs.delete(docId);
 }
@@ -154,15 +152,8 @@ export async function fetchLibraryDocuments(): Promise<LibraryDocument[]> {
 }
 
 export async function deleteLibraryDocument(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  await Promise.all([
-    sb().from('voice_notes').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('drawings').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('text_notes').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('bookmarks').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('key_terms').delete().eq('document_id', docId).eq('user_id', uid),
-  ]);
-  await sb().from('documents').delete().eq('id', docId).eq('user_id', uid);
+  await deleteAllDataForDocument(docId);
+  await deleteLocalDocument(docId);
 }
 
 // ── Community ─────────────────────────────────────────────────────────────────

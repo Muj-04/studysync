@@ -462,7 +462,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const removeIncomingNoteRef = useRef<((id: string) => void) | null>(null);
   const seedNotesRef          = useRef<((remote: Parameters<ReturnType<typeof useRoomVoiceNotes>['seedNotes']>[0]) => void) | null>(null);
 
-  const { activeDocument, addDocument, removeDocument, goToPage } = usePDF();
+  const { activeDocument, addDocument, removeDocument, goToPage } = usePDF({ persist: false });
   const { getDrawing, saveDrawing }  = usePDFDrawings();
 
   const broadcastRef = useRef<(page: number, data: string) => void>(() => {});
