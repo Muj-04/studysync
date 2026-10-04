@@ -81,7 +81,7 @@ export default function PDFViewer({
   useEffect(() => { onPageReadyRef.current  = onPageReady; });
   useEffect(() => { liveZoomRef.current     = zoom; });
   useEffect(() => { allowPinchZoomRef.current = allowPinchZoom; });
-  useEffect(() => { return () => { pdfRef.current?.destroy(); }; }, []);
+  useEffect(() => { return () => { pdfRef.current?.loadingTask.destroy(); }; }, []);
 
   // Scroll active highlight into view when it changes
   useEffect(() => {
@@ -106,9 +106,9 @@ export default function PDFViewer({
         const pdfjs = await getPDFJS();
 
         if (pdfUrlRef.current !== document.url) {
-          if (pdfRef.current) { await pdfRef.current.destroy(); pdfRef.current = null; }
-          const loaded = await pdfjs.getDocument(document.url).promise;
-          if (cancelled) { await loaded.destroy(); return; }
+          if (pdfRef.current) { await pdfRef.current.loadingTask.destroy(); pdfRef.current = null; }
+          const loaded = await pdfjs.getDocument({ url: document.url }).promise;
+          if (cancelled) { await loaded.loadingTask.destroy(); return; }
           pdfRef.current = loaded;
           pdfUrlRef.current = document.url;
         }

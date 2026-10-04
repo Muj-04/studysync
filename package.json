@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node scripts/run-tests.cjs"
+    "test": "node scripts/run-tests.cjs",
+    "postinstall": "node scripts/sync-pdf-worker.cjs",
+    "prebuild": "node scripts/sync-pdf-worker.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
@@ -19,15 +21,15 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "docx": "^9.7.1",
-    "dompurify": "^3.4.8",
+    "dompurify": "^3.4.16",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "livekit-client": "^2.19.2",
     "livekit-server-sdk": "^2.15.4",
     "lucide-react": "^1.14.0",
-    "next": "16.2.6",
-    "pdfjs-dist": "^5.7.284",
+    "next": "16.3.8",
+    "pdfjs-dist": "^6.4.299",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "stripe": "^22.2.0"
@@ -40,9 +42,12 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.3.8",
     "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }
