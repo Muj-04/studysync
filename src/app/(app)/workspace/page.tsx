@@ -1,4 +1,5 @@
 'use client';
+import { useTextNotes } from '@/hooks/useTextNotes';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
@@ -1208,7 +1209,7 @@ export default function WorkspacePage() {
         if (remotePageKeys.has(pageKey)) continue;
         if (notes.length === 0) continue;
         console.log('[StudySync] uploading local-only text notes for page:', pageKey, 'count:', notes.length);
-        dbSaveTextNotes(canonicalId, pageKey, notes);
+        void dbSaveTextNotes(canonicalId, pageKey, notes).catch(console.error);
       }
 
       // Seed voice notes fetched with the canonical docId — happens after ID resolution
@@ -1312,7 +1313,7 @@ export default function WorkspacePage() {
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     stored[docId] = marks;
     storageSet(KEYS.BOOKMARKS, stored);
-    if (userIdRef.current) dbSaveBookmarks(docId, marks);
+    if (userIdRef.current) void dbSaveBookmarks(docId, marks).catch(console.error);
   }, []);
 
   const isCurrentPageBookmarked = bookmarks.some((b) => b.virtualIndex === virtualIndex);
@@ -1356,8 +1357,7 @@ export default function WorkspacePage() {
   }, [setActiveDocument, handleNavigateToPdfPage]);
 
   // ── Text notes (persisted per doc+page) ──────────────────────────────────
-  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
-  const prevTextNotesRef = useRef<Record<string, TextNote[]>>({});
+  const [pageTextNotes, setPageTextNotes] = useTextNotes(userId);
 
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
@@ -1393,26 +1393,6 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Persistence: text notes ───────────────────────────────────────────────
-  useEffect(() => {
-    storageSet(KEYS.TEXT_NOTES, pageTextNotes);
-    if (userIdRef.current) {
-      // Only sync pages whose notes array reference changed (i.e. were mutated)
-      for (const [fullKey, notes] of Object.entries(pageTextNotes)) {
-        if (prevTextNotesRef.current[fullKey] === notes) continue;
-        const colonIdx = fullKey.indexOf(':');
-        if (colonIdx === -1) continue;
-        dbSaveTextNotes(fullKey.slice(0, colonIdx), fullKey.slice(colonIdx + 1), notes);
-      }
-    }
-    prevTextNotesRef.current = pageTextNotes;
-  }, [pageTextNotes]);
-
-  // ── Restore text notes from storage on mount ──────────────────────────────
-  useEffect(() => {
-    const stored = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES);
-    if (stored && Object.keys(stored).length > 0) setPageTextNotes(stored);
-  }, []);
-
   // ── Persistence: zoom per document ────────────────────────────────────────
   const activeDocumentIdRef = useRef<string | null>(null);
   activeDocumentIdRef.current = activeDocumentId;
