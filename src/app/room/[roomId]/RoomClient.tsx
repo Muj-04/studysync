@@ -1,4 +1,5 @@
 'use client';
+import { mergeRoomStroke } from '@/lib/roomStrokes';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -516,11 +517,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // returns true if anything changed (so caller can decide whether to bump
   // maxLocalSeqRef etc.).
   const appendStrokeLocal = useCallback((pageKey: string, stroke: RoomStrokePayload) => {
-    if (knownStrokeIdsRef.current.has(stroke.id)) return false;
+    if (knownStrokeIdsRef.current.has(stroke.id) && stroke.seq === undefined) return false;
     knownStrokeIdsRef.current.add(stroke.id);
     setRoomStrokes((prev) => {
       const existing = prev[pageKey] ?? [];
-      return { ...prev, [pageKey]: [...existing, stroke] };
+      return { ...prev, [pageKey]: mergeRoomStroke(existing, stroke) };
     });
     return true;
   }, []);
@@ -535,8 +536,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // knownStrokeIdsRef makes this safe to call on every reconnect cycle.
   const handleReconnect = useCallback(async () => {
     if (!roomId) return;
-    const since = maxLocalSeqRef.current;
-    const rows = await fetchAllRoomStrokes(roomId, since);
+    // Replay the complete paginated log: a maximum observed sequence is not a contiguous cursor.
+    const rows = await fetchAllRoomStrokes(roomId).catch((error: unknown) => {
+      console.error('Room stroke reconciliation failed', error);
+      return [];
+    });
     for (const row of rows) {
       appendStrokeLocal(row.pageKey, row.stroke);
       if (row.seq > maxLocalSeqRef.current) maxLocalSeqRef.current = row.seq;
@@ -785,10 +789,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         setRoomStrokes((prev) => {
           const merged: Record<string, RoomStrokePayload[]> = { ...prev };
           for (const row of remoteStrokes) {
-            if (knownStrokeIdsRef.current.has(row.stroke.id)) continue;
             knownStrokeIdsRef.current.add(row.stroke.id);
             const existing = merged[row.pageKey] ?? [];
-            merged[row.pageKey] = [...existing, row.stroke];
+            merged[row.pageKey] = mergeRoomStroke(existing, row.stroke);
           }
           return merged;
         });
@@ -957,9 +960,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     console.log('STROKE_DIAG_C about to insertRoomStroke', stroke?.id);
     const result = await insertRoomStroke(roomId, pageKey, stroke);
     console.log('STROKE_DIAG_D after insertRoomStroke await', stroke?.id, !!result, result?.seq ?? null);
-    if (result && result.seq > maxLocalSeqRef.current) {
-      maxLocalSeqRef.current = result.seq;
-      await broadcastStroke(pageKey, stroke);
+    if (result) {
+      const confirmed = { ...stroke, seq: result.seq };
+      appendStrokeLocal(pageKey, confirmed);
+      await broadcastStroke(pageKey, confirmed);
     }
     console.log('[Room] handleStrokeComplete RESULT', { strokeId: stroke.id, persisted: !!result, seq: result?.seq ?? null });
   }, [appendStrokeLocal, broadcastStroke, roomId, userId]);

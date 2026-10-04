@@ -1232,6 +1232,8 @@ export async function fetchAllRoomDrawings(roomId: string): Promise<Array<{ page
 // canvas — keep it small (no bitmaps, just a points list).
 
 export interface RoomStrokePayload {
+  /** Server-assigned ordering; absent only while a local stroke is pending. */
+  seq?: number;
   id:             string;
   tool:           'pen' | 'eraser' | 'line';
   penType:        'normal' | 'marker' | 'highlighter';
@@ -1262,24 +1264,23 @@ export interface RoomStrokeRow {
  * a dropped realtime broadcast.
  */
 export async function fetchAllRoomStrokes(roomId: string, sinceSeq?: number): Promise<RoomStrokeRow[]> {
-  let query = sb()
-    .from('room_strokes')
-    .select('id, page_key, user_id, seq, stroke, created_at')
-    .eq('room_id', roomId)
-    .order('seq', { ascending: true });
-  if (typeof sinceSeq === 'number') {
-    query = query.gt('seq', sinceSeq);
+  const rows: RoomStrokeRow[] = [];
+  let cursor = sinceSeq ?? 0;
+  while (true) {
+    const { data, error } = await sb().from('room_strokes')
+      .select('id,page_key,user_id,seq,stroke,created_at').eq('room_id', roomId)
+      .gt('seq', cursor).order('seq', { ascending: true }).limit(500);
+    if (error) throw new Error(`Could not load room strokes: ${error.message}`);
+    if (!data?.length) break;
+    for (const row of data) rows.push({
+      id: row.id, pageKey: row.page_key, userId: row.user_id, seq: Number(row.seq),
+      stroke: { ...row.stroke, seq: Number(row.seq) }, createdAt: row.created_at,
+    });
+    const next = rows[rows.length - 1].seq;
+    if (next <= cursor) throw new Error('Room stroke cursor did not advance');
+    cursor = next;
   }
-  const { data, error } = await query;
-  if (error) { console.error('[DB] fetchAllRoomStrokes error:', error.message); return []; }
-  return (data ?? []).map((r) => ({
-    id:        r.id as string,
-    pageKey:   r.page_key as string,
-    userId:    r.user_id as string,
-    seq:       Number(r.seq),
-    stroke:    r.stroke as RoomStrokePayload,
-    createdAt: r.created_at as string,
-  }));
+  return rows;
 }
 
 /**

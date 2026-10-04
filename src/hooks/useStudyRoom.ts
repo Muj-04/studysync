@@ -171,9 +171,9 @@ export function useStudyRoom(
           },
           (payload) => {
             if (generation !== generationRef.current) return;
-            const row = payload.new as { page_key?: string; stroke?: RoomStrokePayload } | undefined;
+            const row = payload.new as { page_key?: string; stroke?: RoomStrokePayload; seq?: number } | undefined;
             if (!row?.page_key || !row.stroke) return;
-            onStrokeRef.current?.(row.page_key, row.stroke);
+            onStrokeRef.current?.(row.page_key, { ...row.stroke, seq: Number(row.seq) });
           },
         )
         .on(
