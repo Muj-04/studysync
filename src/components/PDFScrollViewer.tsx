@@ -506,19 +506,18 @@ const ScrollPageItem = memo(function ScrollPageItem({
   // to the applied set in stopDraw, so this loop is a no-op for them
   // (avoids the flash from a full clear-and-replay).
   useEffect(() => {
-    if (!strokeMode || !strokes || strokes.length === 0) return;
-    const drawCanvas = drawCanvasRef.current;
+    if (!strokeMode || !strokes?.length || isDrawing.current) return;
+    const canvas = drawCanvasRef.current;
     const dims = canvasDimsRef.current;
-    if (!drawCanvas || !dims) return;
-    const ctx = drawCanvas.getContext('2d');
-    if (!ctx) return;
-    const { w, h } = dims;
-    for (const s of strokes) {
-      if (appliedStrokeIdsRef.current.has(s.id)) continue;
-      const scaleX = w / (s.canvasW || w);
-      const scaleY = h / (s.canvasH || h);
-      applyStrokeToCtx(ctx, s, scaleX, scaleY);
-      appliedStrokeIdsRef.current.add(s.id);
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !dims || !ctx) return;
+    // Erasers make ordering significant. A confirmed stroke may move before
+    // an already-painted optimistic stroke, so replay the authoritative order.
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    appliedStrokeIdsRef.current = new Set();
+    for (const stroke of strokes) {
+      applyStrokeToCtx(ctx, stroke, dims.w / (stroke.canvasW || dims.w), dims.h / (stroke.canvasH || dims.h));
+      appliedStrokeIdsRef.current.add(stroke.id);
     }
   }, [strokes, strokeMode]);
 
