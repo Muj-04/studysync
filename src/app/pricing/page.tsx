@@ -104,11 +104,11 @@ export default function PricingPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('success') === 'true') {
-      setToast({ type: 'success', message: 'Payment successful! Your plan has been upgraded.' });
+      setToast({ type: 'success', message: 'Checkout returned. Your plan will update after payment confirmation.' });
       window.history.replaceState({}, '', '/pricing');
       setTimeout(loadPlan, 1500);
     } else if (params.get('canceled') === 'true') {
-      setToast({ type: 'error', message: 'Payment canceled. No charges were made.' });
+      setToast({ type: 'error', message: 'Checkout canceled. You can try again when ready.' });
       window.history.replaceState({}, '', '/pricing');
     }
   }, [loadPlan]);

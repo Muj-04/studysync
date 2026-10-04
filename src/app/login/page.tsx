@@ -1,4 +1,5 @@
 'use client';
+import { safeReturnPath } from '@/lib/accessPolicy';
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -80,13 +81,13 @@ export default function LoginPage() {
       if (emailRef.current) emailRef.current.value = savedEmail;
     }
     createClient().auth.getUser().then(({ data: { user } }) => {
-      if (user) window.location.replace('/dashboard');
+      if (user) window.location.replace(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')));
     }).catch(() => {});
   }, []);
 
   const proceedToApp = async (sessionId: string) => {
     await registerSession(sessionId, navigator.userAgent.slice(0, 200));
-    window.location.href = '/dashboard';
+    window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
   };
 
   const processPendingReferral = async () => {
@@ -141,7 +142,7 @@ export default function LoginPage() {
       } catch { /* proceed if session status cannot be checked */ }
 
       await processPendingReferral();
-      window.location.href = '/dashboard';
+      window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
     } catch { setError('Login failed. Check your connection and try again.'); }
     finally { setLoading(false); }
   };
@@ -151,7 +152,7 @@ export default function LoginPage() {
     setGoogleLoading(true); setError('');
     const { error: oauthError } = await createClient().auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')))}` },
     });
     if (oauthError) { setError(oauthError.message); setGoogleLoading(false); }
   };
@@ -163,7 +164,7 @@ export default function LoginPage() {
 
   const handleCancelConflict = async () => {
     setConflictLoading(true);
-    await createClient().auth.signOut();
+    await createClient().auth.signOut({ scope: 'local' });
     await clearLocalUserData();
     setShowConflict(false); setConflictLoading(false);
   };

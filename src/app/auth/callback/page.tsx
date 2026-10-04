@@ -1,4 +1,5 @@
 'use client';
+import { safeReturnPath } from '@/lib/accessPolicy';
 import { useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { ensureProfile, ensureReferralCode, processReferral } from '@/lib/supabase/db';
@@ -47,7 +48,7 @@ export default function AuthCallbackPage() {
       }
 
       // Redirect to the app.
-      window.location.replace('/workspace');
+      window.location.replace(safeReturnPath(new URLSearchParams(window.location.search).get('redirect'), '/workspace'));
     };
     run();
   }, []);

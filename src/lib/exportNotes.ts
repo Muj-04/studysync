@@ -5,17 +5,21 @@ interface ExportData {
   pageTextNotes: Record<string, TextNote[]>;
   bookmarks: Bookmark[];
   docId: string;
+  pageOrder?: string[];
 }
 
 // Build a sorted list of pages that have content
-function collectPages(data: ExportData) {
+export function collectPages(data: ExportData) {
   const prefix = `${data.docId}:`;
-  const pages: Array<{ pageKey: string; pageNum: number; notes: TextNote[] }> = [];
+  const pages: Array<{ pageKey: string; pageNum: number; pageLabel: string; notes: TextNote[] }> = [];
   for (const [key, notes] of Object.entries(data.pageTextNotes)) {
     if (!key.startsWith(prefix) || !notes.length) continue;
     const sub = key.slice(prefix.length);
-    const num = parseInt(sub, 10) || 0;
-    pages.push({ pageKey: sub, pageNum: num, notes });
+    const position = data.pageOrder?.indexOf(sub) ?? -1;
+    const numeric = /^\d+$/.test(sub) ? Number(sub) : null;
+    const num = position >= 0 ? position + 1 : numeric ?? Number.MAX_SAFE_INTEGER;
+    const pageLabel = position >= 0 || numeric !== null ? `Page ${num}` : 'Blank page';
+    pages.push({ pageKey: sub, pageNum: num, pageLabel, notes });
   }
   pages.sort((a, b) => a.pageNum - b.pageNum);
   return pages;
@@ -58,8 +62,8 @@ export async function exportAsPDF(data: ExportData): Promise<void> {
     addText('No notes or bookmarks found.', 12, [120, 120, 140]);
   }
 
-  for (const { pageNum, notes } of pages) {
-    addText(`Page ${pageNum}`, 12, [89, 101, 217], true);
+  for (const { pageLabel, notes } of pages) {
+    addText(pageLabel, 12, [89, 101, 217], true);
     y += 2;
     for (const note of notes) {
       addText(`• ${note.content}`, 11, [50, 50, 70]);
@@ -108,10 +112,10 @@ export async function exportAsDocx(data: ExportData): Promise<void> {
     children.push(new Paragraph({ text: 'No notes or bookmarks found.' }));
   }
 
-  for (const { pageNum, notes } of pages) {
+  for (const { pageLabel, notes } of pages) {
     children.push(
       new Paragraph({
-        text: `Page ${pageNum}`,
+        text: pageLabel,
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 240, after: 80 },
       }),

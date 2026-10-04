@@ -736,11 +736,8 @@ export default function FriendsPage() {
     return () => { cancelled = true; channel.unsubscribe(); };
   }, [authReady, myUserId]);
 
-  const handleConversationRead = useCallback((friendId: string) => {
-    setUnreadCounts((prev) => {
-      if (!prev[friendId]) return prev;
-      const next = { ...prev }; delete next[friendId]; return next;
-    });
+  const handleConversationRead = useCallback(() => {
+    void getUnreadMessageCounts().then(setUnreadCounts).catch(console.error);
   }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
