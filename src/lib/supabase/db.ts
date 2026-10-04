@@ -1,3 +1,4 @@
+export { saveTextNotes, saveBookmarks, saveKeyTerms, saveBlankPages, saveFlashcards } from './annotations';
 import { createClient } from './client';
 import type { VoiceNote, TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
 import {
@@ -433,22 +434,6 @@ export async function deleteVoiceNote(noteId: string, docId: string) {
 
 // ── Text Notes ───────────────────────────────────────────────────────────────
 
-export async function saveTextNotes(docId: string, pageKey: string, notes: TextNote[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  const { error: delErr } = await sb().from('text_notes').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
-  if (delErr) console.error('[DB] saveTextNotes delete error:', delErr.message, 'docId:', docId, 'pageKey:', pageKey);
-  if (notes.length === 0) return;
-  const { error: insErr } = await sb().from('text_notes').insert(notes.map((n) => ({
-    id: n.id, user_id: uid, document_id: docId, page_key: pageKey,
-    x: n.x, y: n.y, width: n.width, height: n.height,
-    content: n.content, font_size: n.fontSize, color: n.color,
-    category: n.category ?? null,
-  })));
-  if (insErr) console.error('[DB] saveTextNotes insert error:', insErr.message, 'docId:', docId, 'pageKey:', pageKey);
-  else console.log('[DB] saveTextNotes OK — docId:', docId, 'pageKey:', pageKey, 'count:', notes.length);
-}
-
 export async function fetchTextNotes(docId: string): Promise<Record<string, TextNote[]>> {
   const uid = await userId();
   console.log('[DB] fetchTextNotes uid:', uid, 'docId:', docId);
@@ -472,20 +457,6 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
 
 // ── Bookmarks ────────────────────────────────────────────────────────────────
 
-export async function saveBookmarks(docId: string, bookmarks: Bookmark[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  const { error: delErr } = await sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId });
-  if (delErr) console.error('[DB] saveBookmarks delete error:', delErr.message, 'docId:', docId);
-  if (bookmarks.length === 0) return;
-  const { error: insErr } = await sb().from('bookmarks').insert(bookmarks.map((b) => ({
-    id: b.id, user_id: uid, document_id: docId,
-    virtual_index: b.virtualIndex, label: b.label, created_at: new Date(b.createdAt).toISOString(),
-  })));
-  if (insErr) console.error('[DB] saveBookmarks insert error:', insErr.message, 'docId:', docId);
-  else console.log('[DB] saveBookmarks OK — docId:', docId, 'count:', bookmarks.length);
-}
-
 export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
   const uid = await userId(); if (!uid) return [];
   let q = sb().from('bookmarks').select('*').eq('user_id', uid);
@@ -498,17 +469,6 @@ export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
 }
 
 // ── Key Terms ────────────────────────────────────────────────────────────────
-
-export async function saveKeyTerms(docId: string, terms: KeyTerm[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  await sb().from('key_terms').delete().match({ user_id: uid, document_id: docId });
-  if (terms.length === 0) return;
-  await sb().from('key_terms').insert(terms.map((t) => ({
-    id: t.id, user_id: uid, document_id: docId,
-    term: t.term, definition: t.definition, created_at: new Date(t.createdAt).toISOString(),
-  })));
-}
 
 export async function fetchKeyTerms(docId: string): Promise<KeyTerm[]> {
   const uid = await userId(); if (!uid) return [];
@@ -557,24 +517,12 @@ export async function fetchDrawings(docId: string): Promise<Record<string, strin
 
 // ── Blank Pages ───────────────────────────────────────────────────────────────
 
-export async function saveBlankPages(docId: string, pages: BlankPage[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  await sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId });
-  if (pages.length === 0) return;
-  await sb().from('blank_pages').insert(pages.map((p) => ({
-    id: p.id, user_id: uid, document_id: docId,
-    insert_after_page: p.insertAfterPage, canvas_data: p.canvasData ?? null,
-    bg_theme: p.bgTheme ?? 'white', created_at: p.createdAt,
-  })));
-}
-
 export async function fetchBlankPages(docId: string): Promise<BlankPage[]> {
   const uid = await userId(); if (!uid) return [];
   const { data } = await sb().from('blank_pages').select('*').match({ user_id: uid, document_id: docId });
   return (data ?? []).map((r) => ({
     id: r.id, documentId: r.document_id, insertAfterPage: r.insert_after_page,
-    canvasData: r.canvas_data, bgTheme: r.bg_theme as 'white' | 'dark', createdAt: r.created_at,
+    images: r.images ?? [], canvasData: r.canvas_data, bgTheme: r.bg_theme as 'white' | 'dark', createdAt: r.created_at,
   }));
 }
 
@@ -2165,16 +2113,6 @@ export interface Flashcard {
   question: string;
   answer: string;
   createdAt: string;
-}
-
-export async function saveFlashcards(docId: string, pageNum: number, cards: { question: string; answer: string }[]): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  // Delete existing cards for this page first, then insert fresh batch
-  await sb().from('flashcards').delete().eq('user_id', uid).eq('doc_id', docId).eq('page_num', pageNum);
-  if (!cards.length) return;
-  const rows = cards.map((c) => ({ user_id: uid, doc_id: docId, page_num: pageNum, question: c.question, answer: c.answer }));
-  const { error } = await sb().from('flashcards').insert(rows);
-  if (error) console.error('[DB] saveFlashcards error:', error.message);
 }
 
 export async function loadFlashcards(docId: string, pageNum: number): Promise<Flashcard[]> {
