@@ -40,7 +40,15 @@ test('identity follows bytes and account, not filename; legacy IDs are preserved
   assert.notEqual((await identifyPdf(file('first', 'lecture.pdf'))).id, first.id);
   stored.set('legacy-id', { blob: file('legacy', 'old.pdf') });
   assert.equal((await identifyPdf(file('legacy', 'new-name.pdf'))).id, 'legacy-id');
-  assert.equal((await identifyPdf(file('selected', 'lecture.pdf'), 'explicit-library-id')).id, 'explicit-library-id');
+  await assert.rejects(identifyPdf(file('different', 'old.pdf'), 'legacy-id'), /does not match/);
+  assert.equal(await stored.get('legacy-id').blob.text(), 'legacy');
+  assert.equal((await identifyPdf(file('legacy', 'renamed.pdf'), 'legacy-id')).id, 'legacy-id');
+  await assert.rejects(identifyPdf(file('selected', 'lecture.pdf'), 'unknown-legacy-id'), /Cannot verify/);
+  owner = 'owner-a';
+  assert.equal((await identifyPdf(file('first', 'lecture.pdf'), first.id)).id, first.id);
+  await assert.rejects(identifyPdf(file('different', 'lecture.pdf'), first.id), /Cannot verify/);
+  owner = 'owner-b';
+  await assert.rejects(identifyPdf(file('first', 'lecture.pdf'), first.id), /Cannot verify/);
 });
 
 test('document cleanup preserves other documents and removes only matching keys', async () => {

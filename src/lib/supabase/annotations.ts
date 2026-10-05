@@ -1,4 +1,5 @@
 import { createClient } from './client';
+import { ensureDocument } from './ensureDocument';
 import { createSerialQueue } from '@/lib/persistence/serialQueue';
 import type { TextNote, Bookmark, KeyTerm, BlankPage } from '@/types';
 
@@ -12,6 +13,7 @@ function replace(collection: Collection, docId: string, rows: object[], pageKey:
     const client = createClient();
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) throw new Error('Sign in to sync study data');
+    await ensureDocument(client, user.id, docId);
     const { error } = await client.rpc('replace_study_collection', {
       p_collection: collection, p_document_id: docId, p_page_key: pageKey, p_rows: rows,
     });
