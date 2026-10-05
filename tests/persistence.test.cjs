@@ -23,7 +23,7 @@ test('annotation saves call one atomic RPC and propagate database failures', asy
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
     rpc: async (name, args) => { calls.push({ name, args }); return { error: { message: 'insert failed' } }; },
-    from() { throw Error('No destructive client-side replacement permitted'); },
+    from(table) { assert.equal(table, 'documents'); return { upsert: async () => ({ error: null }) }; },
   };
   const { saveTextNotes } = loadSource('src/lib/supabase/annotations.ts', { './client': { createClient: () => client } });
   await assert.rejects(saveTextNotes('doc', '1', [{ id: 'note', content: 'retained' }]), /insert failed/);
@@ -37,6 +37,7 @@ test('blank-page images are included in the atomic snapshot', async () => {
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
     rpc: async (_, args) => { saved = args; return { error: null }; },
+    from: () => ({ upsert: async () => ({ error: null }) }),
   };
   const { saveBlankPages } = loadSource('src/lib/supabase/annotations.ts', { './client': { createClient: () => client } });
   await saveBlankPages('doc', [{ id: 'blank', images: [{ id: 'image', src: 'data:image/png;base64,test' }], createdAt: 1 }]);
@@ -97,4 +98,41 @@ test('blank-page updates sync the newest snapshot even when React queues state',
   assert.equal(snapshots[1][0].images[0].id, 'image');
   hook.removeBlankPage('blank');
   assert.deepEqual(snapshots[2], []);
+});
+
+
+test('first annotation save waits for registration and retries after registration failure', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let registrationCalls = 0;
+  let rpcCalls = 0;
+  let failure = false;
+  const client = {
+    auth: { getUser: async () => ({ data: { user: { id: 'owner' } } }) },
+    from(table) {
+      assert.equal(table, 'documents');
+      return { upsert: async (row, options) => {
+        registrationCalls++;
+        assert.equal(row.user_id, 'owner');
+        assert.equal(options.ignoreDuplicates, true);
+        await gate;
+        return { error: failure ? { message: 'offline' } : null };
+      } };
+    },
+    rpc: async () => { rpcCalls++; return { error: null }; },
+  };
+  const api = loadSource('src/lib/supabase/annotations.ts', { './client': { createClient: () => client } });
+  const pending = api.saveTextNotes('new-doc', '1', []);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registrationCalls, 1);
+  assert.equal(rpcCalls, 0);
+  release(); await pending;
+  assert.equal(rpcCalls, 1);
+  failure = true;
+  await assert.rejects(api.saveTextNotes('new-doc', '1', []), /register document: offline/);
+  assert.equal(rpcCalls, 1);
+  failure = false;
+  await api.saveTextNotes('new-doc', '1', []);
+  assert.equal(rpcCalls, 2);
+  assert.equal(registrationCalls, 3);
 });

@@ -1036,9 +1036,11 @@ export default function WorkspacePage() {
       const reopenId = sessionStorage.getItem('reopen_doc_id') ?? undefined;
       sessionStorage.removeItem('reopen_doc_id');
       sessionStorage.removeItem('reopen_doc_name');
-      addDocument(file, reopenId).catch(console.error);
+      addDocument(file, reopenId).catch((error: unknown) => {
+        showToast(error instanceof Error ? error.message : 'Could not reopen this document.');
+      });
     }).catch(console.error);
-  }, [addDocument]);
+  }, [addDocument, showToast]);
 
   // ── Open specific doc from dashboard/library click ─────────────────────────
   const pendingOpenRef = useRef<string | null>(
@@ -1087,8 +1089,10 @@ export default function WorkspacePage() {
     if (!modal) return;
     setReopenModal(null);
     pendingOpenRef.current = null;
-    addDocument(file, modal.docId).catch(console.error);
-  }, [reopenModal, addDocument]);
+    addDocument(file, modal.docId).catch((error: unknown) => {
+      showToast(error instanceof Error ? error.message : 'Could not reopen this document.');
+    });
+  }, [reopenModal, addDocument, showToast]);
 
   // ── Document order ────────────────────────────────────────────────────────
   const savedOrderRef = useRef<string[]>([]);
