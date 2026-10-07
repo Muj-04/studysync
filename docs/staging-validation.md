@@ -50,8 +50,8 @@ These are hosted database tests, not Stripe-provider or browser acceptance tests
 ## Remaining release gates
 
 - Valid Stripe test credentials, real checkout/webhook/portal test-mode flows.
-- Referral expiry scheduling and paid-subscription interaction need implementation
-  and validation. Existing rewards currently have no scheduled expiry job.
+- Referral expiry is implemented in the follow-up migration and verified in staging;
+  production still needs that migration. Validate the complete Stripe/referral journey.
 - Two-browser room drawing/erasing/reconnect/leave and recording acceptance checks.
 - Production backup, verified migration rollout, and post-deployment smoke test.
 
