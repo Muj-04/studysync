@@ -31,12 +31,14 @@ test('billing SQL rolls back, deduplicates, orders events, and restricts RPC acc
     INSERT INTO auth.users VALUES ('${uid}');
     CREATE TABLE profiles(id uuid PRIMARY KEY,plan text);
     INSERT INTO profiles VALUES('${uid}','free');
-    CREATE TABLE subscriptions(user_id uuid PRIMARY KEY,plan text,status text CHECK(status <> 'fail'),stripe_customer_id text,stripe_subscription_id text,updated_at timestamptz);
+    CREATE TABLE subscriptions(user_id uuid PRIMARY KEY,plan text,status text CONSTRAINT subscriptions_status_check CHECK(status IN ('active','canceled','past_due','trialing')),stripe_customer_id text,stripe_subscription_id text,updated_at timestamptz);
   `);
   await db.exec(fs.readFileSync('supabase/migrations/20261004100000_billing_event_transactions.sql', 'utf8'));
   await db.exec(fs.readFileSync('supabase/migrations/20261004101000_checkout_attempts.sql', 'utf8'));
   const apply = (id, created, status, plan = 'premium', user = uid) => db.query('SELECT apply_billing_event($1,$2,$3,$4,$5,$6,$7)', [id, created, user, plan, 'cus', 'sub', status]);
   try {
+    await assert.rejects(apply('before-migration', 1, 'unpaid'), /subscriptions_status_check/);
+    await db.exec(fs.readFileSync('supabase/migrations/20261007100000_subscription_status_compatibility.sql', 'utf8'));
     await assert.rejects(apply('fail', 1, 'fail'));
     assert.equal((await db.query('SELECT plan FROM profiles')).rows[0].plan, 'free');
     assert.equal((await db.query('SELECT count(*)::int n FROM billing_events')).rows[0].n, 0);
@@ -49,8 +51,12 @@ test('billing SQL rolls back, deduplicates, orders events, and restricts RPC acc
     assert.equal((await db.query('SELECT plan FROM profiles')).rows[0].plan, 'free');
     await apply('recovered', 12, 'active', null, null);
     assert.equal((await db.query('SELECT plan FROM profiles')).rows[0].plan, 'premium');
-    await apply('cancel', 13, 'canceled', null, null);
-    await apply('late', 13, 'active', null, null);
+    await apply('paused', 13, 'paused', null, null);
+    assert.equal((await db.query('SELECT plan FROM profiles')).rows[0].plan, 'free');
+    await apply('resumed', 14, 'active', null, null);
+    assert.equal((await db.query('SELECT plan FROM profiles')).rows[0].plan, 'premium');
+    await apply('cancel', 15, 'canceled', null, null);
+    await apply('late', 15, 'active', null, null);
     assert.equal((await db.query('SELECT plan FROM profiles')).rows[0].plan, 'free');
     const reserve = () => db.query('SELECT * FROM reserve_checkout_attempt($1,$2,$3,$4,$5)', [uid, 'premium','monthly','email','https://app.test']);
     const one = (await reserve()).rows[0];
