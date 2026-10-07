@@ -8,10 +8,10 @@ Stacked on PR #11. Do not release until the remaining operational gates below pa
 - Imported a schema-only snapshot of the actual production public schema: 48 tables,
   functions, indexes, grants, triggers, and RLS policies. No customer rows/files copied.
 - Included the auth profile-creation trigger, 19 storage policies, nine realtime table
-  subscriptions, and storage bucket configuration. Managed supabase_admin default ACLs
+  subscriptions, two private realtime channel policies, and storage bucket configuration. Managed supabase_admin default ACLs
   are left to the new project's built-in defaults; postgres defaults are preserved.
 - Applied the seven reviewed October migrations in order, then the compatibility
-  migration in this PR. The resulting public schema has 51 tables.
+  migration in this PR and both referral-expiry migrations (ten total). The resulting public schema has 51 tables.
 - Schema snapshots, staging database credentials, and temporary test tooling stay outside
   git. Staging credentials are configured only in the isolated development worktree.
 - Production was inspected read-only: no duplicate referred_id groups exist currently.
@@ -45,14 +45,33 @@ Using synthetic users that were removed after each run:
   the compatibility migration, through the service_role API function.
 - Referral redemption succeeds once; repeat redemption is rejected.
 
-These are hosted database tests, not Stripe-provider or browser acceptance tests.
+These checks exercise the hosted database, not the Stripe provider.
+
+## Browser checks completed
+
+A local Next.js server used the isolated hosted staging database. Synthetic accounts
+and files were removed afterward. These results do not imply PR preview deployments
+use staging credentials.
+
+- Login, local PDF rendering and reload preserve document identity without uploading
+  the personal PDF to Supabase Storage.
+- Two independent browser contexts receive drawing and erasing updates.
+- A browser disconnected during drawing recovers the missed stroke after reconnect.
+- Room recording saves successfully and releases captured microphone tracks.
+- Authenticated leave preserves the room until its last member leaves, then closes it.
+
+Recording used browser-generated test audio. Physical microphone/playback and LiveKit
+voice-chat behavior remain unverified. See realtime-room-lifecycle.md for fixes found
+by these tests. Referral expiry also passed hosted checks preserving paid access, and
+its scheduled cron invocation completed successfully in staging.
 
 ## Remaining release gates
 
 - Valid Stripe test credentials, real checkout/webhook/portal test-mode flows.
 - Referral expiry is implemented in the follow-up migration and verified in staging;
   production still needs that migration. Validate the complete Stripe/referral journey.
-- Two-browser room drawing/erasing/reconnect/leave and recording acceptance checks.
+- Physical microphone/playback and LiveKit voice-chat acceptance checks where enabled.
+- Review the staging follow-up PRs before merging the stack.
 - Production backup, verified migration rollout, and post-deployment smoke test.
 
 Vercel is configured to deploy main automatically. Do not merge this stack into main

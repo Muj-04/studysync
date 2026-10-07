@@ -1819,9 +1819,12 @@ export default function WorkspacePage() {
 
   // ── Remove document (with confirmation) ──────────────────────────────────
   const [confirmRemoveDocId, setConfirmRemoveDocId] = useState<string | null>(null);
-  const [showTour, setShowTour] = useState(() =>
-    typeof window !== 'undefined' ? shouldShowTour() : false
-  );
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    // Browser storage is only available after hydration; keep the first render identical.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowTour(shouldShowTour());
+  }, []);
 
   const handleRemoveDocument = useCallback((docId: string) => {
     setConfirmRemoveDocId(docId);
