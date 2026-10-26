@@ -63,7 +63,139 @@ test('stale image decodes cannot overwrite another page or a new edit', () => {
   } finally { global.Image = original; }
 });
 
+test('drawing waits for the existing saved bitmap before accepting an edit', () => {
+  const images = [];
+  const original = global.Image;
+  global.Image = class { constructor() { images.push(this); } };
+  try {
+    const { createDrawingHydration } = loadSource('src/lib/drawingHydration.ts');
+    const loader = createDrawingHydration();
+    const canvas = [];
+    loader.load('existing strokes', () => canvas.push('existing strokes'));
+    const edit = () => { if (loader.beginEdit()) canvas.push('new stroke'); };
+    edit();
+    assert.deepEqual(canvas, []);
+    images[0].onload();
+    edit();
+    assert.deepEqual(canvas, ['existing strokes', 'new stroke']);
+  } finally { global.Image = original; }
+});
+
 const { createHookHarness } = require('./hook-harness.cjs');
+
+test('restoring clean text notes does not replace newer cloud notes', () => {
+  const harness = createHookHarness();
+  const saves = [];
+  const local = { 'doc:1': [{ id: 'note', content: 'older device copy' }] };
+  const { useTextNotes } = loadSource('src/hooks/useTextNotes.ts', {
+    react: harness.react,
+    '@/lib/storage': { KEYS: { TEXT_NOTES: 'notes' }, storageGet: key => key === 'notes' ? local : null, storageSet: () => true },
+    '@/lib/supabase/db': { saveTextNotes: async (...args) => saves.push(args) },
+  });
+  harness.render(() => useTextNotes('owner'));
+  const [notes] = harness.render(() => useTextNotes('owner'));
+  assert.equal(notes['doc:1'][0].content, 'older device copy');
+  assert.deepEqual(saves, []);
+});
+
+test('an edit before authentication resolves is synced when the owner arrives', async () => {
+  const harness = createHookHarness();
+  const values = { notes: {} };
+  const saves = [];
+  const { useTextNotes } = loadSource('src/hooks/useTextNotes.ts', {
+    react: harness.react,
+    '@/lib/storage': { KEYS: { TEXT_NOTES: 'notes' }, storageGet: key => values[key], storageSet: (key, value) => { values[key] = value; return true; } },
+    '@/lib/supabase/db': { saveTextNotes: async (...args) => saves.push(args) },
+  });
+  harness.render(() => useTextNotes(null));
+  const [, edit] = harness.render(() => useTextNotes(null));
+  edit({ 'doc:1': [{ id: 'note', content: 'before auth' }] });
+  harness.render(() => useTextNotes(null));
+  harness.render(() => useTextNotes('owner'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'before auth' }]]]);
+});
+
+test('pending notes for a locally deleted document are never reuploaded', () => {
+  const harness = createHookHarness();
+  const values = { notes: {}, notes_pending_owner: { 'deleted:1': [{ id: 'note', content: 'pending' }] } };
+  const saves = [];
+  const { useTextNotes } = loadSource('src/hooks/useTextNotes.ts', {
+    react: harness.react,
+    '@/lib/storage': { KEYS: { TEXT_NOTES: 'notes' }, storageGet: key => values[key], storageSet: (key, value) => { values[key] = value; return true; } },
+    '@/lib/supabase/db': { saveTextNotes: async (...args) => saves.push(args) },
+  });
+  harness.render(() => useTextNotes('owner'));
+  harness.render(() => useTextNotes('owner'));
+  assert.deepEqual(saves, []);
+  assert.deepEqual(values.notes_pending_owner, {});
+});
+
+test('retrying an outbox uses the latest local snapshot after an interrupted save', () => {
+  const harness = createHookHarness();
+  const values = { notes: { 'doc:1': [{ id: 'note', content: 'newer local edit' }] }, notes_pending_owner: { 'doc:1': [{ id: 'note', content: 'older pending edit' }] } };
+  const saves = [];
+  const { useTextNotes } = loadSource('src/hooks/useTextNotes.ts', {
+    react: harness.react,
+    '@/lib/storage': { KEYS: { TEXT_NOTES: 'notes' }, storageGet: key => values[key], storageSet: (key, value) => { values[key] = value; return true; } },
+    '@/lib/supabase/db': { saveTextNotes: async (...args) => saves.push(args) },
+  });
+  harness.render(() => useTextNotes('owner'));
+  harness.render(() => useTextNotes('owner'));
+  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'newer local edit' }]]]);
+});
+
+test('cloud hydration does not enqueue writes but subsequent edits do', () => {
+  const harness = createHookHarness();
+  const saves = [];
+  const { useTextNotes } = loadSource('src/hooks/useTextNotes.ts', {
+    react: harness.react,
+    '@/lib/storage': { KEYS: { TEXT_NOTES: 'notes' }, storageGet: () => null, storageSet: () => true },
+    '@/lib/supabase/db': { saveTextNotes: async (...args) => saves.push(args) },
+  });
+  harness.render(() => useTextNotes('owner'));
+  const [, edit, seed] = harness.render(() => useTextNotes('owner'));
+  assert.equal(typeof seed, 'function');
+  seed({ 'doc:1': [{ id: 'note', content: 'cloud' }] });
+  harness.render(() => useTextNotes('owner'));
+  assert.deepEqual(saves, []);
+  edit(prev => ({ ...prev, 'doc:1': [{ id: 'note', content: 'edited' }] }));
+  harness.render(() => useTextNotes('owner'));
+  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'edited' }]]]);
+});
+
+test('failed text note edits survive remount and retry without uploading clean pages', async () => {
+  const values = { notes: { 'doc:1': [{ id: 'note', content: 'old' }], 'doc:2': [{ id: 'clean', content: 'unchanged' }] } };
+  let offline = true;
+  const saves = [];
+  const mount = () => {
+    const harness = createHookHarness();
+    const { useTextNotes } = loadSource('src/hooks/useTextNotes.ts', {
+      react: harness.react,
+      '@/lib/storage': { KEYS: { TEXT_NOTES: 'notes' }, storageGet: key => values[key] ?? null, storageSet: (key, value) => { values[key] = JSON.parse(JSON.stringify(value)); return true; } },
+      '@/lib/supabase/db': { saveTextNotes: async (doc, page, notes) => { if (offline) throw Error('offline'); saves.push({ doc, page, notes }); } },
+    });
+    harness.render(() => useTextNotes('owner'));
+    return { harness, render: () => harness.render(() => useTextNotes('owner')) };
+  };
+  const first = mount();
+  const [, edit] = first.render();
+  edit(prev => ({ ...prev, 'doc:1': [{ id: 'note', content: 'offline edit' }] }));
+  const originalError = console.error;
+  console.error = () => {};
+  try { first.render(); await new Promise(resolve => setImmediate(resolve)); }
+  finally { console.error = originalError; }
+  first.harness.unmount();
+  offline = false;
+  const second = mount();
+  second.render();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(saves, [{ doc: 'doc', page: '1', notes: [{ id: 'note', content: 'offline edit' }] }]);
+  second.harness.unmount();
+  const third = mount(); third.render();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(saves.length, 1);
+});
 
 test('initial render does not overwrite stored text notes before hydration', () => {
   const harness = createHookHarness();
