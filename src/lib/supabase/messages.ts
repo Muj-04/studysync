@@ -29,5 +29,8 @@ export async function markMessagesRead(friendId: string, messageIds: string[]): 
 export function mergeMessages(previous: DirectMessage[], incoming: DirectMessage[]) {
   const byId = new Map(previous.map((message) => [message.id, message]));
   for (const message of incoming) byId.set(message.id, message);
-  return [...byId.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt) || a.id.localeCompare(b.id));
+  // Date.parse handles timezone offsets but drops PostgreSQL's submillisecond precision.
+  const microseconds = (timestamp: string) => Number((timestamp.match(/\.(\d+)/)?.[1] ?? '').padEnd(6, '0').slice(3, 6));
+  return [...byId.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)
+    || microseconds(a.createdAt) - microseconds(b.createdAt) || a.id.localeCompare(b.id));
 }
