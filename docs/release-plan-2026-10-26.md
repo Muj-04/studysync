@@ -139,4 +139,7 @@ No backup command has been executed yet; access is required.
 ## Execution record
 
 Current results are recorded in [staging execution report](staging-execution-2026-10-26.md).
+The subsequent seven-area review and additional fixes are recorded in
+[follow-up audit](followup-audit-2026-10-26.md), including the unresolved product
+limits choice and provider/backup access gaps.
 The checklist above remains conservative: a partially tested item is not complete.
