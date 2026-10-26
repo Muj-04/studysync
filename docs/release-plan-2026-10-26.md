@@ -13,15 +13,17 @@ successful validation. Specifications: `staging-validation.md` and
 - Tested application revision: `47d84a0d2f2697df3dadb1842d2fa9836d98f09d`.
 - 44 local regressions, TypeScript, production build, GitHub CI and Vercel preview
   passed. Full and production dependency audits reported zero vulnerabilities.
-- Prior documentation identifies staging as `xokiiepdpjvqnpzwmbtb`.
-  Its current schema and migration history have **not** been inspected in this run.
-- This workspace has no Supabase/Vercel login, database connection, Stripe test
-  credentials or LiveKit credentials. GitHub Actions secrets/variables are empty.
-- Supabase, Vercel and Stripe integrations were offered; no connection is confirmed.
+- Supabase MCP is connected. Verified staging `xokiiepdpjvqnpzwmbtb` and production
+  `mlyvadsznvyurjakovau`; inspected histories, relevant functions and RLS.
+- Staging had the first ten October migrations plus three free-launch migrations
+  absent from git. Applied the referral/billing correction and a newly reproduced
+  study-statistics authorization fix to staging. See the execution report below.
+- Vercel, Stripe test credentials, LiveKit credentials and a verified production
+  backup/database export connection remain unavailable.
 - Cloudflare was uninstalled by the owner. The old failed check remains historical;
   do not delete or falsify its result.
-- **Not completed:** hosted migrations/tests, production backup/restore verification,
-  production migrations, merge to main, or production deployment.
+- **Not completed:** full hosted browser/provider acceptance, production backup/
+  restore verification, production migrations, merge to main or deployment.
 
 ## 1. Establish the environment and migration baseline
 
@@ -136,6 +138,5 @@ No backup command has been executed yet; access is required.
 
 ## Execution record
 
-Only repository/connection inspection and release preparation have been completed
-in this run. Hosted operations remain pending account connections. Earlier staging
-results are historical evidence and must not be represented as this run's results.
+Current results are recorded in [staging execution report](staging-execution-2026-10-26.md).
+The checklist above remains conservative: a partially tested item is not complete.
