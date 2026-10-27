@@ -9,6 +9,8 @@ import {
   BookOpen, Shield, Flame, Globe2, Gift, Copy, Users,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import AuthCaptcha from '@/components/AuthCaptcha';
+import { useAuthCaptcha } from '@/hooks/useAuthCaptcha';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
 import { clearLocalUserData } from '@/lib/clearLocalUserData';
@@ -433,6 +435,7 @@ function AccountSection({
   const [cfmPwd, setCfmPwd] = useState('');
   const [pwdSt, setPwdSt] = useState<'idle' | 'loading' | 'ok' | 'err'>('idle');
   const [pwdErr, setPwdErr] = useState('');
+  const captcha = useAuthCaptcha();
 
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [delLoading, setDelLoading] = useState(false);
@@ -511,19 +514,27 @@ function AccountSection({
   }, [email, sb]);
 
   const savePassword = useCallback(async () => {
+    if (pwdSt === 'loading') return;
     if (newPwd !== cfmPwd) { setPwdErr(t('set_acc_pw_mismatch')); setPwdSt('err'); return; }
     if (newPwd.length < 8) { setPwdErr(t('set_acc_pw_short')); setPwdSt('err'); return; }
     setPwdSt('loading');
     setPwdErr('');
-    const { error } = await sb.auth.signInWithPassword({ email: userEmail, password: curPwd });
-    if (error) { setPwdErr(t('set_acc_current_pw_wrong')); setPwdSt('err'); return; }
-    const { error: updErr } = await sb.auth.updateUser({ password: newPwd });
-    if (updErr) { setPwdErr(updErr.message); setPwdSt('err'); }
-    else {
-      setPwdSt('ok'); setCurPwd(''); setNewPwd(''); setCfmPwd('');
-      setTimeout(() => setPwdSt('idle'), 3000);
+    try {
+      const { error } = await captcha.run(captchaToken => sb.auth.signInWithPassword({
+        email: userEmail, password: curPwd, options: { captchaToken },
+      }));
+      if (error) { setPwdErr(error.code === 'invalid_credentials' ? t('set_acc_current_pw_wrong') : error.message); setPwdSt('err'); return; }
+      const { error: updErr } = await sb.auth.updateUser({ password: newPwd });
+      if (updErr) { setPwdErr(updErr.message); setPwdSt('err'); }
+      else {
+        setPwdSt('ok'); setCurPwd(''); setNewPwd(''); setCfmPwd('');
+        setTimeout(() => setPwdSt('idle'), 3000);
+      }
+    } catch (err) {
+      setPwdErr(err instanceof Error ? err.message : 'Could not update your password. Please try again.');
+      setPwdSt('err');
     }
-  }, [curPwd, newPwd, cfmPwd, userEmail, sb, t]);
+  }, [curPwd, newPwd, cfmPwd, userEmail, sb, t, captcha, pwdSt]);
 
   const handleDelete = useCallback(async () => {
     setDelLoading(true);
@@ -644,10 +655,11 @@ function AccountSection({
               <p style={{ margin: '4px 0 0', fontSize: 11.5, color: '#ef4444' }}>{t('set_acc_pw_mismatch')}</p>
             )}
           </div>
+          <AuthCaptcha control={captcha} />
           <PrimaryBtn
             onClick={savePassword}
             loading={pwdSt === 'loading'}
-            disabled={!curPwd || !newPwd || !cfmPwd || newPwd !== cfmPwd}
+            disabled={!curPwd || !newPwd || !cfmPwd || newPwd !== cfmPwd || !captcha.ready}
           >
             {t('set_acc_update_pw')}
           </PrimaryBtn>
