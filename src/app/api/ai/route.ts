@@ -1,3 +1,4 @@
+import { AI_TEXT_LIMITS, AI_CHAT_MESSAGE_LIMIT, AI_LANGUAGE_LIMIT, AI_REQUEST_MAX_BYTES } from '@/lib/aiInputLimits';
 import { apiErrorResponse, bearerToken, readJsonObject } from '@/lib/api/request';
 import { reserveAiRequest, refundAiRequest, completeAiRequest } from '@/lib/aiQuota';
 import Anthropic from '@anthropic-ai/sdk';
@@ -89,7 +90,7 @@ async function handlePost(req: NextRequest) {
   // Process the AI request
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000, maxRetries: 0 });
   try {
-    const { action, text, language, message: chatMessage } = await readJsonObject(req, 65536);
+    const { action, text, language, message: chatMessage } = await readJsonObject(req, AI_REQUEST_MAX_BYTES);
 
     if (action !== 'chat' && (!text || typeof text !== 'string')) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });
@@ -103,14 +104,14 @@ async function handlePost(req: NextRequest) {
         return NextResponse.json({ error: 'Missing message' }, { status: 400 });
       }
       const pageContext = typeof text === 'string' && text.trim()
-        ? `Current page content:\n${(text as string).slice(0, 6000)}\n\n`
+        ? `Current page content:\n${text.slice(0, AI_TEXT_LIMITS.chat)}\n\n`
         : 'No document is open.\n\n';
       prompt =
         'You are a helpful AI assistant. The user is currently studying with a PDF tool. ' +
         'Answer any question they ask — whether about the document, a general topic, math, coding, or anything else. ' +
         'If document content is provided below, use it as context when relevant, but never refuse a question just because it is off-topic.\n\n' +
         pageContext +
-        `User: ${chatMessage.slice(0, 1000)}\n\n` +
+        `User: ${chatMessage.slice(0, AI_CHAT_MESSAGE_LIMIT)}\n\n` +
         'Guidelines:\n' +
         '- For summary requests: use bullet points starting with •\n' +
         '- For flashcard requests: format as Q: [question] / A: [answer], one per line\n' +
@@ -121,21 +122,21 @@ async function handlePost(req: NextRequest) {
         'Generate 5 to 10 flashcard question-answer pairs from the text below. ' +
         'Return ONLY a JSON array with objects containing "question" and "answer" string fields. ' +
         'No markdown fences, no extra text, just the raw JSON array.\n\n' +
-        sourceText.slice(0, 6000);
+        sourceText.slice(0, AI_TEXT_LIMITS.flashcards);
 
     } else if (action === 'summary') {
       prompt =
         'Summarize the following text in 3–5 concise bullet points. ' +
         'Return ONLY the bullet points, one per line, each starting with "• ". No headers or extra text.\n\n' +
-        sourceText.slice(0, 8000);
+        sourceText.slice(0, AI_TEXT_LIMITS.summary);
     } else if (action === 'translate') {
-      if (typeof language !== 'string' || !language.trim() || language.length > 100) {
+      if (typeof language !== 'string' || !language.trim() || language.length > AI_LANGUAGE_LIMIT) {
         return NextResponse.json({ error: 'Missing language' }, { status: 400 });
       }
       prompt =
         `Translate the following text to ${language}. ` +
         'Return ONLY the translation, no explanations or notes.\n\n' +
-        sourceText.slice(0, 2000);
+        sourceText.slice(0, AI_TEXT_LIMITS.translate);
     } else if (action === 'explain') {
       prompt =
         'Explain this concept in simple terms with 2-3 practical examples. Be concise and clear.\n' +
@@ -147,7 +148,7 @@ async function handlePost(req: NextRequest) {
         '[example 2]\n' +
         '[example 3]\n\n' +
         'Concept to explain:\n' +
-        sourceText.slice(0, 2000);
+        sourceText.slice(0, AI_TEXT_LIMITS.explain);
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
