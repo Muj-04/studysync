@@ -1,9 +1,20 @@
 import { KEYS, storageGet, storageSet } from './storage';
 import { deletePdfBlob } from './pdfStore';
 
+export function deletePendingDocumentNotes(docId: string) {
+  if (typeof localStorage === 'undefined') return;
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(`${KEYS.TEXT_NOTES}_pending_`)) continue;
+    const notes = storageGet<Record<string, unknown>>(key) ?? {};
+    storageSet(key, Object.fromEntries(Object.entries(notes).filter(([id]) => !id.startsWith(`${docId}:`))));
+  }
+}
+
 /** Remove only this document's local data; other documents remain untouched. */
 export async function deleteLocalDocument(docId: string) {
   await deletePdfBlob(docId);
+  deletePendingDocumentNotes(docId);
   for (const key of [KEYS.DRAWINGS, KEYS.TEXT_NOTES, KEYS.PAGE_IMAGES]) {
     const values = storageGet<Record<string, unknown>>(key) ?? {};
     storageSet(key, Object.fromEntries(Object.entries(values).filter(([id]) => id !== docId && !id.startsWith(`${docId}:`))));

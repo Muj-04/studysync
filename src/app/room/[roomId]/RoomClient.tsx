@@ -1,4 +1,6 @@
 'use client';
+import { enqueueRoomMembership } from '@/lib/roomMembershipQueue';
+import { mergeRoomStroke } from '@/lib/roomStrokes';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -516,11 +518,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // returns true if anything changed (so caller can decide whether to bump
   // maxLocalSeqRef etc.).
   const appendStrokeLocal = useCallback((pageKey: string, stroke: RoomStrokePayload) => {
-    if (knownStrokeIdsRef.current.has(stroke.id)) return false;
+    if (knownStrokeIdsRef.current.has(stroke.id) && stroke.seq === undefined) return false;
     knownStrokeIdsRef.current.add(stroke.id);
     setRoomStrokes((prev) => {
       const existing = prev[pageKey] ?? [];
-      return { ...prev, [pageKey]: [...existing, stroke] };
+      return { ...prev, [pageKey]: mergeRoomStroke(existing, stroke) };
     });
     return true;
   }, []);
@@ -535,8 +537,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // knownStrokeIdsRef makes this safe to call on every reconnect cycle.
   const handleReconnect = useCallback(async () => {
     if (!roomId) return;
-    const since = maxLocalSeqRef.current;
-    const rows = await fetchAllRoomStrokes(roomId, since);
+    // Replay the complete paginated log: a maximum observed sequence is not a contiguous cursor.
+    const rows = await fetchAllRoomStrokes(roomId).catch((error: unknown) => {
+      console.error('Room stroke reconciliation failed', error);
+      return [];
+    });
     for (const row of rows) {
       appendStrokeLocal(row.pageKey, row.stroke);
       if (row.seq > maxLocalSeqRef.current) maxLocalSeqRef.current = row.seq;
@@ -661,16 +666,20 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    let joined = false;
     async function init() {
       const supabase = createClient();
       // Cache the access token before doing anything else — needed
       // synchronously by the pagehide handler for the keepalive fetch.
       const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
       accessTokenRef.current = session?.access_token ?? null;
       const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) return;
       if (!user) { router.replace('/login'); return; }
 
       const profile = await getProfile();
+      if (cancelled) return;
       const name = profile?.username
         ?? (user.user_metadata?.full_name as string | undefined)
         ?? (user.user_metadata?.name as string | undefined)
@@ -690,7 +699,17 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       // First-time invitees are not room members yet, so fetching first can
       // make a valid private room look missing. The SECURITY DEFINER RPC
       // validates the invitation server-side and establishes membership.
-      const joinResult = await joinRoom(roomId);
+      const joinResult = await enqueueRoomMembership(roomId, async () => {
+        if (cancelled) return { error: 'cancelled' };
+        const result = await joinRoom(roomId);
+        if (!result.error) {
+          if (cancelled) { await leaveRoom(roomId); return { error: 'cancelled' }; }
+          joined = true;
+          hasJoinedRef.current = true;
+        }
+        return result;
+      });
+      if (cancelled) return;
       console.log('[Room] joinRoom result', { uid: user.id, roomId, joinResult });
       if (joinResult.error === 'full') {
         setErrorMsg('This room is full.'); setStatus('error'); return;
@@ -715,13 +734,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         setErrorMsg('Could not join this room. Please try again.');
         setStatus('error'); return;
       }
-      if (cancelled) {
-        await leaveRoom(roomId);
-        return;
-      }
-      hasJoinedRef.current = true;
 
       const room = await fetchRoom(roomId);
+      if (cancelled) return;
       if (!room) { setErrorMsg(t('room_not_found')); setStatus('error'); return; }
       if (room.status === 'closed') { setErrorMsg(t('room_ended_msg')); setStatus('error'); return; }
       if (room.expiresAt && new Date(room.expiresAt) < new Date()) {
@@ -785,10 +800,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         setRoomStrokes((prev) => {
           const merged: Record<string, RoomStrokePayload[]> = { ...prev };
           for (const row of remoteStrokes) {
-            if (knownStrokeIdsRef.current.has(row.stroke.id)) continue;
             knownStrokeIdsRef.current.add(row.stroke.id);
             const existing = merged[row.pageKey] ?? [];
-            merged[row.pageKey] = [...existing, row.stroke];
+            merged[row.pageKey] = mergeRoomStroke(existing, row.stroke);
           }
           return merged;
         });
@@ -809,9 +823,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     });
     return () => {
       cancelled = true;
-      if (hasJoinedRef.current) {
+      if (joined) {
+        joined = false;
         hasJoinedRef.current = false;
-        leaveRoom(roomId).catch(() => {});
+        void enqueueRoomMembership(roomId, () => leaveRoom(roomId)).catch(console.error);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -957,9 +972,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     console.log('STROKE_DIAG_C about to insertRoomStroke', stroke?.id);
     const result = await insertRoomStroke(roomId, pageKey, stroke);
     console.log('STROKE_DIAG_D after insertRoomStroke await', stroke?.id, !!result, result?.seq ?? null);
-    if (result && result.seq > maxLocalSeqRef.current) {
-      maxLocalSeqRef.current = result.seq;
-      await broadcastStroke(pageKey, stroke);
+    if (result) {
+      const confirmed = { ...stroke, seq: result.seq };
+      appendStrokeLocal(pageKey, confirmed);
+      await broadcastStroke(pageKey, confirmed);
     }
     console.log('[Room] handleStrokeComplete RESULT', { strokeId: stroke.id, persisted: !!result, seq: result?.seq ?? null });
   }, [appendStrokeLocal, broadcastStroke, roomId, userId]);

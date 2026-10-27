@@ -26,11 +26,14 @@ import { callAI, callAIChat } from '@/lib/gemini';
 async function extractPageText(url: string, pageNum: number): Promise<string> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
-  const doc = await pdfjs.getDocument(url).promise;
-  const page = await doc.getPage(pageNum);
-  const content = await page.getTextContent();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return content.items.map((item: any) => item.str ?? '').join(' ').trim();
+  const task = pdfjs.getDocument({ url });
+  try {
+    const doc = await task.promise;
+    const page = await doc.getPage(pageNum);
+    const content = await page.getTextContent();
+    return content.items.map((item) => 'str' in item ? item.str : '').join(' ').trim();
+  } finally { await task.destroy(); }
+
 }
 
 const LANGS = ['Arabic', 'English', 'French', 'Spanish'] as const;

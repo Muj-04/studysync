@@ -178,7 +178,10 @@ export default function ResetPasswordPage() {
           <span className={styles.stateEyebrow}>PASSWORD UPDATED</span>
           <h2>Your password is ready</h2>
           <p>Your password has been changed. You can now log in with your new password.</p>
-          <Link href="/login" className={styles.primaryLink}>Go to Login</Link>
+          {/* Discard routes cached while the recovery session was still active. */}
+          <button type="button" className={styles.primaryLink} onClick={() => window.location.replace('/login')}>
+            Go to Login
+          </button>
         </div>
       </ResetShell>
     );
