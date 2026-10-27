@@ -35,7 +35,9 @@ export function usePDFDrawings() {
       return next;
     });
     if (userIdRef.current) {
-      dbSaveDrawing(documentId, String(page), data);
+      void dbSaveDrawing(documentId, String(page), data).catch((error: unknown) => {
+        console.warn('[Drawings] remote save failed; local drawing retained:', error);
+      });
     }
   }, []);
 
