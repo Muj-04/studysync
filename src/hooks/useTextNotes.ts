@@ -15,10 +15,21 @@ export function useTextNotes(userId: string | null) {
   const pendingOwner = useRef<string | null>(null);
   const inFlight = useRef<Record<string, TextNote[]>>({});
   const seeded = useRef(new WeakSet<TextNote[]>());
+  const editedPages = useRef(new Set<string>());
 
   const seedNotes = useCallback((remote: NotesByPage) => {
     for (const pageNotes of Object.values(remote)) seeded.current.add(pageNotes);
-    setNotes((local) => ({ ...remote, ...local }));
+    setNotes((local) => {
+      const merged = { ...local };
+      for (const [key, pageNotes] of Object.entries(remote)) {
+        // Cloud refreshes clean cached pages. Pending edits (including restored
+        // failures) and edits made during this mount keep their local snapshot.
+        const changedBeforeEffect = local[key] !== previous.current[key];
+        if (pending.current[key] || editedPages.current.has(key) || changedBeforeEffect) continue;
+        merged[key] = pageNotes;
+      }
+      return merged;
+    });
   }, []);
 
   useEffect(() => {
@@ -47,6 +58,7 @@ export function useTextNotes(userId: string | null) {
     }
     for (const [key, pageNotes] of Object.entries(notes)) {
       if (previous.current[key] === pageNotes || seeded.current.has(pageNotes)) continue;
+      editedPages.current.add(key);
       pending.current[key] = pageNotes;
     }
     previous.current = notes;
