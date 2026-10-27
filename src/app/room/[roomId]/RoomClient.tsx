@@ -661,7 +661,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   useEffect(() => { seedNotesRef.current          = voiceSeedNotes; },     [voiceSeedNotes]);
 
   // Auto-open sheet when recording starts
-  useEffect(() => { if (voiceIsRecording) setVoiceSheetOpen(true); }, [voiceIsRecording]);
+  const [previouslyRecording, setPreviouslyRecording] = useState(voiceIsRecording);
+  if (previouslyRecording !== voiceIsRecording) {
+    setPreviouslyRecording(voiceIsRecording);
+    if (voiceIsRecording) setVoiceSheetOpen(true);
+  }
 
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -868,16 +872,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   useEffect(() => {
     if (!expiresAt || status !== 'ready') return;
     const ms = new Date(expiresAt).getTime() - Date.now();
-    if (ms <= 0) {
-      closeRoom(roomId).catch(() => {});
-      broadcastRoomClosed();
-      setErrorMsg(t('room_expired_msg')); setStatus('error'); return;
-    }
-    const timer = setTimeout(async () => {
-      await closeRoom(roomId).catch(() => {});
+    const timer = setTimeout(() => {
+      void closeRoom(roomId).catch(() => {});
       broadcastRoomClosed();
       setErrorMsg(t('room_expired_msg')); setStatus('error');
-    }, ms);
+    }, Math.max(0, ms));
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiresAt, status]);

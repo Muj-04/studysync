@@ -1,4 +1,5 @@
 'use client';
+import { useClientReady } from '@/hooks/useClientReady';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { type Lang, type TranslationKey, translate, LANG_KEY } from '@/lib/i18n';
 import { getUserSettings } from '@/lib/supabase/db';
@@ -18,16 +19,19 @@ const LanguageContext = createContext<LanguageContextValue>({
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>('en');
 
-  useEffect(() => {
-    // Apply from localStorage immediately (no flash)
+  const clientReady = useClientReady();
+  const [restored, setRestored] = useState(false);
+  if (clientReady && !restored) {
+    setRestored(true);
     try {
-      const stored = localStorage.getItem(LANG_KEY) as Lang | null;
-      if (stored === 'ar' || stored === 'en') {
-        setLangState(stored);
-        applyLangToDom(stored);
-      }
-    } catch {}
+      const stored = localStorage.getItem(LANG_KEY);
+      if (stored === 'ar' || stored === 'en') setLangState(stored);
+    } catch { /* unavailable storage */ }
+  }
 
+  useEffect(() => { applyLangToDom(lang); }, [lang]);
+
+  useEffect(() => {
     // Sync from Supabase asynchronously (cross-device preference)
     getUserSettings().then((settings) => {
       const serverLang = settings.language;

@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "node scripts/run-tests.cjs",
     "postinstall": "node scripts/sync-pdf-worker.cjs",
-    "prebuild": "node scripts/sync-pdf-worker.cjs"
+    "prebuild": "node scripts/check-preview-environment.cjs && node scripts/sync-pdf-worker.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
