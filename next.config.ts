@@ -1,3 +1,4 @@
+import { developmentHosts, protectedPaths } from './src/lib/accessPolicy';
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
@@ -17,18 +18,10 @@ const noStoreHeaders = [
   { key: 'Expires',       value: '0' },
 ];
 
-const protectedSources = [
-  '/workspace/:path*',
-  '/dashboard/:path*',
-  '/library/:path*',
-  '/community/:path*',
-  '/friends/:path*',
-  '/settings/:path*',
-  '/room/:path*',
-];
+const protectedSources = protectedPaths.map((path) => `${path}/:path*`);
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['10.0.2.2', '192.168.1.169'],
+  allowedDevOrigins: developmentHosts,
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
       ? { exclude: ['error', 'warn'] }

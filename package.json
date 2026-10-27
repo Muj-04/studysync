@@ -6,40 +6,49 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node scripts/run-tests.cjs",
+    "postinstall": "node scripts/sync-pdf-worker.cjs",
+    "prebuild": "node scripts/sync-pdf-worker.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@sentry/nextjs": "^10.57.0",
+    "@marsidev/react-turnstile": "1.6.3",
+    "@sentry/nextjs": "^10.76.2",
     "@stripe/stripe-js": "^9.8.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "docx": "^9.7.1",
-    "dompurify": "^3.4.8",
+    "dompurify": "^3.4.17",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "livekit-client": "^2.19.2",
     "livekit-server-sdk": "^2.15.4",
     "lucide-react": "^1.14.0",
-    "next": "16.2.6",
-    "pdfjs-dist": "^5.7.284",
+    "next": "16.4.3",
+    "pdfjs-dist": "^6.4.299",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "stripe": "^22.2.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.4.3",
+    "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

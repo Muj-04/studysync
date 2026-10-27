@@ -1,4 +1,6 @@
 'use client';
+import { useTextNotes } from '@/hooks/useTextNotes';
+import { deletePendingDocumentNotes } from '@/lib/documentLocalData';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
@@ -1032,11 +1034,14 @@ export default function WorkspacePage() {
     getPendingReopenFile().then(async (file) => {
       if (!file) return;
       await clearPendingReopenFile();
+      const reopenId = sessionStorage.getItem('reopen_doc_id') ?? undefined;
       sessionStorage.removeItem('reopen_doc_id');
       sessionStorage.removeItem('reopen_doc_name');
-      addDocument(file).catch(console.error);
+      addDocument(file, reopenId).catch((error: unknown) => {
+        showToast(error instanceof Error ? error.message : 'Could not reopen this document.');
+      });
     }).catch(console.error);
-  }, [addDocument]);
+  }, [addDocument, showToast]);
 
   // ── Open specific doc from dashboard/library click ─────────────────────────
   const pendingOpenRef = useRef<string | null>(
@@ -1085,12 +1090,10 @@ export default function WorkspacePage() {
     if (!modal) return;
     setReopenModal(null);
     pendingOpenRef.current = null;
-    // Pre-seed the DOC_MAP so addDocument uses the canonical Supabase ID
-    const map = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-    map[file.name] = modal.docId;
-    storageSet(KEYS.DOC_MAP, map);
-    addDocument(file).catch(console.error);
-  }, [reopenModal, addDocument]);
+    addDocument(file, modal.docId).catch((error: unknown) => {
+      showToast(error instanceof Error ? error.message : 'Could not reopen this document.');
+    });
+  }, [reopenModal, addDocument, showToast]);
 
   // ── Document order ────────────────────────────────────────────────────────
   const savedOrderRef = useRef<string[]>([]);
@@ -1196,7 +1199,7 @@ export default function WorkspacePage() {
         prefixedNotes[`${canonicalId}:${subKey}`] = notes;
       }
       if (Object.keys(prefixedNotes).length > 0) {
-        setPageTextNotes((prev) => ({ ...prefixedNotes, ...prev }));
+        seedTextNotes(prefixedNotes);
       }
 
       // Upload local-only text note pages that Supabase doesn't have yet
@@ -1208,7 +1211,7 @@ export default function WorkspacePage() {
         if (remotePageKeys.has(pageKey)) continue;
         if (notes.length === 0) continue;
         console.log('[StudySync] uploading local-only text notes for page:', pageKey, 'count:', notes.length);
-        dbSaveTextNotes(canonicalId, pageKey, notes);
+        void dbSaveTextNotes(canonicalId, pageKey, notes).catch(console.error);
       }
 
       // Seed voice notes fetched with the canonical docId — happens after ID resolution
@@ -1312,7 +1315,7 @@ export default function WorkspacePage() {
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     stored[docId] = marks;
     storageSet(KEYS.BOOKMARKS, stored);
-    if (userIdRef.current) dbSaveBookmarks(docId, marks);
+    if (userIdRef.current) void dbSaveBookmarks(docId, marks).catch(console.error);
   }, []);
 
   const isCurrentPageBookmarked = bookmarks.some((b) => b.virtualIndex === virtualIndex);
@@ -1356,8 +1359,7 @@ export default function WorkspacePage() {
   }, [setActiveDocument, handleNavigateToPdfPage]);
 
   // ── Text notes (persisted per doc+page) ──────────────────────────────────
-  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
-  const prevTextNotesRef = useRef<Record<string, TextNote[]>>({});
+  const [pageTextNotes, setPageTextNotes, seedTextNotes] = useTextNotes(userId);
 
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
@@ -1393,26 +1395,6 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Persistence: text notes ───────────────────────────────────────────────
-  useEffect(() => {
-    storageSet(KEYS.TEXT_NOTES, pageTextNotes);
-    if (userIdRef.current) {
-      // Only sync pages whose notes array reference changed (i.e. were mutated)
-      for (const [fullKey, notes] of Object.entries(pageTextNotes)) {
-        if (prevTextNotesRef.current[fullKey] === notes) continue;
-        const colonIdx = fullKey.indexOf(':');
-        if (colonIdx === -1) continue;
-        dbSaveTextNotes(fullKey.slice(0, colonIdx), fullKey.slice(colonIdx + 1), notes);
-      }
-    }
-    prevTextNotesRef.current = pageTextNotes;
-  }, [pageTextNotes]);
-
-  // ── Restore text notes from storage on mount ──────────────────────────────
-  useEffect(() => {
-    const stored = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES);
-    if (stored && Object.keys(stored).length > 0) setPageTextNotes(stored);
-  }, []);
-
   // ── Persistence: zoom per document ────────────────────────────────────────
   const activeDocumentIdRef = useRef<string | null>(null);
   activeDocumentIdRef.current = activeDocumentId;
@@ -1821,11 +1803,9 @@ export default function WorkspacePage() {
     }
     let anyRestored = false;
     for (const f of files) {
-      const { isRestored } = await addDocument(f);
+      const { isRestored, id: docId } = await addDocument(f);
       if (isRestored) anyRestored = true;
       if (userIdRef.current) {
-        const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-        const docId = docMap[f.name];
         if (docId) {
           upsertDocument({
             id: docId,
@@ -1840,9 +1820,12 @@ export default function WorkspacePage() {
 
   // ── Remove document (with confirmation) ──────────────────────────────────
   const [confirmRemoveDocId, setConfirmRemoveDocId] = useState<string | null>(null);
-  const [showTour, setShowTour] = useState(() =>
-    typeof window !== 'undefined' ? shouldShowTour() : false
-  );
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    // Browser storage is only available after hydration; keep the first render identical.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowTour(shouldShowTour());
+  }, []);
 
   const handleRemoveDocument = useCallback((docId: string) => {
     setConfirmRemoveDocId(docId);
@@ -1857,6 +1840,7 @@ export default function WorkspacePage() {
 
     const textNotes = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES) ?? {};
     storageSet(KEYS.TEXT_NOTES, Object.fromEntries(Object.entries(textNotes).filter(([k]) => !k.startsWith(`${docId}:`))));
+    deletePendingDocumentNotes(docId);
 
     const storedBMs = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     delete storedBMs[docId];
@@ -2355,7 +2339,7 @@ export default function WorkspacePage() {
                                 setExportMenuOpen(false);
                                 if (!activeDocument) return;
                                 const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
-                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
+                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id, pageOrder: virtualSequence.map((page) => page.type === 'pdf' ? String(page.pdfPage) : page.blankPage.id) };
                                 if (ext === 'pdf') exportAsPDF(data);
                                 else exportAsDocx(data);
                               }}

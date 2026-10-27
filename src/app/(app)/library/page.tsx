@@ -741,7 +741,13 @@ export default function LibraryPage() {
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const id = deleteTarget.id;
-    await deleteLibraryDocument(id);
+    try {
+      await deleteLibraryDocument(id);
+    } catch (error) {
+      console.error('Document deletion failed', error);
+      alert('The document could not be fully deleted. Please try again.');
+      return;
+    }
     setDocs((prev) => prev.filter((d) => d.id !== id));
     setTagsMap((prev) => { const next = { ...prev }; delete next[id]; return next; });
     setStudyMap((prev) => { const next = { ...prev }; delete next[id]; return next; });
