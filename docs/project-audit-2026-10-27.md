@@ -1,5 +1,7 @@
 # Project audit — 27 October 2026
 
+> Current status: PRs #15–#20 are merged into dev and the combined Preview is deployed. See [the staging release checklist](staging-release-checklist.md) for current evidence and Auth configuration blockers. The details below record the earlier audit state.
+
 ## Scope and integration
 
 This review builds on PR #15 (`fix/dev-readiness`). The focused follow-up PRs target that branch to keep their diffs reviewable; retarget them to `dev` after #15 is integrated. They are not a production release. No production deployment, provider credential change, or hosted database mutation was performed during this audit.

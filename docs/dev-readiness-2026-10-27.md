@@ -1,5 +1,7 @@
 # Dev readiness follow-up — 27 October 2026
 
+> Current status: PRs #15–#20 are merged into dev and the combined Preview is deployed. See [the staging release checklist](staging-release-checklist.md) for current evidence and Auth configuration blockers. The details below record the earlier audit state.
+
 ## Completed
 
 - Dev integration revision `9fafae5` passed GitHub CI and Vercel deployment.
