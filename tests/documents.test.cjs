@@ -66,3 +66,17 @@ test('document cleanup preserves other documents and removes only matching keys'
   assert.deepEqual(values.DOC_MAP, { 'b.pdf': 'other' });
   assert.equal(values.SESSION, null);
 });
+
+test('document deletion removes pending text writes while preserving other documents', async () => {
+  const values = { notes: { 'doc:1': [], 'other:1': [] }, notes_pending_owner: { 'doc:1': [{ content: 'offline' }], 'other:1': [{ content: 'keep' }] } };
+  const original = global.localStorage;
+  global.localStorage = { length: 2, key: index => Object.keys(values)[index] };
+  try {
+    const { deleteLocalDocument } = loadSource('src/lib/documentLocalData.ts', {
+      './storage': { KEYS: { ...Object.fromEntries(['DRAWINGS','PAGE_IMAGES','BLANK_PAGES','VOICE_NOTES','BOOKMARKS','KEY_TERMS','ZOOM','DOC_MAP','SESSION'].map(key => [key, key])), TEXT_NOTES: 'notes' }, storageGet: key => values[key], storageSet: (key, value) => { values[key] = value; } },
+      './pdfStore': { deletePdfBlob: async () => {} },
+    });
+    await deleteLocalDocument('doc');
+    assert.deepEqual(values.notes_pending_owner, { 'other:1': [{ content: 'keep' }] });
+  } finally { global.localStorage = original; }
+});
