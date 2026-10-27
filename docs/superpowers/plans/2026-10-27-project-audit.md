@@ -48,4 +48,4 @@
 ### Task 5: Integration verification
 - [x] Independently review subsystem diffs and resolve important findings.
 - [x] Validate combined changes with tests, TypeScript, lint, dependency audit and local production build.
-- [ ] Publish focused PRs with dependencies, validation and material limitations; leave them unmerged.
+- [x] Publish focused PRs with dependencies, validation and material limitations; leave them unmerged.
