@@ -40,7 +40,15 @@ test('identity follows bytes and account, not filename; legacy IDs are preserved
   assert.notEqual((await identifyPdf(file('first', 'lecture.pdf'))).id, first.id);
   stored.set('legacy-id', { blob: file('legacy', 'old.pdf') });
   assert.equal((await identifyPdf(file('legacy', 'new-name.pdf'))).id, 'legacy-id');
-  assert.equal((await identifyPdf(file('selected', 'lecture.pdf'), 'explicit-library-id')).id, 'explicit-library-id');
+  await assert.rejects(identifyPdf(file('different', 'old.pdf'), 'legacy-id'), /does not match/);
+  assert.equal(await stored.get('legacy-id').blob.text(), 'legacy');
+  assert.equal((await identifyPdf(file('legacy', 'renamed.pdf'), 'legacy-id')).id, 'legacy-id');
+  await assert.rejects(identifyPdf(file('selected', 'lecture.pdf'), 'unknown-legacy-id'), /Cannot verify/);
+  owner = 'owner-a';
+  assert.equal((await identifyPdf(file('first', 'lecture.pdf'), first.id)).id, first.id);
+  await assert.rejects(identifyPdf(file('different', 'lecture.pdf'), first.id), /Cannot verify/);
+  owner = 'owner-b';
+  await assert.rejects(identifyPdf(file('first', 'lecture.pdf'), first.id), /Cannot verify/);
 });
 
 test('document cleanup preserves other documents and removes only matching keys', async () => {
@@ -57,4 +65,18 @@ test('document cleanup preserves other documents and removes only matching keys'
   assert.deepEqual(values.BLANK_PAGES, [{ documentId: 'other' }]);
   assert.deepEqual(values.DOC_MAP, { 'b.pdf': 'other' });
   assert.equal(values.SESSION, null);
+});
+
+test('document deletion removes pending text writes while preserving other documents', async () => {
+  const values = { notes: { 'doc:1': [], 'other:1': [] }, notes_pending_owner: { 'doc:1': [{ content: 'offline' }], 'other:1': [{ content: 'keep' }] } };
+  const original = global.localStorage;
+  global.localStorage = { length: 2, key: index => Object.keys(values)[index] };
+  try {
+    const { deleteLocalDocument } = loadSource('src/lib/documentLocalData.ts', {
+      './storage': { KEYS: { ...Object.fromEntries(['DRAWINGS','PAGE_IMAGES','BLANK_PAGES','VOICE_NOTES','BOOKMARKS','KEY_TERMS','ZOOM','DOC_MAP','SESSION'].map(key => [key, key])), TEXT_NOTES: 'notes' }, storageGet: key => values[key], storageSet: (key, value) => { values[key] = value; } },
+      './pdfStore': { deletePdfBlob: async () => {} },
+    });
+    await deleteLocalDocument('doc');
+    assert.deepEqual(values.notes_pending_owner, { 'other:1': [{ content: 'keep' }] });
+  } finally { global.localStorage = original; }
 });

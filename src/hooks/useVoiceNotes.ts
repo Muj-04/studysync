@@ -1,4 +1,5 @@
 'use client';
+import { useRecordingLifetime } from './useRecordingLifetime';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
@@ -81,6 +82,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     pageNumber: number | string;
   } | null>(null);
   const recordingRef = useRef<RecordingState | null>(null);
+  const acquireStream = useRecordingLifetime(recordingRef);
   const userIdRef = useRef<string | null>(null);
 
   // Load from localStorage, then merge Supabase notes on top
@@ -165,14 +167,18 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
 
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const acquired = await acquireStream();
+      if (!acquired) return;
+      stream = acquired;
     } catch {
       alert('Microphone access is required to record voice notes.');
       return;
     }
 
     const mimeType = getSupportedMimeType();
-    const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+    let mediaRecorder: MediaRecorder;
+    try { mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); }
+    catch (error) { stream.getTracks().forEach((track) => track.stop()); throw error; }
     const chunks: BlobPart[] = [];
     const startTime = Date.now();
 
@@ -238,13 +244,13 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     setIsRecording(true);
     setRecordingDuration(0);
     setRecordingContext({ documentId, pageNumber });
-  }, []);
+  }, [acquireStream]);
 
   const stopRecording = useCallback(() => {
     const rec = recordingRef.current;
     if (!rec) return;
     clearInterval(rec.intervalId);
-    rec.mediaRecorder.stop();
+    if (rec.mediaRecorder.state !== 'inactive') rec.mediaRecorder.stop();
     rec.stream.getTracks().forEach((t) => t.stop());
     recordingRef.current = null;
     setIsRecording(false);
