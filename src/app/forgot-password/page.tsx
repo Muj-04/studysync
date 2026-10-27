@@ -18,6 +18,8 @@ import {
   StickyNote,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import AuthCaptcha from '@/components/AuthCaptcha';
+import { useAuthCaptcha } from '@/hooks/useAuthCaptcha';
 import styles from './forgot-password.module.css';
 
 function Brand() {
@@ -67,8 +69,10 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const captcha = useAuthCaptcha();
 
   const handleSend = async () => {
+    if (loading) return;
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       setError('Please enter your email address.');
@@ -77,16 +81,17 @@ export default function ForgotPasswordPage() {
 
     setError('');
     setLoading(true);
-    const { error: resetError } = await createClient().auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    setLoading(false);
-
-    if (resetError) {
-      setError(resetError.message);
-      return;
+    try {
+      const { error: resetError } = await captcha.run(captchaToken => createClient().auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: `${window.location.origin}/reset-password`, captchaToken,
+      }));
+      if (resetError) { setError(resetError.message); return; }
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send the reset link. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setSent(true);
   };
 
   return (
@@ -148,7 +153,8 @@ export default function ForgotPasswordPage() {
                 aria-invalid={!!error}
                 disabled={loading}
               />
-              <button type="submit" disabled={loading}>
+              <AuthCaptcha control={captcha} />
+              <button type="submit" disabled={loading || !captcha.ready}>
                 {loading ? 'Sending…' : 'Send Reset Link'}
               </button>
             </form>
