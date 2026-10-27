@@ -1,5 +1,5 @@
 import { createClient } from './client';
-import type { DirectMessage } from './db';
+import type { DirectMessage } from './directMessages';
 
 export async function getConversation(friendId: string, limit = 100, before?: { createdAt: string; id: string }): Promise<DirectMessage[]> {
   const client = createClient();
