@@ -63,13 +63,15 @@ export async function getLimitUsageStats(): Promise<{
 }
 
 export async function deleteAllVoiceNotesForUser(): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  await sb().from('voice_notes').delete().eq('user_id', uid);
+  const uid = await userId(); if (!uid) throw new Error('Sign in to delete voice notes');
+  const { error } = await sb().from('voice_notes').delete().eq('user_id', uid);
+  if (error) throw error;
 }
 
 export async function deleteAllDrawingsForUser(): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  await sb().from('drawings').delete().eq('user_id', uid);
+  const uid = await userId(); if (!uid) throw new Error('Sign in to delete drawings');
+  const { error } = await sb().from('drawings').delete().eq('user_id', uid);
+  if (error) throw error;
 }
 
 export async function exportAllUserData(): Promise<object> {
