@@ -57,7 +57,7 @@ test('LiveKit validates fields, caller identity and membership before signing to
   let membership = null, queryError = null, signed = 0;
   const query = { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: membership, error: queryError }) };
   const { POST } = loadSource('src/app/api/livekit/token/route.ts', { ...mocks,
-    '@supabase/supabase-js': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: uid } } }) }, from: () => query }) },
+    '@supabase/supabase-js': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: uid } } }) }, from: (table) => table === 'room_members' ? query : { ...query, maybeSingle: async () => ({ data: { status: 'active', expires_at: null } }) } }) },
     'livekit-server-sdk': { AccessToken: class { addGrant() {} async toJwt() { signed++; return 'signed'; } } },
   });
   const call = body => POST(request(JSON.stringify(body)));
@@ -193,4 +193,47 @@ test('checkout passes verified identity and validated product to billing coordin
   req.nextUrl = new URL('https://example.invalid');
   assert.equal((await POST(req)).status, 200);
   assert.deepEqual(captured, { user: { id: 'owner', email: 'owner@example.invalid' }, plan: 'pro', billing: 'yearly' });
+});
+
+test('LiveKit denies new tokens for closed, expired or missing rooms even when membership remains', async t => {
+  const uid = '11111111-1111-4111-8111-111111111111';
+  for (const key of ['LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET', 'LIVEKIT_URL']) {
+    const prior = process.env[key]; process.env[key] = 'test';
+    t.after(() => { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; });
+  }
+  let room = { status: 'closed', expires_at: null }, roomError = null, signed = 0;
+  const { POST } = loadSource('src/app/api/livekit/token/route.ts', {
+    ...mocks,
+    '@supabase/supabase-js': { createClient: () => ({
+      auth: { getUser: async () => ({ data: { user: { id: uid } } }) },
+      from(table) {
+        assert.ok(['room_members', 'study_rooms'].includes(table));
+        return {
+        select(fields) { assert.equal(fields, table === 'room_members' ? 'user_id' : 'status, expires_at'); return this; },
+        eq(field, value) {
+          assert.ok((table === 'room_members' ? ['room_id', 'user_id'] : ['id']).includes(field));
+          assert.equal(value, uid); return this;
+        },
+        maybeSingle: async () => table === 'room_members'
+          ? { data: { user_id: uid }, error: null }
+          : { data: room, error: roomError },
+      }; },
+    }) },
+    'livekit-server-sdk': { AccessToken: class { addGrant() {} async toJwt() { signed++; return 'signed'; } } },
+  });
+  const call = () => POST(request(JSON.stringify({ roomId: uid, identity: uid })));
+  for (const inactive of [room, { status: 'active', expires_at: new Date(Date.now() - 1000).toISOString() }, { status: 'active', expires_at: 'invalid' }, null]) {
+    room = inactive;
+    assert.equal((await call()).status, 403);
+    assert.equal(signed, 0);
+  }
+  roomError = { message: 'database unavailable' };
+  assert.equal((await call()).status, 500);
+  assert.equal(signed, 0);
+  roomError = null;
+  for (const expires_at of [null, new Date(Date.now() + 60000).toISOString()]) {
+    room = { status: 'active', expires_at };
+    assert.equal((await call()).status, 200);
+  }
+  assert.equal(signed, 2);
 });
