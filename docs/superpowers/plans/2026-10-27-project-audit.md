@@ -25,27 +25,27 @@
 - Shared preview credentials and unavailable providers; distinguish code tests from live acceptance.
 
 ### Task 1: Database module boundary
-- [ ] Inventory every exported function/type and shared client/cache in `src/lib/supabase/db.ts`.
-- [ ] Extract cohesive domains under `src/lib/supabase/`, retaining a compatibility facade.
-- [ ] Preserve shared singleton registration and deletion coordination. Add an export-contract regression and run persistence/documents/billing/navigation tests plus tsc/lint.
-- [ ] Review and open a database-only PR.
+- [x] Inventory every exported function/type and shared client/cache in `src/lib/supabase/db.ts`.
+- [x] Extract cohesive domains under `src/lib/supabase/`, retaining a compatibility facade.
+- [x] Preserve shared singleton registration and deletion coordination. Add an export-contract regression and run persistence/documents/billing/navigation tests plus tsc/lint.
+- [x] Review and open a database-only PR.
 
 ### Task 2: Workspace boundary
-- [ ] Extract cohesive state hooks and UI sections from `src/app/(app)/workspace/page.tsx` into its adjacent feature directory.
-- [ ] Keep React hook ordering and callback/ref lifetimes stable; test changed lifecycle behavior.
-- [ ] Run workspace lint, typecheck, relevant persistence/drawing/document tests; review and open a workspace-only PR.
+- [x] Extract cohesive state hooks and UI sections from `src/app/(app)/workspace/page.tsx` into its adjacent feature directory.
+- [x] Keep React hook ordering and callback/ref lifetimes stable; test changed lifecycle behavior.
+- [x] Run workspace lint, typecheck, relevant persistence/drawing/document tests; review and open a workspace-only PR.
 
 ### Task 3: API/security audit
-- [ ] Inspect every route, authorization wrapper, quota/idempotency handler, request validation and error path.
-- [ ] Reproduce confirmed defects with tests, then fix in small shared helpers where appropriate.
-- [ ] Review and open an API-only PR; no live provider calls or migrations without a separately established need.
+- [x] Inspect every route, authorization wrapper, quota/idempotency handler, request validation and error path.
+- [x] Reproduce confirmed defects with tests, then fix in small shared helpers where appropriate.
+- [x] Review and open an API-only PR; no live provider calls or migrations without a separately established need.
 
 ### Task 4: UI/configuration audit
-- [ ] Inspect settings, room, community, friends, library, hooks, configuration, dependencies and Android integration; inventory coverage.
-- [ ] Repair confirmed defects and extract suitable cohesive settings/UI sections, retaining behavior.
-- [ ] Record unresolved issues and external gates; open a separate PR.
+- [x] Inspect settings, room, community, friends, library, hooks, configuration, dependencies and Android integration; inventory coverage.
+- [x] Repair confirmed defects and extract suitable cohesive settings/UI sections, retaining behavior.
+- [x] Record unresolved issues and external gates; open a separate PR.
 
 ### Task 5: Integration verification
-- [ ] Independently review subsystem diffs and resolve important findings.
-- [ ] Validate combined changes with tests, TypeScript, lint, dependency audit and local production build.
+- [x] Independently review subsystem diffs and resolve important findings.
+- [x] Validate combined changes with tests, TypeScript, lint, dependency audit and local production build.
 - [ ] Publish focused PRs with dependencies, validation and material limitations; leave them unmerged.
