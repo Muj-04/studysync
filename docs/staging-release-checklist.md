@@ -16,15 +16,17 @@ Checked 27 October 2026, 23:00 UTC. This supersedes the pre-integration status i
 
 Only the staging project `xokiiepdpjvqnpzwmbtb` was contacted, using its public publishable key. No accounts, email messages, production requests or configuration changes were made.
 
-### CAPTCHA: release blocker
+### CAPTCHA: backend rejection verified; successful challenge pending
 
-The existing bounded `scripts/auth-abuse-check.cjs` probe made two sequential password-grant requests: one without a token and one with a deliberately invalid token. Both returned HTTP 400; `captchaRejectionVerified` was false. A repeated pair and two diagnostic requests (six password-grant requests total) established that both cases return `error_code: invalid_credentials`, not `captcha_failed`. Random nonexistent `example.invalid` addresses were used. No valid password/session was obtained, and no load/rate-limit test was attempted.
+Update after the owner enabled Turnstile in staging Supabase Auth: the bounded two-request probe now passes (`captchaRejectionVerified: true`, two HTTP 400 responses with CAPTCHA rejection, completed normally). Missing and deliberately invalid tokens are rejected. No account was created or accessed. A successful real challenge/login after this configuration change remains unverified.
+
+Earlier diagnostic evidence: the existing bounded `scripts/auth-abuse-check.cjs` probe made two sequential password-grant requests: one without a token and one with a deliberately invalid token. Both returned HTTP 400; `captchaRejectionVerified` was false. A repeated pair and two diagnostic requests (six password-grant requests total) established that both cases return `error_code: invalid_credentials`, not `captcha_failed`. Random nonexistent `example.invalid` addresses were used. No valid password/session was obtained, and no load/rate-limit test was attempted.
 
 The frontend passes `captchaToken` to signup, password login and password reset. Nevertheless, direct backend rejection without a valid challenge has not been demonstrated. Reaching credential validation is inconsistent with the expected CAPTCHA-first rejection; do not mark abuse protection verified merely because the widget renders or a user can log in.
 
-Required owner configuration: in **StudySync-Staging → Authentication → Bot and Abuse Protection**, verify CAPTCHA protection is enabled, provider is **Cloudflare Turnstile**, and the secret belongs to the widget whose site key is used in Preview. The secret belongs in Supabase Auth, never a browser/public variable. The connected Supabase tool returned `Unknown tool`, and available tools expose no working Auth configuration editor; this setting was not inspected or modified.
+Configuration completed by owner (not directly inspected): in **StudySync-Staging → Authentication → Bot and Abuse Protection**, verify CAPTCHA protection is enabled, provider is **Cloudflare Turnstile**, and the secret belongs to the widget whose site key is used in Preview. The secret belongs in Supabase Auth, never a browser/public variable. The connected Supabase tool returned `Unknown tool`, and available tools expose no working Auth configuration editor; this setting was not inspected or modified.
 
-Completion evidence: rerun the existing two-request probe and require `captcha_failed` for both cases, plus one successful legitimate challenge/login. A failed probe is not proof that a real account was accessed; conversely, invalid-credential rejection is not proof CAPTCHA is enforced.
+Completion evidence: the existing two-request probe now returns CAPTCHA rejection for both cases. One successful legitimate challenge/login after enabling enforcement is still required. A failed probe is not proof that a real account was accessed; conversely, invalid-credential rejection is not proof CAPTCHA is enforced.
 
 ### Redirect allowlist: release blocker for the combined Preview
 
@@ -54,7 +56,7 @@ Prefer a verified stable dev hostname for ongoing acceptance, then use that same
 
 | Priority | Item | Required evidence / decision |
 | --- | --- | --- |
-| Block release | Backend CAPTCHA and combined Preview redirects | Resolve the two Auth findings above and verify them. |
+| Block release | Backend CAPTCHA and combined Preview redirects | Backend negative CAPTCHA probes pass; verify a legitimate challenge and resolve the combined Preview redirect configuration. |
 | Block release | Backup/restore and migration rollout | Verify production backup plus a restore exercise; reconcile migration contents/history and coordinate billing lease migration with application rollout. No production migration is authorized by this checklist. |
 | Block release | Entitlement policy | Reconcile staging free-launch limits with plan-based UI and server enforcement before claiming supported plans. |
 | Block affected features | Stripe | Deferred at owner request. Real checkout/webhook/portal acceptance is outstanding; passing builds are not provider acceptance. Do not enable paid launch without it. |
@@ -66,7 +68,7 @@ Prefer a verified stable dev hostname for ongoing acceptance, then use that same
 
 ## Minimal next actions
 
-1. Owner configures staging Auth CAPTCHA and the combined Preview origin using the exact values above; no repeat manual test tour is needed.
+1. Staging Auth CAPTCHA was enabled by the owner and backend rejection verified. Configure the combined Preview origin using the exact values above; no repeat manual test tour is needed.
 2. Agent reruns the bounded backend CAPTCHA and redirect checks and updates this evidence.
 3. Keep Stripe acceptance deferred, document which provider features are excluded from any release, and resolve backup/migration/entitlement gates before proposing a `main` merge.
 
