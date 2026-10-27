@@ -28,9 +28,11 @@ Configuration completed by owner (not directly inspected): in **StudySync-Stagin
 
 Completion evidence: the existing two-request probe now returns CAPTCHA rejection for both cases. One successful legitimate challenge/login after enabling enforcement is still required. A failed probe is not proof that a real account was accessed; conversely, invalid-credential rejection is not proof CAPTCHA is enforced.
 
-### Redirect allowlist: release blocker for the combined Preview
+### Redirect allowlist: verified for the combined Preview
 
-Three non-following verification requests with a fabricated 64-character token tested redirect selection without sending mail or authenticating a user:
+After the owner saved the combined Preview Site URL and added both redirects, three non-following fabricated-token checks passed: `/auth/callback` retained its requested destination, `/reset-password` retained its requested destination, and an untrusted `example.invalid` destination fell back to the combined Preview root. This verifies redirect selection, not successful confirmation/recovery or session establishment.
+
+Earlier diagnostic results (now superseded): three non-following verification requests with a fabricated 64-character token tested redirect selection without sending mail or authenticating a user:
 
 | Requested destination | Observed HTTP 303 Location origin/path |
 | --- | --- |
@@ -56,7 +58,7 @@ Prefer a verified stable dev hostname for ongoing acceptance, then use that same
 
 | Priority | Item | Required evidence / decision |
 | --- | --- | --- |
-| Block release | Backend CAPTCHA and combined Preview redirects | Backend negative CAPTCHA probes pass; verify a legitimate challenge and resolve the combined Preview redirect configuration. |
+| Block release | Backend CAPTCHA and combined Preview redirects | Backend negative CAPTCHA probes and combined Preview redirect selection pass; verify a legitimate challenge/login after enforcement was enabled. |
 | Block release | Backup/restore and migration rollout | Verify production backup plus a restore exercise; reconcile migration contents/history and coordinate billing lease migration with application rollout. No production migration is authorized by this checklist. |
 | Block release | Entitlement policy | Reconcile staging free-launch limits with plan-based UI and server enforcement before claiming supported plans. |
 | Block affected features | Stripe | Deferred at owner request. Real checkout/webhook/portal acceptance is outstanding; passing builds are not provider acceptance. Do not enable paid launch without it. |
@@ -68,8 +70,8 @@ Prefer a verified stable dev hostname for ongoing acceptance, then use that same
 
 ## Minimal next actions
 
-1. Staging Auth CAPTCHA was enabled by the owner and backend rejection verified. Configure the combined Preview origin using the exact values above; no repeat manual test tour is needed.
-2. Agent reruns the bounded backend CAPTCHA and redirect checks and updates this evidence.
+1. Staging Auth CAPTCHA was enabled by the owner and backend rejection verified. The combined Preview Site URL and callback/recovery redirects are also configured and verified; no repeat manual test tour is needed.
+2. Backend CAPTCHA and redirect checks passed and are recorded above. One legitimate challenge/login after enforcement was enabled remains pending; current Turnstile hostname authorization has not been independently inspected.
 3. Keep Stripe acceptance deferred, document which provider features are excluded from any release, and resolve backup/migration/entitlement gates before proposing a `main` merge.
 
 References: [Supabase CAPTCHA](https://supabase.com/docs/guides/auth/auth-captcha), [Supabase redirects](https://supabase.com/docs/guides/auth/redirect-urls), [Turnstile hostname management](https://developers.cloudflare.com/turnstile/additional-configuration/hostname-management/).
