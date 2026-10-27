@@ -5,6 +5,14 @@ const SCOPED_DB_PREFIX = 'studysync_pdfs_user_';
 const STORE = 'files';
 const DB_VERSION = 1;
 
+export interface StoredPdf { blob: Blob; filename?: string; fingerprint?: string }
+
+function asStoredPdf(value: unknown): StoredPdf | null {
+  if (value instanceof Blob) return { blob: value, filename: typeof File !== 'undefined' && value instanceof File ? value.name : undefined };
+  if (value && typeof value === 'object' && 'blob' in value && value.blob instanceof Blob) return value as StoredPdf;
+  return null;
+}
+
 // Avoid repeating the one-time legacy ownership check during the same session.
 const migratedLegacyScopes = new Set<string>();
 
@@ -22,19 +30,19 @@ function openDb(name: string): Promise<IDBDatabase> {
   });
 }
 
-function readBlob(db: IDBDatabase, docId: string): Promise<Blob | null> {
+function readEntry(db: IDBDatabase, docId: string): Promise<StoredPdf | null> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly');
     const req = tx.objectStore(STORE).get(docId);
-    req.onsuccess = () => resolve(req.result instanceof Blob ? req.result : null);
+    req.onsuccess = () => resolve(asStoredPdf(req.result));
     req.onerror = () => reject(req.error);
   });
 }
 
-function writeBlob(db: IDBDatabase, docId: string, blob: Blob): Promise<void> {
+function writeEntry(db: IDBDatabase, docId: string, entry: StoredPdf): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).put(blob, docId);
+    tx.objectStore(STORE).put(entry, docId);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -102,11 +110,11 @@ async function migrateOwnedLegacyBlobs(
   const legacyDb = await openDb(LEGACY_DB_NAME);
   try {
     for (const docId of ownedIds) {
-      const legacyBlob = await readBlob(legacyDb, docId);
+      const legacyBlob = await readEntry(legacyDb, docId);
       if (!legacyBlob) continue;
 
-      const existingScopedBlob = await readBlob(scopedDb, docId);
-      if (!existingScopedBlob) await writeBlob(scopedDb, docId, legacyBlob);
+      const existingScopedBlob = await readEntry(scopedDb, docId);
+      if (!existingScopedBlob) await writeEntry(scopedDb, docId, legacyBlob);
 
       // Copy completed successfully (or the scoped copy already existed), so
       // the unsafe unscoped copy can no longer be exposed by old code.
@@ -119,25 +127,25 @@ async function migrateOwnedLegacyBlobs(
   }
 }
 
-export async function savePdfBlob(docId: string, blob: Blob): Promise<void> {
+export async function savePdfBlob(docId: string, blob: Blob, metadata: Omit<StoredPdf, 'blob'> = {}): Promise<void> {
   const scope = await getStorageScope();
   const db = await openDb(scope.dbName);
   try {
-    await writeBlob(db, docId, blob);
+    await writeEntry(db, docId, { blob, ...metadata });
   } finally {
     db.close();
   }
 }
 
-export async function getPdfBlob(docId: string): Promise<Blob | null> {
+export async function getStoredPdf(docId: string): Promise<StoredPdf | null> {
   const scope = await getStorageScope();
   const db = await openDb(scope.dbName);
   try {
-    const scopedBlob = await readBlob(db, docId);
+    const scopedBlob = await readEntry(db, docId);
     if (scopedBlob) return scopedBlob;
 
     await migrateOwnedLegacyBlobs(scope, db, docId);
-    return readBlob(db, docId);
+    return readEntry(db, docId);
   } finally {
     db.close();
   }
@@ -162,4 +170,8 @@ export async function getAllStoredDocIds(): Promise<string[]> {
   } finally {
     db.close();
   }
+}
+
+export async function getPdfBlob(docId: string): Promise<Blob | null> {
+  return (await getStoredPdf(docId))?.blob ?? null;
 }

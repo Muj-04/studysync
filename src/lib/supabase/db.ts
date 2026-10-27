@@ -1,3 +1,7 @@
+export { getConversation, markMessagesRead } from './messages';
+import { deleteLocalDocument } from '@/lib/documentLocalData';
+import { enqueueDocumentDeletion, enqueueDocumentRegistration } from '@/lib/persistence/documentQueue';
+export { saveTextNotes, saveBookmarks, saveKeyTerms, saveBlankPages, saveFlashcards } from './annotations';
 import { createClient } from './client';
 import type { VoiceNote, TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
 import {
@@ -32,31 +36,30 @@ async function ensureDoc(uid: string, docId: string): Promise<void> {
 
 // ── Documents ────────────────────────────────────────────────────────────────
 
-// Returns the canonical document ID for this user+name (cross-device stable).
-// If a row with the same name already exists (opened on another device first),
-// that existing ID is returned and used — the local UUID is discarded.
+// Persist metadata by stable document ID, never by a potentially duplicated filename.
 export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }): Promise<string> {
-  const uid = await userId(); if (!uid) return doc.id;
+  return enqueueDocumentRegistration(doc.id, async () => {
+    const uid = await userId(); if (!uid) throw new Error('Sign in to open a document');
 
-  // Look up by (user_id, name) — stable across devices regardless of local UUID
-  const { data: existing } = await sb()
-    .from('documents').select('id')
-    .eq('user_id', uid).eq('name', doc.name)
-    .maybeSingle();
+    const canonicalId = doc.id;
 
-  const canonicalId = existing?.id ?? doc.id;
+    const { error } = await sb().from('documents').upsert({
+      id: canonicalId, user_id: uid, name: doc.name, type: doc.type,
+      page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
 
-  const { error } = await sb().from('documents').upsert({
-    id: canonicalId, user_id: uid, name: doc.name, type: doc.type,
-    page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' });
-
-  if (error) console.error('[DB] upsertDocument error:', error.message, 'canonicalId:', canonicalId);
-  else {
-    console.log('[DB] upsertDocument OK — canonicalId:', canonicalId, 'localId:', doc.id, 'name:', doc.name);
-    registeredDocs.add(canonicalId);
-  }
-  return canonicalId;
+    if (error) throw new Error(`Could not register document: ${error.message}`);
+    else {
+      console.log('[DB] upsertDocument OK — canonicalId:', canonicalId, 'localId:', doc.id, 'name:', doc.name);
+      registeredDocs.add(canonicalId);
+    }
+    return canonicalId;
+  }).catch((error: unknown) => {
+    // Preserve the metadata API's best-effort contract; failed registration
+    // must leave the deletion barrier in place.
+    console.error('[DB] upsertDocument error:', error);
+    return doc.id;
+  });
 }
 
 export async function fetchDocuments(): Promise<Array<{ id: string; name: string; type: string }>> {
@@ -66,38 +69,49 @@ export async function fetchDocuments(): Promise<Array<{ id: string; name: string
 }
 
 export async function deleteDocument(docId: string) {
-  await sb().from('documents').delete().eq('id', docId);
+  return enqueueDocumentDeletion(docId, async () => {
+    const { error } = await sb().from('documents').delete().eq('id', docId);
+    if (error) throw error;
+    registeredDocs.delete(docId);
+  });
 }
 
 export async function deleteAllVoiceNotesForDocument(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  const { data } = await sb().from('voice_notes').select('id').match({ user_id: uid, document_id: docId });
+  const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
+  const { data, error: readError } = await sb().from('voice_notes').select('id').match({ user_id: uid, document_id: docId });
+  if (readError) throw readError;
   if (data?.length) {
     const exts = ['webm', 'ogg', 'mp4'];
     const paths = data.flatMap((r) => exts.map((e) => `${uid}/${docId}/${r.id}.${e}`));
-    await sb().storage.from('voice-notes').remove(paths);
-    await sb().from('voice_notes').delete().match({ user_id: uid, document_id: docId });
+    const { error: storageError } = await sb().storage.from('voice-notes').remove(paths);
+    if (storageError) throw storageError;
+    const { error } = await sb().from('voice_notes').delete().match({ user_id: uid, document_id: docId });
+    if (error) throw error;
   }
 }
 
 export async function deleteAllDataForDocument(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  await deleteAllVoiceNotesForDocument(docId);
-  await Promise.all([
-    sb().from('drawings').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('text_notes').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('key_terms').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('page_image_annotations').delete().match({ user_id: uid, document_id: docId }),
-    // flashcards uses doc_id (not document_id)
-    sb().from('flashcards').delete().match({ user_id: uid, doc_id: docId }),
-    // session_state: one row per user keyed on user_id; delete only if it points to this doc
-    sb().from('session_state').delete().match({ user_id: uid, doc_id: docId }),
-  ]);
-  await sb().from('documents').delete().eq('id', docId);
-  // Remove from in-process cache so a re-add starts fresh
-  registeredDocs.delete(docId);
+  return enqueueDocumentDeletion(docId, async () => {
+    const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
+    await deleteAllVoiceNotesForDocument(docId);
+    const results = await Promise.all([
+      sb().from('drawings').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('text_notes').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('key_terms').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('page_image_annotations').delete().match({ user_id: uid, document_id: docId }),
+      // flashcards uses doc_id (not document_id)
+      sb().from('flashcards').delete().match({ user_id: uid, doc_id: docId }),
+      // session_state: one row per user keyed on user_id; delete only if it points to this doc
+      sb().from('session_state').delete().match({ user_id: uid, doc_id: docId }),
+    ]);
+    for (const result of results) if (result.error) throw result.error;
+    const { error } = await sb().from('documents').delete().match({ id: docId, user_id: uid });
+    if (error) throw error;
+    // Remove from in-process cache so a re-add starts fresh
+    registeredDocs.delete(docId);
+  });
 }
 
 // ── Library ───────────────────────────────────────────────────────────────────
@@ -153,15 +167,8 @@ export async function fetchLibraryDocuments(): Promise<LibraryDocument[]> {
 }
 
 export async function deleteLibraryDocument(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  await Promise.all([
-    sb().from('voice_notes').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('drawings').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('text_notes').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('bookmarks').delete().eq('document_id', docId).eq('user_id', uid),
-    sb().from('key_terms').delete().eq('document_id', docId).eq('user_id', uid),
-  ]);
-  await sb().from('documents').delete().eq('id', docId).eq('user_id', uid);
+  await deleteAllDataForDocument(docId);
+  await deleteLocalDocument(docId);
 }
 
 // ── Community ─────────────────────────────────────────────────────────────────
@@ -433,22 +440,6 @@ export async function deleteVoiceNote(noteId: string, docId: string) {
 
 // ── Text Notes ───────────────────────────────────────────────────────────────
 
-export async function saveTextNotes(docId: string, pageKey: string, notes: TextNote[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  const { error: delErr } = await sb().from('text_notes').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
-  if (delErr) console.error('[DB] saveTextNotes delete error:', delErr.message, 'docId:', docId, 'pageKey:', pageKey);
-  if (notes.length === 0) return;
-  const { error: insErr } = await sb().from('text_notes').insert(notes.map((n) => ({
-    id: n.id, user_id: uid, document_id: docId, page_key: pageKey,
-    x: n.x, y: n.y, width: n.width, height: n.height,
-    content: n.content, font_size: n.fontSize, color: n.color,
-    category: n.category ?? null,
-  })));
-  if (insErr) console.error('[DB] saveTextNotes insert error:', insErr.message, 'docId:', docId, 'pageKey:', pageKey);
-  else console.log('[DB] saveTextNotes OK — docId:', docId, 'pageKey:', pageKey, 'count:', notes.length);
-}
-
 export async function fetchTextNotes(docId: string): Promise<Record<string, TextNote[]>> {
   const uid = await userId();
   console.log('[DB] fetchTextNotes uid:', uid, 'docId:', docId);
@@ -472,20 +463,6 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
 
 // ── Bookmarks ────────────────────────────────────────────────────────────────
 
-export async function saveBookmarks(docId: string, bookmarks: Bookmark[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  const { error: delErr } = await sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId });
-  if (delErr) console.error('[DB] saveBookmarks delete error:', delErr.message, 'docId:', docId);
-  if (bookmarks.length === 0) return;
-  const { error: insErr } = await sb().from('bookmarks').insert(bookmarks.map((b) => ({
-    id: b.id, user_id: uid, document_id: docId,
-    virtual_index: b.virtualIndex, label: b.label, created_at: new Date(b.createdAt).toISOString(),
-  })));
-  if (insErr) console.error('[DB] saveBookmarks insert error:', insErr.message, 'docId:', docId);
-  else console.log('[DB] saveBookmarks OK — docId:', docId, 'count:', bookmarks.length);
-}
-
 export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
   const uid = await userId(); if (!uid) return [];
   let q = sb().from('bookmarks').select('*').eq('user_id', uid);
@@ -498,17 +475,6 @@ export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
 }
 
 // ── Key Terms ────────────────────────────────────────────────────────────────
-
-export async function saveKeyTerms(docId: string, terms: KeyTerm[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  await sb().from('key_terms').delete().match({ user_id: uid, document_id: docId });
-  if (terms.length === 0) return;
-  await sb().from('key_terms').insert(terms.map((t) => ({
-    id: t.id, user_id: uid, document_id: docId,
-    term: t.term, definition: t.definition, created_at: new Date(t.createdAt).toISOString(),
-  })));
-}
 
 export async function fetchKeyTerms(docId: string): Promise<KeyTerm[]> {
   const uid = await userId(); if (!uid) return [];
@@ -557,24 +523,12 @@ export async function fetchDrawings(docId: string): Promise<Record<string, strin
 
 // ── Blank Pages ───────────────────────────────────────────────────────────────
 
-export async function saveBlankPages(docId: string, pages: BlankPage[]) {
-  const uid = await userId(); if (!uid) return;
-  await ensureDoc(uid, docId);
-  await sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId });
-  if (pages.length === 0) return;
-  await sb().from('blank_pages').insert(pages.map((p) => ({
-    id: p.id, user_id: uid, document_id: docId,
-    insert_after_page: p.insertAfterPage, canvas_data: p.canvasData ?? null,
-    bg_theme: p.bgTheme ?? 'white', created_at: p.createdAt,
-  })));
-}
-
 export async function fetchBlankPages(docId: string): Promise<BlankPage[]> {
   const uid = await userId(); if (!uid) return [];
   const { data } = await sb().from('blank_pages').select('*').match({ user_id: uid, document_id: docId });
   return (data ?? []).map((r) => ({
     id: r.id, documentId: r.document_id, insertAfterPage: r.insert_after_page,
-    canvasData: r.canvas_data, bgTheme: r.bg_theme as 'white' | 'dark', createdAt: r.created_at,
+    images: r.images ?? [], canvasData: r.canvas_data, bgTheme: r.bg_theme as 'white' | 'dark', createdAt: r.created_at,
   }));
 }
 
@@ -1293,6 +1247,8 @@ export async function fetchAllRoomDrawings(roomId: string): Promise<Array<{ page
 // canvas — keep it small (no bitmaps, just a points list).
 
 export interface RoomStrokePayload {
+  /** Server-assigned ordering; absent only while a local stroke is pending. */
+  seq?: number;
   id:             string;
   tool:           'pen' | 'eraser' | 'line';
   penType:        'normal' | 'marker' | 'highlighter';
@@ -1323,24 +1279,23 @@ export interface RoomStrokeRow {
  * a dropped realtime broadcast.
  */
 export async function fetchAllRoomStrokes(roomId: string, sinceSeq?: number): Promise<RoomStrokeRow[]> {
-  let query = sb()
-    .from('room_strokes')
-    .select('id, page_key, user_id, seq, stroke, created_at')
-    .eq('room_id', roomId)
-    .order('seq', { ascending: true });
-  if (typeof sinceSeq === 'number') {
-    query = query.gt('seq', sinceSeq);
+  const rows: RoomStrokeRow[] = [];
+  let cursor = sinceSeq ?? 0;
+  while (true) {
+    const { data, error } = await sb().from('room_strokes')
+      .select('id,page_key,user_id,seq,stroke,created_at').eq('room_id', roomId)
+      .gt('seq', cursor).order('seq', { ascending: true }).limit(500);
+    if (error) throw new Error(`Could not load room strokes: ${error.message}`);
+    if (!data?.length) break;
+    for (const row of data) rows.push({
+      id: row.id, pageKey: row.page_key, userId: row.user_id, seq: Number(row.seq),
+      stroke: { ...row.stroke, seq: Number(row.seq) }, createdAt: row.created_at,
+    });
+    const next = rows[rows.length - 1].seq;
+    if (next <= cursor) throw new Error('Room stroke cursor did not advance');
+    cursor = next;
   }
-  const { data, error } = await query;
-  if (error) { console.error('[DB] fetchAllRoomStrokes error:', error.message); return []; }
-  return (data ?? []).map((r) => ({
-    id:        r.id as string,
-    pageKey:   r.page_key as string,
-    userId:    r.user_id as string,
-    seq:       Number(r.seq),
-    stroke:    r.stroke as RoomStrokePayload,
-    createdAt: r.created_at as string,
-  }));
+  return rows;
 }
 
 /**
@@ -1641,32 +1596,6 @@ export async function sendDirectMessage(
   return mapDirectMessage(data as DirectMessageRow);
 }
 
-export async function getConversation(
-  friendId: string,
-  limit:    number = 100,
-): Promise<DirectMessage[]> {
-  const uid = await userId(); if (!uid) return [];
-  // RLS already restricts visibility to rows where caller is sender or
-  // recipient. Filtering on the pair narrows to this specific conversation.
-  const { data, error } = await sb()
-    .from('direct_messages')
-    .select('id, sender_id, recipient_id, content, read, created_at')
-    .or(`and(sender_id.eq.${uid},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${uid})`)
-    .order('created_at', { ascending: true })
-    .limit(limit);
-  if (error) { console.error('[DB] getConversation error:', error.message); return []; }
-  return (data ?? []).map((r) => mapDirectMessage(r as DirectMessageRow));
-}
-
-export async function markMessagesRead(friendId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  // Only flips rows the trigger + UPDATE policy allow: caller is recipient.
-  await sb().from('direct_messages')
-    .update({ read: true })
-    .eq('sender_id', friendId)
-    .eq('recipient_id', uid)
-    .eq('read', false);
-}
 
 // ── Study Rooms — listing ─────────────────────────────────────────────────────
 
@@ -2165,16 +2094,6 @@ export interface Flashcard {
   question: string;
   answer: string;
   createdAt: string;
-}
-
-export async function saveFlashcards(docId: string, pageNum: number, cards: { question: string; answer: string }[]): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  // Delete existing cards for this page first, then insert fresh batch
-  await sb().from('flashcards').delete().eq('user_id', uid).eq('doc_id', docId).eq('page_num', pageNum);
-  if (!cards.length) return;
-  const rows = cards.map((c) => ({ user_id: uid, doc_id: docId, page_num: pageNum, question: c.question, answer: c.answer }));
-  const { error } = await sb().from('flashcards').insert(rows);
-  if (error) console.error('[DB] saveFlashcards error:', error.message);
 }
 
 export async function loadFlashcards(docId: string, pageNum: number): Promise<Flashcard[]> {

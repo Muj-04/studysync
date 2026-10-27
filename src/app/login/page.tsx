@@ -1,10 +1,13 @@
 'use client';
+import { safeReturnPath } from '@/lib/accessPolicy';
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AlertCircle, BookOpen, Eye, EyeOff, FileText, Layers, Loader2, Search, Sparkles, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import AuthCaptcha from '@/components/AuthCaptcha';
+import { useAuthCaptcha } from '@/hooks/useAuthCaptcha';
 import {
   checkActiveSession, registerSession, getOrCreateSessionId,
   ensureReferralCode, processReferral,
@@ -57,6 +60,7 @@ function LoginWorkspacePreview() {
 }
 
 export default function LoginPage() {
+  const captcha = useAuthCaptcha();
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
@@ -80,13 +84,13 @@ export default function LoginPage() {
       if (emailRef.current) emailRef.current.value = savedEmail;
     }
     createClient().auth.getUser().then(({ data: { user } }) => {
-      if (user) window.location.replace('/dashboard');
+      if (user) window.location.replace(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')));
     }).catch(() => {});
   }, []);
 
   const proceedToApp = async (sessionId: string) => {
     await registerSession(sessionId, navigator.userAgent.slice(0, 200));
-    window.location.href = '/dashboard';
+    window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
   };
 
   const processPendingReferral = async () => {
@@ -126,7 +130,9 @@ export default function LoginPage() {
     setError(''); setLoading(true);
     const cleanEmail = rawEmail.trim().replace(/[^\x20-\x7e]/g, '');
     try {
-      const { error: authError } = await createClient().auth.signInWithPassword({ email: cleanEmail, password: rawPassword });
+      const { error: authError } = await captcha.run(captchaToken => createClient().auth.signInWithPassword({
+        email: cleanEmail, password: rawPassword, options: { captchaToken },
+      }));
       if (authError) {
         setError(/invalid login credentials/i.test(authError.message) ? 'Incorrect email or password. Please try again.' : authError.message);
         return;
@@ -141,8 +147,8 @@ export default function LoginPage() {
       } catch { /* proceed if session status cannot be checked */ }
 
       await processPendingReferral();
-      window.location.href = '/dashboard';
-    } catch { setError('Login failed. Check your connection and try again.'); }
+      window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
+    } catch (err) { setError(err instanceof Error ? err.message : 'Login failed. Check your connection and try again.'); }
     finally { setLoading(false); }
   };
 
@@ -151,7 +157,7 @@ export default function LoginPage() {
     setGoogleLoading(true); setError('');
     const { error: oauthError } = await createClient().auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')))}` },
     });
     if (oauthError) { setError(oauthError.message); setGoogleLoading(false); }
   };
@@ -163,7 +169,7 @@ export default function LoginPage() {
 
   const handleCancelConflict = async () => {
     setConflictLoading(true);
-    await createClient().auth.signOut();
+    await createClient().auth.signOut({ scope: 'local' });
     await clearLocalUserData();
     setShowConflict(false); setConflictLoading(false);
   };
@@ -237,7 +243,8 @@ export default function LoginPage() {
               <Link href="/forgot-password">Forgot password?</Link>
             </div>
 
-            <button className="login-submit" type="submit" disabled={loading || googleLoading}>
+            <AuthCaptcha control={captcha} />
+            <button className="login-submit" type="submit" disabled={loading || googleLoading || !captcha.ready}>
               {loading ? <><Loader2 className="spin" size={16} />Signing in…</> : 'Log In'}
             </button>
           </form>

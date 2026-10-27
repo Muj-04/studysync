@@ -30,7 +30,7 @@ function getPdfDocPromise(url: string): Promise<unknown> {
   if (!docPromises.has(url)) {
     const p = import('pdfjs-dist').then((pdfjs) => {
       pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
-      return pdfjs.getDocument(url).promise;
+      return pdfjs.getDocument({ url }).promise;
     });
     docPromises.set(url, p);
   }
