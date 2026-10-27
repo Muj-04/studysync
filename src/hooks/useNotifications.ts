@@ -16,22 +16,27 @@ export function useNotifications() {
 
   useEffect(() => {
     const supabase = createClient();
+    let disposed = false;
+    let ownedChannel: RealtimeChannel | null = null;
 
     supabase.auth.getUser().then(({ data: { user } }) => {
+      if (disposed) return;
       if (!user) { setLoading(false); return; }
 
       getNotifications().then((notifs) => {
+        if (disposed) return;
         setNotifications(notifs);
         setUnreadCount(notifs.filter((n) => !n.read).length);
         setLoading(false);
       });
 
       const channel = supabase
-        .channel(`user-notifications:${user.id}`)
+        .channel(`user-notifications:${user.id}:${crypto.randomUUID()}`)
         .on(
           'postgres_changes',
           { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
           (payload) => {
+            if (disposed) return;
             const raw = payload.new as { id: string; type: string; data: Record<string, unknown>; read: boolean; created_at: string };
             // Direct-message notifications that target the currently-open
             // ChatPanel: the user is already watching this conversation,
@@ -70,12 +75,14 @@ export function useNotifications() {
         )
         .subscribe();
 
+      ownedChannel = channel;
       channelRef.current = channel;
     });
 
     return () => {
-      channelRef.current?.unsubscribe();
-      channelRef.current = null;
+      disposed = true;
+      if (ownedChannel) void supabase.removeChannel(ownedChannel).catch(console.error);
+      if (channelRef.current === ownedChannel) channelRef.current = null;
     };
   }, []);
 
