@@ -1,5 +1,5 @@
 'use client';
-import { forwardRef, useRef, useEffect, useState, useCallback, useImperativeHandle } from 'react';
+import { forwardRef, useRef, useEffect, useLayoutEffect, useState, useCallback, useImperativeHandle } from 'react';
 import { createDrawingHydration } from '@/lib/drawingHydration';
 import PDFViewer from './PDFViewer';
 import PDFSearchBar from './PDFSearchBar';
@@ -285,7 +285,6 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     const lastPos    = useRef<{ x: number; y: number } | null>(null);
     const [canvasDims, setCanvasDims] = useState<{ w: number; h: number } | null>(null);
     const canvasDimsRef = useRef(canvasDims);
-    canvasDimsRef.current = canvasDims;
 
     const hydration = useRef(createDrawingHydration());
     const canvasIdentity = useRef('');
@@ -308,18 +307,14 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
 
     // Stable refs so event handlers always see the latest values without re-subscribing
     const pageImagesRef         = useRef<PDFPageImage[]>([]);
-    pageImagesRef.current       = pageImages ?? [];
     const onSavePageImagesRef   = useRef<((imgs: PDFPageImage[]) => void) | undefined>(undefined);
-    onSavePageImagesRef.current = onSavePageImages;
     const selectedImageIdRef    = useRef<string | null>(null);
-    selectedImageIdRef.current  = selectedImageId;
     const dragRef               = useRef<DragState>({ kind: 'none' });
 
     // Computed at render time, mirrored to a ref so the window listener can read it without deps
     const canDrawNow         = interactive && tool !== 'text' && tool !== 'cursor';
     const isInteractingImages = interactive && tool === 'cursor';
     const isInteractingRef   = useRef(false);
-    isInteractingRef.current = isInteractingImages;
 
     // displayImages: during a drag/resize use the local optimistic copy, otherwise use props
     const displayImages = dragImages ?? (pageImages ?? []);
@@ -331,15 +326,25 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     const pdfPageRef     = useRef<PDFPageProxy | null>(null);
     const cssViewportRef = useRef<PageViewport | null>(null);
     const searchQueryRef = useRef('');
-    searchQueryRef.current = searchQuery;
 
-    useEffect(() => {
+    useLayoutEffect(() => {
+      canvasDimsRef.current = canvasDims;
+      pageImagesRef.current = pageImages ?? [];
+      onSavePageImagesRef.current = onSavePageImages;
+      selectedImageIdRef.current = selectedImageId;
+      isInteractingRef.current = isInteractingImages;
+      searchQueryRef.current = searchQuery;
+    }, [canvasDims, pageImages, onSavePageImages, selectedImageId, isInteractingImages, searchQuery]);
+
+    const [previousSearchOpen, setPreviousSearchOpen] = useState(searchOpen);
+    if (previousSearchOpen !== searchOpen) {
+      setPreviousSearchOpen(searchOpen);
       if (!searchOpen) { setSearchQuery(''); setSearchRects([]); setActiveMatchIdx(0); }
-    }, [searchOpen]);
+    }
 
     useEffect(() => {
       const q = searchQuery.trim();
-      if (!q) { setSearchRects([]); setActiveMatchIdx(0); return; }
+      if (!q) return;
       const page = pdfPageRef.current;
       const vp   = cssViewportRef.current;
       if (!page || !vp) return;
@@ -380,10 +385,14 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     useEffect(() => { if (tool !== 'line') cancelLine(); }, [tool, cancelLine]);
 
     // Deselect any selected image on page navigation
-    useEffect(() => {
+    const imagePageKey = `${document.id}:${document.currentPage}`;
+    const [previousImagePageKey, setPreviousImagePageKey] = useState(imagePageKey);
+    if (previousImagePageKey !== imagePageKey) {
+      setPreviousImagePageKey(imagePageKey);
       setSelectedImageId(null);
       setDragImages(null);
-    }, [document.id, document.currentPage]);
+    }
+    useLayoutEffect(() => { dragRef.current = { kind: 'none' }; }, [imagePageKey]);
 
     const handleCanvasDimensions = useCallback((w: number, h: number) => {
       setCanvasDims((prev) => (prev?.w === w && prev?.h === h ? prev : { w, h }));
@@ -500,7 +509,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
       ctx.restore();
     };
 
-    const continueDraw = (pos: { x: number; y: number }, shiftKey = false) => {
+    const continueDraw = (pos: { x: number; y: number }) => {
       if (tool === 'line') {
         const ls = lineStateRef.current;
         if (ls.phase !== 'active') return;
@@ -732,7 +741,9 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     }, []);
 
     // Called when user drags a corner resize handle
-    const handleCornerMouseDown = useCallback((e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br') => {
+    const handleCornerMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+      const corner = e.currentTarget.dataset.corner;
+      if (corner !== 'tl' && corner !== 'tr' && corner !== 'bl' && corner !== 'br') return;
       e.preventDefault();
       e.stopPropagation();
       const selId = selectedImageIdRef.current;
@@ -879,7 +890,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
               touchAction: canDrawNow ? 'none' : 'pan-y',
             }}
             onMouseDown={(e) => { if (!canDrawNow) return; startDraw(getPos(e.nativeEvent), e.shiftKey); }}
-            onMouseMove={(e) => { if (!canDrawNow) return; continueDraw(getPos(e.nativeEvent), e.shiftKey); }}
+            onMouseMove={(e) => { if (!canDrawNow) return; continueDraw(getPos(e.nativeEvent)); }}
             onMouseUp={() => canDrawNow && stopDraw()}
             onMouseLeave={() => canDrawNow && stopDraw()}
             onTouchStart={(e) => {
@@ -915,6 +926,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
               <div
                 key={corner}
                 data-corner-handle=""
+                data-corner={corner}
                 style={{
                   position: 'absolute',
                   left: hx * canvasDims.w - 5,
@@ -928,7 +940,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
                   cursor,
                   pointerEvents: 'auto',
                 }}
-                onMouseDown={(e) => handleCornerMouseDown(e, corner)}
+                onMouseDown={handleCornerMouseDown}
               />
             );
           })}
@@ -963,7 +975,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
         {searchOpen && (
           <PDFSearchBar
             query={searchQuery}
-            onQueryChange={setSearchQuery}
+            onQueryChange={(query) => { setSearchQuery(query); setSearchRects([]); setActiveMatchIdx(0); }}
             matchCount={searchRects.length}
             activeIndex={activeMatchIdx}
             onPrev={goPrev}

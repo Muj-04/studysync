@@ -147,21 +147,27 @@ function AddFriendCard({
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const [busyId, setBusyId]   = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Debounced live search
+  // Cancel stale search results when the query changes or the card unmounts.
   useEffect(() => {
-    setError('');
-    if (!query.trim()) { setResults([]); return; }
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setLoading(true);
-    timerRef.current = setTimeout(async () => {
-      const r = await searchUsers(query);
-      setResults(r);
-      setLoading(false);
+    if (!query.trim()) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchUsers(query).then(r => {
+        if (!cancelled) { setResults(r); setLoading(false); }
+      }).catch(() => {
+        if (!cancelled) { setError('Search failed. Please try again.'); setLoading(false); }
+      });
     }, 350);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [query]);
+
+  const changeQuery = (value: string) => {
+    setQuery(value);
+    setError('');
+    setResults([]);
+    setLoading(Boolean(value.trim()));
+  };
 
   const send = useCallback(async (receiverId: string) => {
     setBusyId(receiverId);
@@ -171,6 +177,7 @@ function AddFriendCard({
       onSent(receiverId, id);
       setQuery('');
       setResults([]);
+      setLoading(false);
     } else {
       setError('Could not send request. They may have blocked requests or you already have one in flight.');
     }
@@ -206,7 +213,7 @@ function AddFriendCard({
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => changeQuery(e.target.value)}
             placeholder="Enter username or invite code…"
             aria-label="Search users to add"
             onKeyDown={(e) => {
@@ -671,18 +678,17 @@ export default function FriendsPage() {
       if (!user) { router.replace('/login'); return; }
       setMyUserId(user.id);
       setAuthReady(true);
+      setActiveRoom(getActiveRoom());
     });
-    setActiveRoom(getActiveRoom());
   }, [router]);
 
   // Initial data load (+ mutuals)
-  const loadData = useCallback(async () => {
-    setDataLoading(true);
-    const [friendsList, requests, friendships] = await Promise.all([
+  const loadData = useCallback(() => {
+    return Promise.all([
       getFriends(),
       getFriendRequests(),
       getMyFriendships(),
-    ]);
+    ]).then(async ([friendsList, requests, friendships]) => {
     setFriends(friendsList);
     setIncoming(requests.incoming);
     setOutgoing(requests.outgoing);
@@ -700,6 +706,7 @@ export default function FriendsPage() {
     } else {
       setMutualMap({});
     }
+    });
   }, []);
 
   useEffect(() => { if (authReady) loadData(); }, [authReady, loadData]);

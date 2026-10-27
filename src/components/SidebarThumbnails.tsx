@@ -12,11 +12,12 @@ import {
   verticalListSortingStrategy, arrayMove, useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import type { PDFDocument, BlankPage, Bookmark as BookmarkType } from '@/types';
 
 // ── Module-level thumbnail caches ─────────────────────────────────────────────
 
-const docPromises = new Map<string, Promise<unknown>>();
+const docPromises = new Map<string, Promise<PDFDocumentProxy>>();
 const thumbCache  = new Map<string, string>(); // "url:page" → jpeg dataURL
 const outlineCache = new Map<string, OutlineItem[]>(); // url → resolved outline
 
@@ -26,7 +27,7 @@ const outlineCache = new Map<string, OutlineItem[]>(); // url → resolved outli
 // annotations tab JSX, and the NoteEntry type were deleted from this
 // file. SidebarThumbnails now has just two tabs: Pages and Outlines.
 
-function getPdfDocPromise(url: string): Promise<unknown> {
+function getPdfDocPromise(url: string): Promise<PDFDocumentProxy> {
   if (!docPromises.has(url)) {
     const p = import('pdfjs-dist').then((pdfjs) => {
       pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
@@ -41,7 +42,7 @@ async function getThumb(url: string, page: number): Promise<string> {
   const key = `${url}:${page}`;
   if (thumbCache.has(key)) return thumbCache.get(key)!;
 
-  const doc = await getPdfDocPromise(url) as any;
+  const doc = await getPdfDocPromise(url);
   const pdfPage = await doc.getPage(page);
   const vp0    = pdfPage.getViewport({ scale: 1 });
   const scale  = 152 / vp0.width;
@@ -70,19 +71,23 @@ interface OutlineItem {
   items: OutlineItem[];
 }
 
-async function resolveDestToPage(doc: any, dest: string | any[] | null): Promise<number | null> {
+async function resolveDestToPage(doc: PDFDocumentProxy, dest: string | unknown[] | null): Promise<number | null> {
   if (!dest) return null;
   try {
-    const d: any[] | null = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
-    if (!d || !d[0]) return null;
-    const idx = await doc.getPageIndex(d[0]);
+    const d: unknown[] | null = typeof dest === 'string' ? await doc.getDestination(dest) : dest;
+    if (!d || d[0] == null) return null;
+    if (typeof d[0] === 'number') return d[0] + 1;
+    const ref = d[0];
+    if (typeof ref !== 'object' || ref === null || !('num' in ref) || !('gen' in ref)
+      || typeof ref.num !== 'number' || typeof ref.gen !== 'number') return null;
+    const idx = await doc.getPageIndex({ num: ref.num, gen: ref.gen });
     return idx + 1;
   } catch {
     return null;
   }
 }
 
-async function resolveOutlineItems(doc: any, rawItems: any[]): Promise<OutlineItem[]> {
+async function resolveOutlineItems(doc: PDFDocumentProxy, rawItems: NonNullable<Awaited<ReturnType<PDFDocumentProxy['getOutline']>>>): Promise<OutlineItem[]> {
   return Promise.all(
     rawItems.map(async (item) => ({
       title: item.title || '(untitled)',
@@ -96,7 +101,7 @@ async function resolveOutlineItems(doc: any, rawItems: any[]): Promise<OutlineIt
 
 async function loadOutlineForUrl(url: string): Promise<OutlineItem[]> {
   if (outlineCache.has(url)) return outlineCache.get(url)!;
-  const doc = await getPdfDocPromise(url) as any;
+  const doc = await getPdfDocPromise(url);
   const raw = await doc.getOutline();
   if (!raw) { outlineCache.set(url, []); return []; }
   const items = await resolveOutlineItems(doc, raw);
@@ -107,12 +112,14 @@ async function loadOutlineForUrl(url: string): Promise<OutlineItem[]> {
 // ── PDF thumbnail (lazy via IntersectionObserver) ─────────────────────────────
 
 function PDFThumb({ url, page }: { url: string; page: number }) {
-  const [src, setSrc] = useState<string | null>(() => thumbCache.get(`${url}:${page}`) ?? null);
+  const key = `${url}:${page}`;
+  const [thumbnail, setThumbnail] = useState<{ key: string; src: string } | null>(null);
+  const src = thumbnail?.key === key ? thumbnail.src : thumbCache.get(key) ?? null;
   const divRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const key = `${url}:${page}`;
-    if (thumbCache.has(key)) { setSrc(thumbCache.get(key)!); return; }
+    if (thumbCache.has(key)) return;
 
     let cancelled = false;
     const el = divRef.current;
@@ -123,7 +130,7 @@ function PDFThumb({ url, page }: { url: string; page: number }) {
         if (!entries[0].isIntersecting) return;
         observer.disconnect();
         getThumb(url, page)
-          .then((s) => { if (!cancelled) setSrc(s); })
+          .then((s) => { if (!cancelled) setThumbnail({ key, src: s }); })
           .catch(() => {});
       },
       { threshold: 0.05, rootMargin: '120px' },
@@ -443,9 +450,12 @@ export default function SidebarThumbnails({
   const draggingDoc = draggingId ? documents.find((d) => d.id === draggingId) : null;
 
   // Outline state
-  const [outlineItems, setOutlineItems] = useState<OutlineItem[] | null>(null);
-  const [outlineLoading, setOutlineLoading] = useState(false);
-  const [outlineError, setOutlineError] = useState('');
+  const outlineUrl = activeTab === 'outlines' && !isPPTX ? activeDocument?.url : undefined;
+  const [outlineResult, setOutlineResult] = useState<{ url: string; items: OutlineItem[]; error: string } | null>(null);
+  const currentOutline = outlineResult?.url === outlineUrl ? outlineResult : null;
+  const outlineItems = currentOutline?.items ?? null;
+  const outlineLoading = Boolean(outlineUrl && !currentOutline);
+  const outlineError = currentOutline?.error ?? '';
 
   // Scroll active thumbnail into view whenever the page changes
   useEffect(() => {
@@ -453,19 +463,17 @@ export default function SidebarThumbnails({
     el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [currentVirtualIndex]);
 
-  // Load outline when tab becomes active or document changes
+  // Ignore a completed request after switching documents or closing the outline tab.
   useEffect(() => {
-    if (activeTab !== 'outlines') return;
-    if (!activeDocument || isPPTX) { setOutlineItems(null); return; }
-
-    setOutlineLoading(true);
-    setOutlineItems(null);
-    setOutlineError('');
-
-    loadOutlineForUrl(activeDocument.url)
-      .then((items) => { setOutlineItems(items); setOutlineLoading(false); })
-      .catch((e) => { setOutlineError((e as Error).message.slice(0, 120)); setOutlineLoading(false); });
-  }, [activeTab, activeDocument, isPPTX]);
+    if (!outlineUrl) return;
+    let cancelled = false;
+    loadOutlineForUrl(outlineUrl)
+      .then((items) => { if (!cancelled) setOutlineResult({ url: outlineUrl, items, error: '' }); })
+      .catch((error: unknown) => {
+        if (!cancelled) setOutlineResult({ url: outlineUrl, items: [], error: String(error instanceof Error ? error.message : error).slice(0, 120) });
+      });
+    return () => { cancelled = true; };
+  }, [outlineUrl]);
 
   return (
     <aside

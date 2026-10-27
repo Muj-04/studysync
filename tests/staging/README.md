@@ -16,3 +16,9 @@ roll back the failed transaction and still execute a later standalone SELECT.
 The tests cover database behavior only. They do not replace browser, provider,
 concurrent-connection or backup/restore acceptance. Current observed results and
 remaining gates are in `docs/staging-execution-2026-10-26.md`.
+
+For the current billing path, run `billing-reconciliation.sql` after the
+`serialize_billing_reconciliation` migration. `billing-quota.sql` remains a
+postgres-only historical regression for the old writer and quota functions; its
+timestamp-order assertions do not describe the new authoritative reconciliation
+path. The old writer is deliberately revoked from service_role.
