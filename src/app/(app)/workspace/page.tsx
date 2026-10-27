@@ -357,7 +357,11 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!activeDocumentId) return;
     storageSet(KEYS.SESSION, { docId: activeDocumentId, virtualIndex });
-    if (userIdRef.current) dbSaveSessionState(activeDocumentId, virtualIndex);
+    if (userIdRef.current) {
+      void dbSaveSessionState(activeDocumentId, virtualIndex).catch((error: unknown) => {
+        console.error('[Workspace] Could not sync reading position:', error);
+      });
+    }
   }, [activeDocumentId, virtualIndex]);
 
   // Load per-document data from Supabase when the active document changes.
