@@ -69,33 +69,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const { error: deleteError } = await admin.from('room_members')
-    .delete()
-    .eq('room_id', roomId)
-    .eq('user_id', userId);
-  if (deleteError) {
-    console.error('[Room leave] member delete failed:', deleteError.message);
+  const { data: wasLastMember, error } = await admin.rpc('leave_room_atomic', {
+    p_room_id: roomId, p_user_id: userId,
+  });
+  if (error) {
+    console.error('[Room leave] transaction failed:', error.message);
     return NextResponse.json({ error: 'leave failed' }, { status: 500 });
   }
-
-  // Mirror leaveRoom()'s "last member out closes the room" behaviour.
-  const { count, error: countError } = await admin.from('room_members')
-    .select('user_id', { count: 'exact', head: true })
-    .eq('room_id', roomId);
-  if (countError) {
-    console.error('[Room leave] member count failed:', countError.message);
-    return NextResponse.json({ error: 'leave verification failed' }, { status: 500 });
-  }
-  const wasLastMember = (count ?? 0) === 0;
-  if (wasLastMember) {
-    const { error: closeError } = await admin.from('study_rooms')
-      .update({ status: 'closed' })
-      .eq('id', roomId);
-    if (closeError) {
-      console.error('[Room leave] room close failed:', closeError.message);
-      return NextResponse.json({ error: 'room close failed' }, { status: 500 });
-    }
-  }
-
-  return NextResponse.json({ wasLastMember });
+  return NextResponse.json({ wasLastMember: wasLastMember === true });
 }
