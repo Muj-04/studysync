@@ -1,3 +1,4 @@
+import { apiErrorResponse, readBody } from '@/lib/api/request';
 import { applyBillingEvent } from '@/lib/billing/webhook';
 import Stripe from 'stripe';
 import { NextRequest, NextResponse } from 'next/server';
@@ -21,13 +22,17 @@ function getAdmin() {
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const body = await req.text();
+  try { return await handlePost(req); } catch (error) { return apiErrorResponse(error); }
+}
+
+async function handlePost(req: NextRequest) {
   const sig  = req.headers.get('stripe-signature');
 
   if (!sig) {
     return NextResponse.json({ error: 'Missing stripe-signature header' }, { status: 400 });
   }
 
+  const body = await readBody(req, 1024 * 1024);
   let event: Stripe.Event;
   try {
     event = getStripe().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
