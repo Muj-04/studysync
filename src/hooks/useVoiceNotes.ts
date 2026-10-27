@@ -257,7 +257,9 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
           console.log('[VoiceNotes] calling saveVoiceNote id:', note.id);
           const url = await saveVoiceNote(note);
           console.log('[VoiceNotes] saveVoiceNote returned audioUrl:', url ? url.slice(0, 80) + '…' : null);
-        })();
+        })().catch((error: unknown) => {
+          console.warn('[VoiceNotes] remote save failed; local recording retained:', error);
+        });
       } else {
         console.warn('[VoiceNotes] userIdRef is null — saveVoiceNote NOT called');
       }
