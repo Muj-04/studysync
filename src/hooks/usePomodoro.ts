@@ -23,61 +23,62 @@ function playBell() {
   } catch { /* silent if no audio context */ }
 }
 
+interface TimerState {
+  phase: PomodoroPhase;
+  timeLeft: number;
+  running: boolean;
+  sessions: number;
+}
+
+const INITIAL_STATE: TimerState = { phase: 'work', timeLeft: WORK_SECS, running: false, sessions: 0 };
+
 export function usePomodoro() {
-  const [phase, setPhase]       = useState<PomodoroPhase>('work');
-  const [timeLeft, setTimeLeft] = useState(WORK_SECS);
-  const [running, setRunning]   = useState(false);
-  const [sessions, setSessions] = useState(0);
-
+  const [state, setState] = useState(INITIAL_STATE);
+  // Timer callbacks and consecutive button clicks share the latest committed action.
+  const stateRef = useRef(INITIAL_STATE);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const stop = useCallback(() => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    setRunning(false);
+  const update = useCallback((next: TimerState) => {
+    stateRef.current = next;
+    setState(next);
   }, []);
+  const clearTimer = useCallback(() => {
+    if (intervalRef.current !== null) clearInterval(intervalRef.current);
+    intervalRef.current = null;
+  }, []);
+  const advance = useCallback(() => {
+    clearTimer();
+    const current = stateRef.current;
+    const phase = current.phase === 'work' ? 'break' : 'work';
+    update({ phase, timeLeft: phase === 'work' ? WORK_SECS : BREAK_SECS,
+      running: false, sessions: current.sessions + (current.phase === 'work' ? 1 : 0) });
+  }, [clearTimer, update]);
 
   const start = useCallback(() => {
-    if (intervalRef.current) return;
-    setRunning(true);
+    if (intervalRef.current !== null) return;
+    update({ ...stateRef.current, running: true });
     intervalRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(intervalRef.current!);
-          intervalRef.current = null;
-          playBell();
-          setRunning(false);
-          setPhase((p) => {
-            if (p === 'work') { setSessions((s) => s + 1); setTimeLeft(BREAK_SECS); }
-            else              { setTimeLeft(WORK_SECS); }
-            return p === 'work' ? 'break' : 'work';
-          });
-          return 0;
-        }
-        return prev - 1;
-      });
+      if (stateRef.current.timeLeft <= 1) {
+        advance();
+        playBell();
+      } else {
+        update({ ...stateRef.current, timeLeft: stateRef.current.timeLeft - 1 });
+      }
     }, 1000);
-  }, []);
+  }, [advance, update]);
 
-  const pause = useCallback(() => stop(), [stop]);
+  const pause = useCallback(() => {
+    clearTimer();
+    update({ ...stateRef.current, running: false });
+  }, [clearTimer, update]);
 
   const reset = useCallback(() => {
-    stop();
-    setTimeLeft(phase === 'work' ? WORK_SECS : BREAK_SECS);
-  }, [stop, phase]);
+    clearTimer();
+    update({ ...stateRef.current, running: false,
+      timeLeft: stateRef.current.phase === 'work' ? WORK_SECS : BREAK_SECS });
+  }, [clearTimer, update]);
 
-  const skipPhase = useCallback(() => {
-    stop();
-    setPhase((p) => {
-      const next = p === 'work' ? 'break' : 'work';
-      setTimeLeft(next === 'work' ? WORK_SECS : BREAK_SECS);
-      if (p === 'work') setSessions((s) => s + 1);
-      return next;
-    });
-  }, [stop]);
+  useEffect(() => clearTimer, [clearTimer]);
 
-  useEffect(() => () => { if (intervalRef.current) clearInterval(intervalRef.current); }, []);
-
-  const total = phase === 'work' ? WORK_SECS : BREAK_SECS;
-
-  return { phase, timeLeft, running, sessions, total, start, pause, reset, skipPhase };
+  const total = state.phase === 'work' ? WORK_SECS : BREAK_SECS;
+  return { ...state, total, start, pause, reset, skipPhase: advance };
 }
