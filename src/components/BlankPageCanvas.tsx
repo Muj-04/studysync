@@ -255,7 +255,7 @@ const BlankPageCanvas = forwardRef<DrawingCanvasHandle, Props>(
         el.removeEventListener('touchend', onTouchEnd);
         el.removeEventListener('touchcancel', onTouchEnd);
       };
-    }, [onZoomChange]);
+    }, [onZoomChange, tool]);
 
     // ── Coordinate helpers ─────────────────────────────────────────────────
     const clientToLogical = (clientX: number, clientY: number) => {

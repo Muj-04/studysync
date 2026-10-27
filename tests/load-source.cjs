@@ -5,8 +5,8 @@ const ts = require('typescript');
 exports.loadSource = function loadSource(filename, mocks = {}, cache = new Map()) {
   const absolute = path.resolve(filename);
   if (cache.has(absolute)) return cache.get(absolute).exports;
-  const module = { exports: {} };
-  cache.set(absolute, module);
+  const loadedModule = { exports: {} };
+  cache.set(absolute, loadedModule);
   const source = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
@@ -19,6 +19,6 @@ exports.loadSource = function loadSource(filename, mocks = {}, cache = new Map()
     }
     return require(name);
   };
-  new Function('require', 'module', 'exports', source)(requireSource, module, module.exports);
-  return module.exports;
+  new Function('require', 'module', 'exports', source)(requireSource, loadedModule, loadedModule.exports);
+  return loadedModule.exports;
 };
