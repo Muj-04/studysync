@@ -157,7 +157,7 @@ export default function FlashcardsPage() {
   const [creating, setCreating] = useState(false);
   const [activeDeck, setActiveDeck] = useState<FlashcardDeck | null>(null);
   const [streak, setStreak] = useState(0);
-  const load = useCallback(async () => { const [d, docs, s] = await Promise.all([fetchFlashcardDecks(), fetchLibraryDocuments(), getStudyStreak()]); setDecks(d); setDocuments(docs); setStreak(s); setLoading(false); }, []);
+  const load = useCallback(() => Promise.all([fetchFlashcardDecks(), fetchLibraryDocuments(), getStudyStreak()]).then(([d, docs, s]) => { setDecks(d); setDocuments(docs); setStreak(s); setLoading(false); }), []);
   useEffect(() => { load(); }, [load]);
   const shown = useMemo(() => decks.filter((deck) => {
     const matches = deck.name.toLowerCase().includes(query.toLowerCase()) || (deck.docName ?? '').toLowerCase().includes(query.toLowerCase());

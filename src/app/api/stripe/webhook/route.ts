@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const admin = getAdmin();
 
   try {
-    await applyBillingEvent(admin, event);
+    await applyBillingEvent(admin, event, getStripe());
   } catch (err) {
     console.error('[stripe/webhook] handler error:', err);
     return NextResponse.json({ error: 'Handler error' }, { status: 500 });

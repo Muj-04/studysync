@@ -1,4 +1,5 @@
 'use client';
+import { useClientReady } from '@/hooks/useClientReady';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, Crown, Loader2, Search, Sparkles, X, Zap } from 'lucide-react';
@@ -92,26 +93,36 @@ export default function PricingPage() {
   const premiumPrice = useAnimatedPrice(yearly ? 39 : 4.99);
   const proPrice = useAnimatedPrice(yearly ? 109 : 13.99);
 
-  const loadPlan = useCallback(async () => {
+  const loadPlan = useCallback(() => {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setUserPlan(null); return; }
-    const { data } = await supabase.from('profiles').select('plan').eq('id', user.id).maybeSingle();
-    setUserPlan((data?.plan as Plan) ?? 'free');
+    return supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setUserPlan(null); return; }
+      const { data } = await supabase.from('profiles').select('plan').eq('id', user.id).maybeSingle();
+      setUserPlan((data?.plan as Plan) ?? 'free');
+    });
   }, []);
 
-  useEffect(() => { loadPlan(); }, [loadPlan]);
-  useEffect(() => {
+  const clientReady = useClientReady();
+  const [checkoutReturn, setCheckoutReturn] = useState<'success' | 'canceled' | 'none' | null>(null);
+  if (clientReady && checkoutReturn === null) {
     const params = new URLSearchParams(window.location.search);
     if (params.get('success') === 'true') {
+      setCheckoutReturn('success');
       setToast({ type: 'success', message: 'Checkout returned. Your plan will update after payment confirmation.' });
-      window.history.replaceState({}, '', '/pricing');
-      setTimeout(loadPlan, 1500);
     } else if (params.get('canceled') === 'true') {
+      setCheckoutReturn('canceled');
       setToast({ type: 'error', message: 'Checkout canceled. You can try again when ready.' });
-      window.history.replaceState({}, '', '/pricing');
+    } else setCheckoutReturn('none');
+  }
+  useEffect(() => { void loadPlan(); }, [loadPlan]);
+  useEffect(() => {
+    if (checkoutReturn === null || checkoutReturn === 'none') return;
+    window.history.replaceState({}, '', '/pricing');
+    if (checkoutReturn === 'success') {
+      const timer = setTimeout(() => { void loadPlan(); }, 1500);
+      return () => clearTimeout(timer);
     }
-  }, [loadPlan]);
+  }, [checkoutReturn, loadPlan]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 5500);

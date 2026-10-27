@@ -25,14 +25,15 @@ interface NoteItemProps {
   note: VoiceNote;
   isActive: boolean;
   isPlaying: boolean;
-  audio: HTMLAudioElement | null;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  onSeek: (time: number) => void;
   onTogglePlay: (note: VoiceNote) => void;
   onDelete: (id: string) => void;
   onUpdateTitle: (id: string, title: string) => void;
 }
 
 function NoteItem({
-  note, isActive, isPlaying, audio,
+  note, isActive, isPlaying, audioRef, onSeek,
   onTogglePlay, onDelete, onUpdateTitle,
 }: NoteItemProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -43,6 +44,7 @@ function NoteItem({
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
+    const audio = audioRef.current;
     cancelAnimationFrame(rafRef.current);
     if (!isActive || !audio) {
       if (sliderRef.current) sliderRef.current.value = '0';
@@ -57,11 +59,11 @@ function NoteItem({
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [isActive, audio]);
+  }, [isActive, audioRef]);
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const t = parseFloat(e.target.value);
-    if (audio) audio.currentTime = t;
+    onSeek(t);
     if (currentTimeRef.current) currentTimeRef.current.textContent = formatDuration(t);
   };
 
@@ -219,8 +221,8 @@ function NoteItem({
             type="range" min={0} max={note.duration} step={0.01} defaultValue={0}
             onMouseDown={() => { isScrubbing.current = true; }}
             onTouchStart={() => { isScrubbing.current = true; }}
-            onMouseUp={(e) => { isScrubbing.current = false; if (audio) audio.currentTime = parseFloat((e.target as HTMLInputElement).value); }}
-            onTouchEnd={(e) => { isScrubbing.current = false; if (audio) audio.currentTime = parseFloat((e.target as HTMLInputElement).value); }}
+            onMouseUp={(e) => { isScrubbing.current = false; onSeek(parseFloat((e.target as HTMLInputElement).value)); }}
+            onTouchEnd={(e) => { isScrubbing.current = false; onSeek(parseFloat((e.target as HTMLInputElement).value)); }}
             onChange={handleSeek}
             style={{ flex: 1, height: 3, cursor: 'pointer', accentColor: '#ffffff' }}
           />
@@ -245,8 +247,8 @@ interface Props {
   onUpdateTitle: (id: string, title: string) => void;
 }
 
-const VoiceNoteList = forwardRef<VoiceNoteListHandle, Props>(function VoiceNoteList(
-  { notes, pageKey, onDelete, onUpdateTitle }, ref,
+const VoiceNoteListSession = forwardRef<VoiceNoteListHandle, Props>(function VoiceNoteListSession(
+  { notes, onDelete, onUpdateTitle }, ref,
 ) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [playState, setPlayState] = useState<'playing' | 'paused'>('playing');
@@ -264,9 +266,20 @@ const VoiceNoteList = forwardRef<VoiceNoteListHandle, Props>(function VoiceNoteL
     setPlayState('playing');
   }, []);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { destroyAudio(); }, [pageKey]);
-  useEffect(() => () => destroyAudio(), [destroyAudio]);
+  useEffect(() => () => {
+    const audio = audioRef.current;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.src = '';
+      audioRef.current = null;
+    }
+  }, []);
+
+  const handleSeek = useCallback((time: number) => {
+    if (audioRef.current) audioRef.current.currentTime = time;
+  }, []);
 
   const handleTogglePlay = useCallback((note: VoiceNote) => {
     if (playingId === note.id && audioRef.current) {
@@ -313,7 +326,8 @@ const VoiceNoteList = forwardRef<VoiceNoteListHandle, Props>(function VoiceNoteL
           note={note}
           isActive={playingId === note.id}
           isPlaying={playingId === note.id && playState === 'playing'}
-          audio={playingId === note.id ? audioRef.current : null}
+          audioRef={audioRef}
+          onSeek={handleSeek}
           onTogglePlay={handleTogglePlay}
           onDelete={handleDelete}
           onUpdateTitle={onUpdateTitle}
@@ -321,6 +335,10 @@ const VoiceNoteList = forwardRef<VoiceNoteListHandle, Props>(function VoiceNoteL
       ))}
     </div>
   );
+});
+
+const VoiceNoteList = forwardRef<VoiceNoteListHandle, Props>(function VoiceNoteList(props, ref) {
+  return <VoiceNoteListSession key={props.pageKey} {...props} ref={ref} />;
 });
 
 export default VoiceNoteList;

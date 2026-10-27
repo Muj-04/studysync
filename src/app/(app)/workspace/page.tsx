@@ -1,7 +1,8 @@
 'use client';
+import { useRouter } from 'next/navigation';
 import { useTextNotes } from '@/hooks/useTextNotes';
 import { deletePendingDocumentNotes } from '@/lib/documentLocalData';
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
   ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
@@ -72,6 +73,26 @@ import { getPdfBlob } from '@/lib/pdfStore';
 import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
 import { MAX_UNDO_HISTORY, type Tool, type PenType } from '@/lib/drawing';
 
+// Browser preferences need a server snapshot so hydration starts consistently.
+function subscribePreferences(onChange: () => void) {
+  window.addEventListener('storage', onChange);
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  return () => {
+    window.removeEventListener('storage', onChange);
+    observer.disconnect();
+  };
+}
+
+function readDarkTheme() {
+  try { return (storageGet<string>(KEYS.THEME) ?? localStorage.getItem('theme')) !== 'light'; }
+  catch { return true; }
+}
+
+function readDefaultBackground(): 'white' | 'dark' {
+  return storageGet<string>(KEYS.DEFAULT_BG) === 'dark' ? 'dark' : 'white';
+}
+
 // ── Doc order helper ──────────────────────────────────────────────────────────
 
 function applyDocOrder(docs: PDFDocument[], order: string[]): PDFDocument[] {
@@ -101,17 +122,6 @@ function buildVirtualSequence(pdfPageCount: number, blankPages: BlankPage[]): Vi
       .forEach((b) => pages.push({ type: 'blank', blankPage: b }));
   }
   return pages;
-}
-
-// ── Split view icon ───────────────────────────────────────────────────────────
-
-function SplitIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="8" height="18" rx="1.5" />
-      <rect x="13" y="3" width="8" height="18" rx="1.5" />
-    </svg>
-  );
 }
 
 // ── Reusable header icon button ───────────────────────────────────────────────
@@ -881,7 +891,8 @@ function HelpModal({ onClose }: { onClose: () => void }) {
 
 export default function WorkspacePage() {
   useAuthGuard();
-  useSessionGuard({ onKicked: () => { window.location.href = '/login?kicked=1'; } });
+  const router = useRouter();
+  useSessionGuard({ onKicked: () => { router.replace('/login?kicked=1'); } });
   const { t } = useLanguage();
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -913,15 +924,14 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Theme ─────────────────────────────────────────────────────────────────
-  const [isDark, setIsDark] = useState(true);
+  const storedIsDark = useSyncExternalStore(subscribePreferences, readDarkTheme, () => true);
+  const [themeOverride, setIsDark] = useState<boolean | null>(null);
+  const isDark = themeOverride ?? storedIsDark;
 
   useEffect(() => {
-    const stored = storageGet<string>(KEYS.THEME) ?? localStorage.getItem('theme');
-    if (stored === 'light') {
-      setIsDark(false);
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-  }, []);
+    if (isDark) document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', 'light');
+  }, [isDark]);
 
   const toggleTheme = useCallback(() => {
     const html = document.documentElement;
@@ -961,12 +971,9 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Default blank page background ────────────────────────────────────────
-  const [defaultBgTheme, setDefaultBgTheme] = useState<'white' | 'dark'>('white');
-
-  useEffect(() => {
-    const stored = storageGet<'white' | 'dark'>(KEYS.DEFAULT_BG);
-    if (stored === 'white' || stored === 'dark') setDefaultBgTheme(stored);
-  }, []);
+  const storedDefaultBg = useSyncExternalStore<'white' | 'dark'>(subscribePreferences, readDefaultBackground, () => 'white');
+  const [defaultBgOverride, setDefaultBgTheme] = useState<'white' | 'dark' | null>(null);
+  const defaultBgTheme = defaultBgOverride ?? storedDefaultBg;
 
   const handleDefaultBgThemeChange = useCallback((theme: 'white' | 'dark') => {
     setDefaultBgTheme(theme);
@@ -1015,9 +1022,8 @@ export default function WorkspacePage() {
   } = usePDF();
   const {
     notes: voiceNotes,
-    isRecording, recordingDuration, recordingContext,
-    startRecording, stopRecording, deleteNote, deleteNotesForDocument,
-    updateNoteTitle, getNotesForPage,
+    isRecording, recordingContext,
+    startRecording, stopRecording, deleteNote, deleteNotesForDocument, getNotesForPage,
     seedVoiceNotes,
   } = useVoiceNotes({ onStorageLimitReached: () => setLimitModal('voice') });
   const {
@@ -1028,6 +1034,7 @@ export default function WorkspacePage() {
   const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
   const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages } = usePDFPageImages();
   useStudySession(activeDocumentId, userId);
+  const [pageTextNotes, setPageTextNotes, seedTextNotes] = useTextNotes(userId);
 
   // ── Pending reopen file (from Library page "Open" button) ─────────────────
   useEffect(() => {
@@ -1123,23 +1130,23 @@ export default function WorkspacePage() {
 
   // ── Virtual pages ─────────────────────────────────────────────────────────
   const [virtualIndex, setVirtualIndex] = useState(0);
-  const docBlankPages = activeDocument
+  const docBlankPages = useMemo(() => activeDocument
     ? getBlankPagesForDocument(activeDocument.id)
-    : [];
-  const virtualSequence = activeDocument
+    : [], [activeDocument, getBlankPagesForDocument]);
+  const virtualSequence = useMemo(() => activeDocument
     ? buildVirtualSequence(activeDocument.pageCount, docBlankPages)
-    : [];
+    : [], [activeDocument, docBlankPages]);
   const currentVP: VirtualPage | null = virtualSequence[virtualIndex] ?? null;
   const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : null;
 
-  // Restore last page when a document is activated; fall back to 0 for new docs
-  useEffect(() => {
-    if (!activeDocumentId) return;
+  // Adjust before committing a new document so persistence never saves the
+  // previous document's page under the newly active document ID.
+  const [pageDocumentId, setPageDocumentId] = useState(activeDocumentId);
+  if (pageDocumentId !== activeDocumentId) {
     const session = storageGet<{ docId: string; virtualIndex: number }>(KEYS.SESSION);
-    setVirtualIndex(
-      session?.docId === activeDocumentId ? session.virtualIndex : 0
-    );
-  }, [activeDocumentId]);
+    setPageDocumentId(activeDocumentId);
+    setVirtualIndex(session?.docId === activeDocumentId ? session.virtualIndex : 0);
+  }
 
   // Save session (active doc + page) whenever either changes
   useEffect(() => {
@@ -1232,8 +1239,7 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (currentPdfPage !== null) goToPage(currentPdfPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPdfPage]);
+  }, [currentPdfPage, goToPage]);
 
   const goVirtualPrev = useCallback(
     () => setVirtualIndex((i) => Math.max(0, i - 1)),
@@ -1290,25 +1296,28 @@ export default function WorkspacePage() {
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
 
+  const [bookmarkDocumentId, setBookmarkDocumentId] = useState(activeDocumentId);
+  if (bookmarkDocumentId !== activeDocumentId) {
+    setBookmarkDocumentId(activeDocumentId);
+    setBookmarks(activeDocumentId
+      ? storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS)?.[activeDocumentId] ?? []
+      : []);
+  }
+
   useEffect(() => {
-    if (!activeDocumentId) { setBookmarks([]); return; }
-    // Optimistic: localStorage first
-    const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS);
-    const local = stored?.[activeDocumentId] ?? [];
-    setBookmarks(local);
-    // Authoritative: Supabase — merge remote+local; upload any local-only bookmarks
-    if (userId) {
-      fetchBookmarks(activeDocumentId).then((remote) => {
-        const remoteIds = new Set(remote.map((b) => b.id));
-        const localOnly = local.filter((b) => !remoteIds.has(b.id));
-        const merged = [...remote, ...localOnly];
-        setBookmarks(merged);
-        if (localOnly.length > 0) {
-          console.log('[StudySync] uploading', localOnly.length, 'local-only bookmarks');
-          dbSaveBookmarks(activeDocumentId, merged);
-        }
-      });
-    }
+    if (!activeDocumentId || !userId) return;
+    let cancelled = false;
+    fetchBookmarks(activeDocumentId).then((remote) => {
+      if (cancelled) return;
+      // Read after the request: include bookmarks added while it was in flight.
+      const local = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS)?.[activeDocumentId] ?? [];
+      const remoteIds = new Set(remote.map((b) => b.id));
+      const localOnly = local.filter((b) => !remoteIds.has(b.id));
+      const merged = [...remote, ...localOnly];
+      setBookmarks(merged);
+      if (localOnly.length > 0) void dbSaveBookmarks(activeDocumentId, merged).catch(console.error);
+    }).catch(console.error);
+    return () => { cancelled = true; };
   }, [activeDocumentId, userId]);
 
   const persistBookmarks = useCallback((docId: string, marks: Bookmark[]) => {
@@ -1358,9 +1367,6 @@ export default function WorkspacePage() {
     }
   }, [setActiveDocument, handleNavigateToPdfPage]);
 
-  // ── Text notes (persisted per doc+page) ──────────────────────────────────
-  const [pageTextNotes, setPageTextNotes, seedTextNotes] = useTextNotes(userId);
-
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
   const activeSideRef   = useRef<'left' | 'right'>('left');
@@ -1387,24 +1393,20 @@ export default function WorkspacePage() {
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    setIsFullscreen((f) => {
-      if (f) { return false; }
-      setVoiceSheetOpen(false);
-      return true;
-    });
+    setIsFullscreen((current) => !current);
   }, []);
 
   // ── Persistence: text notes ───────────────────────────────────────────────
   // ── Persistence: zoom per document ────────────────────────────────────────
   const activeDocumentIdRef = useRef<string | null>(null);
-  activeDocumentIdRef.current = activeDocumentId;
+  useEffect(() => { activeDocumentIdRef.current = activeDocumentId; }, [activeDocumentId]);
 
-  // Restore zoom when the active document changes
-  useEffect(() => {
-    if (!activeDocumentId) return;
+  const [zoomDocumentId, setZoomDocumentId] = useState(activeDocumentId);
+  if (zoomDocumentId !== activeDocumentId) {
+    setZoomDocumentId(activeDocumentId);
     const stored = storageGet<Record<string, number>>(KEYS.ZOOM);
-    if (stored?.[activeDocumentId]) setLeftZoom(stored[activeDocumentId]);
-  }, [activeDocumentId]);
+    setLeftZoom(activeDocumentId ? clampZoom(stored?.[activeDocumentId] ?? 1) : 1);
+  }
 
   const handleLeftZoomChange = useCallback((z: number) => {
     const clamped = clampZoom(z);
@@ -1456,8 +1458,12 @@ export default function WorkspacePage() {
     [rightDoc, rightDocPage],
   );
 
-  // Reset page when the selected right doc changes
-  useEffect(() => { setRightDocPage(1); }, [rightDocId]);
+  // Reset before rendering a different right document.
+  const [pageRightDocId, setPageRightDocId] = useState(rightDocId);
+  if (pageRightDocId !== rightDocId) {
+    setPageRightDocId(rightDocId);
+    setRightDocPage(1);
+  }
 
   const rightDocDrawing = useMemo(
     () => (rightDoc ? getDrawing(rightDoc.id, rightDocPage) : undefined),
@@ -1492,7 +1498,6 @@ export default function WorkspacePage() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [rightPanelTab, setRightPanelTab]   = useState<'notes' | 'ai' | 'chat'>('ai');
   const [navBarVisible, setNavBarVisible]   = useState(true);
-  const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
   const [viewMode, setViewMode]             = useState<'page' | 'scroll'>(() => {
     if (typeof window === 'undefined') return 'page';
@@ -1569,7 +1574,6 @@ export default function WorkspacePage() {
     };
   }, [isDraggingLeft, isDraggingRight]);
 
-  useEffect(() => { if (isRecording) setVoiceSheetOpen(true); }, [isRecording]);
 
   // Track text selected anywhere on the page for the Translate feature
   useEffect(() => {
@@ -1589,9 +1593,6 @@ export default function WorkspacePage() {
     currentVP?.type === 'blank' ? currentVP.blankPage.id
     : currentVP?.type === 'pdf' ? currentVP.pdfPage
     : 1;
-  const pageNotes = activeDocument
-    ? getNotesForPage(activeDocument.id, pageIdentifier)
-    : [];
   const pageKey = activeDocument ? `${activeDocument.id}:${pageIdentifier}` : '';
 
   // leftNotesKey is the canonical text-note key for the centred/active page.
@@ -1681,10 +1682,10 @@ export default function WorkspacePage() {
     const key = `${activeDocument.id}:${pdfPage}`;
     setPageTextNotes((prev) => ({ ...prev, [key]: notes }));
     lastInteractedPdfPageRef.current = { docId: activeDocument.id, pdfPage };
-  }, [activeDocument]);
+  }, [activeDocument, setPageTextNotes]);
 
   // ── Undo + Clear handlers (pure extraction — see useUndoClear) ───────────
-  const { handleUndo, handleRedo, handleClear } = useUndoClear({
+  const { handleUndo, handleRedo } = useUndoClear({
     showSplit, activeSide, rightSideMode, viewMode, currentVP,
     pdfDrawingRef, blankDrawingRef, rightDocDrawingRef,
     blankUndoStacksRef, blankRedoStacksRef, resolveScrollBlankPageId,
@@ -1820,12 +1821,10 @@ export default function WorkspacePage() {
 
   // ── Remove document (with confirmation) ──────────────────────────────────
   const [confirmRemoveDocId, setConfirmRemoveDocId] = useState<string | null>(null);
-  const [showTour, setShowTour] = useState(false);
-  useEffect(() => {
-    // Browser storage is only available after hydration; keep the first render identical.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setShowTour(shouldShowTour());
-  }, []);
+  const docToRemove = documents.find((d) => d.id === confirmRemoveDocId);
+  const tourAvailable = useSyncExternalStore(subscribePreferences, shouldShowTour, () => false);
+  const [tourDismissed, setTourDismissed] = useState(false);
+  const showTour = tourAvailable && !tourDismissed;
 
   const handleRemoveDocument = useCallback((docId: string) => {
     setConfirmRemoveDocId(docId);
@@ -1884,14 +1883,16 @@ export default function WorkspacePage() {
         console.error('[Delete] Supabase cleanup failed:', err);
       }
     }
-  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast]);
+  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast, setPageTextNotes]);
 
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';
   const isPPTX       = activeDocument?.type === 'pptx';
   const hasDocument  = !!activeDocument;
-  hasDocumentRef.current = hasDocument;
-  isPPTXRef.current      = !!isPPTX;
+  useEffect(() => {
+    hasDocumentRef.current = hasDocument;
+    isPPTXRef.current = !!isPPTX;
+  }, [hasDocument, isPPTX]);
 
   // ── Study room modal ──────────────────────────────────────────────────────
   const [roomModal, setRoomModal] = useState<'idle' | 'creating' | 'done'>('idle');
@@ -1932,7 +1933,7 @@ export default function WorkspacePage() {
   // ── Add image to current PDF page ────────────────────────────────────────
   const handleAddImageToPage = useCallback((dataUrl: string) => {
     pdfDrawingRef.current?.insertImage?.(dataUrl);
-  }, []);
+  }, [pdfDrawingRef]);
 
   // ── Add image as a new blank page ─────────────────────────────────────────
   const handleAddImageAsNewPage = useCallback((dataUrl: string) => {
@@ -1970,12 +1971,12 @@ export default function WorkspacePage() {
     clearAllDrawings(activeDocument.id);
     pdfDrawingRef.current?.clear();
     showToast('All drawings cleared.');
-  }, [activeDocument, clearAllDrawings, showToast]);
+  }, [activeDocument, clearAllDrawings, showToast, pdfDrawingRef]);
 
   // ── Insert image (blank page canvas) ─────────────────────────────────────
   const handleInsertImage = useCallback((dataUrl: string) => {
     blankDrawingRef.current?.insertImage?.(dataUrl);
-  }, []);
+  }, [blankDrawingRef]);
 
   // ── Active-side tool props (routed to the correct side state) ─────────────
   const atTool          = showSplit && activeSide === 'right' ? rightTool          : leftTool;
@@ -1988,12 +1989,14 @@ export default function WorkspacePage() {
   const atSetStrokeSize = showSplit && activeSide === 'right' ? setRightStrokeSize : setLeftStrokeSize;
 
   // Keep keyboard-handler refs in sync
-  showSplitRef.current     = showSplit;
-  activeSideRef.current    = activeSide;
-  rightSideModeRef.current = rightSideMode;
-  currentVPRef.current     = currentVP;
-  leftZoomRef.current      = leftZoom;
-  rightZoomRef.current     = rightZoom;
+  useEffect(() => {
+    showSplitRef.current     = showSplit;
+    activeSideRef.current    = activeSide;
+    rightSideModeRef.current = rightSideMode;
+    currentVPRef.current     = currentVP;
+    leftZoomRef.current      = leftZoom;
+    rightZoomRef.current     = rightZoom;
+  }, [showSplit, activeSide, rightSideMode, currentVP, leftZoom, rightZoom]);
 
   // ── Text notes helpers ────────────────────────────────────────────────────
   // leftNotesKey, rightBlankNotesKey, rightDocNotesKey, handleLeftNotesChange,
@@ -2006,7 +2009,7 @@ export default function WorkspacePage() {
       ...prev,
       [pageKey]: (prev[pageKey] ?? []).filter((n) => n.id !== noteId),
     }));
-  }, []);
+  }, [setPageTextNotes]);
 
   // handleRightBlankNotesChange / handleRightDocNotesChange now come from
   // useSinglePageMode (step 3, declared above near useUndoClear).
@@ -2687,7 +2690,6 @@ export default function WorkspacePage() {
                     // old VoiceNotesSheet recorder is now hidden in workspace).
                     if (isRecording) { stopRecording(); return; }
                     startRecording(activeDocument.id, pageIdentifier);
-                    setVoiceSheetOpen(true);
                   } : undefined}
                   isRecording={isRecording}
                   onUndo={handleUndo}
@@ -2794,7 +2796,6 @@ export default function WorkspacePage() {
                     // so clicking it must actually stop.
                     if (isRecording) { stopRecording(); return; }
                     startRecording(activeDocument.id, pageIdentifier);
-                    setVoiceSheetOpen(true);
                   } : undefined}
                   isRecording={isRecording}
                 />
@@ -2915,9 +2916,7 @@ export default function WorkspacePage() {
       })()}
 
       {/* ══ Remove document confirmation ══ */}
-      {confirmRemoveDocId && (() => {
-        const docToRemove = documents.find((d) => d.id === confirmRemoveDocId);
-        return (
+      {confirmRemoveDocId && (
           <div
             onClick={() => setConfirmRemoveDocId(null)}
             style={{
@@ -2968,8 +2967,7 @@ export default function WorkspacePage() {
               </div>
             </div>
           </div>
-        );
-      })()}
+      )}
 
       {/* ══ Study Room modal ══ */}
       {roomModal !== 'idle' && (
@@ -3074,7 +3072,7 @@ export default function WorkspacePage() {
       )}
 
       {/* ══ Onboarding tour ══ */}
-      {showTour && <OnboardingTour onComplete={() => setShowTour(false)} />}
+      {showTour && <OnboardingTour onComplete={() => setTourDismissed(true)} />}
 
       {/* ══ Toast ══ */}
       {toast && (
