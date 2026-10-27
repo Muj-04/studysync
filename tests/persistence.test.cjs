@@ -268,3 +268,74 @@ test('first annotation save waits for registration and retries after registratio
   assert.equal(rpcCalls, 2);
   assert.equal(registrationCalls, 3);
 });
+
+test('deleting a document drains active writes, cancels queued collections, and allows explicit reopen', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let exists = true;
+  let saves = 0;
+  const client = {
+    auth: { getUser: async () => ({ data: { user: { id: 'owner' } } }) },
+    from(table) {
+      return {
+        upsert: async () => { exists = true; return { error: null }; },
+        select: () => ({ match: async () => ({ data: [], error: null }) }),
+        delete: () => ({ match: async () => { if (table === 'documents') exists = false; return { error: null }; } }),
+      };
+    },
+    rpc: async () => { saves++; if (saves === 1) await gate; return { error: exists ? null : { message: 'missing parent' } }; },
+  };
+  const api = loadSource('src/lib/supabase/db.ts', {
+    './client': { createClient: () => client },
+    '@/lib/documentLocalData': { deleteLocalDocument: async () => {} },
+  });
+  const first = api.saveTextNotes('delete-race', '1', []);
+  await new Promise(setImmediate);
+  const pending = [
+    api.saveTextNotes('delete-race', '1', []),
+    api.saveBookmarks('delete-race', []),
+    api.saveKeyTerms('delete-race', []),
+    api.saveBlankPages('delete-race', []),
+    api.saveFlashcards('delete-race', 1, []),
+  ];
+  const settled = Promise.allSettled([first, ...pending]);
+  const deletion = api.deleteAllDataForDocument('delete-race');
+  await new Promise(setImmediate);
+  release();
+  await Promise.all([settled, deletion]);
+  assert.equal(exists, false, 'queued saves must not resurrect a deleted parent');
+  assert.equal(saves, 1, 'only the already active save may finish');
+  await assert.rejects(api.saveTextNotes('delete-race', '1', []), /deleted|deleting/i);
+  await api.upsertDocument({ id: 'delete-race', name: 'Reopened PDF', type: 'pdf' });
+  await api.saveTextNotes('delete-race', '1', []);
+  assert.equal(exists, true);
+  assert.equal(saves, 2);
+});
+
+test('failed deletion remains blocked until successful explicit registration and does not block another document', async () => {
+  const queue = loadSource('src/lib/persistence/documentQueue.ts');
+  await assert.rejects(queue.enqueueDocumentDeletion('removed', async () => { throw Error('offline'); }), /offline/);
+  await assert.rejects(queue.enqueueDocumentWrite('removed', async () => {}), /deleted/);
+  assert.equal(await queue.enqueueDocumentWrite('other', async () => 'saved'), 'saved');
+  await assert.rejects(queue.enqueueDocumentRegistration('removed', async () => { throw Error('offline'); }), /offline/);
+  await assert.rejects(queue.enqueueDocumentWrite('removed', async () => {}), /deleted/);
+  await queue.enqueueDocumentRegistration('removed', async () => {});
+  assert.equal(await queue.enqueueDocumentWrite('removed', async () => 'saved'), 'saved');
+});
+
+test('registration requested before deletion cannot unblock writes during that deletion', async () => {
+  const queue = loadSource('src/lib/persistence/documentQueue.ts');
+  let finishRegistration;
+  let finishDeletion;
+  const registrationGate = new Promise(resolve => { finishRegistration = resolve; });
+  const deletionGate = new Promise(resolve => { finishDeletion = resolve; });
+  const registration = queue.enqueueDocumentRegistration('doc', () => registrationGate);
+  const deletion = queue.enqueueDocumentDeletion('doc', () => deletionGate);
+  finishRegistration();
+  await registration;
+  const lateWrite = queue.enqueueDocumentWrite('doc', async () => 'resurrected');
+  const result = Promise.allSettled([lateWrite]);
+  finishDeletion();
+  await deletion;
+  assert.equal((await result)[0].status, 'rejected');
+});
