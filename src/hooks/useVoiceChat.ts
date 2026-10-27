@@ -23,19 +23,44 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
   const [voiceError,  setVoiceError]  = useState<string | null>(null);
 
   const lkRoom      = useRef<Room | null>(null);
+  const generation = useRef(0);
+  const joining = useRef(false);
   const mutedRef    = useRef(false);
   const pttRef      = useRef(false);   // push-to-talk active
   const audioEls    = useRef<Map<string, HTMLAudioElement>>(new Map());
 
   useEffect(() => { mutedRef.current = muted; }, [muted]);
 
+  // Invalidate pending async work before disconnecting; late callbacks must not
+  // mutate a newer room or re-enable audio after leaving.
+  const cancelConnection = useCallback(() => {
+    generation.current++;
+    joining.current = false;
+    const room = lkRoom.current;
+    lkRoom.current = null;
+    audioEls.current.forEach((el) => el.remove());
+    audioEls.current.clear();
+    mutedRef.current = false;
+    pttRef.current = false;
+    setConnecting(false);
+    setConnected(false);
+    setMuted(false);
+    setSpeakingIds(new Set());
+    return room;
+  }, []);
+
   const join = useCallback(async () => {
-    if (connected || connecting || !userId) return;
+    if (lkRoom.current || joining.current || !userId) return;
+    joining.current = true;
+    const operation = ++generation.current;
+    const current = () => generation.current === operation;
+    let room: Room | null = null;
     setConnecting(true);
     setVoiceError(null);
 
     try {
       const { data: { session } } = await createClient().auth.getSession();
+      if (!current()) return;
       if (!session) throw new Error('Not logged in');
 
       const res = await fetch('/api/livekit/token', {
@@ -52,15 +77,18 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
       }
       const { token, url } = await res.json() as { token: string; url: string };
 
-      const room = new Room({ adaptiveStream: true, dynacast: true });
+      if (!current()) return;
+      room = new Room({ adaptiveStream: true, dynacast: true });
       lkRoom.current = room;
 
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers: Participant[]) => {
+        if (!current()) return;
         setSpeakingIds(new Set(speakers.map((s) => s.identity)));
       });
 
       // Auto-attach remote audio tracks
       room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (!current()) return;
         if (track.kind !== Track.Kind.Audio) return;
         const el = track.attach() as HTMLAudioElement;
         el.style.display = 'none';
@@ -69,6 +97,7 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
       });
 
       room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (!current()) return;
         if (track.sid) {
           const el = audioEls.current.get(track.sid);
           if (el) { el.remove(); audioEls.current.delete(track.sid); }
@@ -77,6 +106,10 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        if (!current()) return;
+        generation.current++;
+        joining.current = false;
+        setConnecting(false);
         setConnected(false);
         setMuted(false);
         setSpeakingIds(new Set());
@@ -87,30 +120,24 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
       });
 
       await room.connect(url, token);
+      if (!current()) { await room.disconnect(); return; }
       await room.localParticipant.setMicrophoneEnabled(true);
+      if (!current()) { await room.disconnect(); return; }
       setConnected(true);
       setMuted(false);
     } catch (err) {
+      if (!current()) { void room?.disconnect(); return; }
       const msg = err instanceof Error ? err.message : 'Could not join voice chat';
       setVoiceError(msg);
-      lkRoom.current?.disconnect();
-      lkRoom.current = null;
+      void cancelConnection()?.disconnect();
     } finally {
-      setConnecting(false);
+      if (current()) { joining.current = false; setConnecting(false); }
     }
-  }, [roomId, userId, displayName, connected, connecting]);
+  }, [roomId, userId, displayName, cancelConnection]);
 
   const leave = useCallback(async () => {
-    const room = lkRoom.current;
-    audioEls.current.forEach((el) => el.remove());
-    audioEls.current.clear();
-    if (!room) { setConnected(false); return; }
-    await room.disconnect();
-    lkRoom.current = null;
-    setConnected(false);
-    setMuted(false);
-    setSpeakingIds(new Set());
-  }, []);
+    await cancelConnection()?.disconnect();
+  }, [cancelConnection]);
 
   const toggleMute = useCallback(() => {
     if (!lkRoom.current || !connected) return;
@@ -145,24 +172,14 @@ export function useVoiceChat(roomId: string, userId: string, displayName: string
     };
   }, [connected]);
 
-  // Cleanup on unmount
+  // Cleanup also invalidates work when the room or authenticated user changes.
   useEffect(() => () => {
-    audioEls.current.forEach((el) => el.remove());
-    audioEls.current.clear();
-    lkRoom.current?.disconnect();
-    lkRoom.current = null;
-  }, []);
+    void cancelConnection()?.disconnect();
+  }, [roomId, userId, cancelConnection]);
 
-  // Synchronous, fire-and-forget disconnect — for `pagehide` and other
-  // tab-close paths where there is no time to await `leave()`. Initiates
-  // the LiveKit Leave frame so the server sees the disconnect immediately
-  // and notifies other participants.
   const disconnectImmediate = useCallback(() => {
-    audioEls.current.forEach((el) => el.remove());
-    audioEls.current.clear();
-    lkRoom.current?.disconnect();
-    lkRoom.current = null;
-  }, []);
+    void cancelConnection()?.disconnect();
+  }, [cancelConnection]);
 
   return { connected, connecting, muted, speakingIds, voiceError, join, leave, toggleMute, disconnectImmediate };
 }
