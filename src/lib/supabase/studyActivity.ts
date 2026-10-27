@@ -1,10 +1,13 @@
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
+import { createSerialQueue } from '@/lib/persistence/serialQueue';
 import { sb, userId } from './dbShared';
 
 // ── Session State ─────────────────────────────────────────────────────────────
 
-async function saveSessionStateNow(docId: string, virtualIndex: number) {
-  const uid = await userId(); if (!uid) return;
+const enqueueSessionWrite = createSerialQueue();
+let latestSessionRequest = 0;
+
+async function saveSessionStateNow(uid: string, docId: string, virtualIndex: number) {
   await sb().from('session_state').upsert({
     user_id: uid, doc_id: docId, virtual_index: virtualIndex,
     updated_at: new Date().toISOString(),
@@ -115,6 +118,25 @@ export async function getTodayStudySeconds(): Promise<number> {
 
 
 /** Share the document lifetime with collection writes and deletion. */
-export function saveSessionState(...args: Parameters<typeof saveSessionStateNow>): ReturnType<typeof saveSessionStateNow> {
-  return enqueueDocumentWrite(args[0], () => saveSessionStateNow(...args));
+export function saveSessionState(docId: string, virtualIndex: number): Promise<void> {
+  const request = ++latestSessionRequest;
+  // Capture identity before waiting for document writes. Settle auth failures
+  // immediately so even a rejected document enqueue leaves no orphan rejection.
+  const requestedOwner = userId().then(
+    uid => ({ uid, error: undefined }),
+    (error: unknown) => ({ uid: null, error }),
+  );
+  return enqueueDocumentWrite(docId, async () => {
+    const owner = await requestedOwner;
+    if (owner.error) throw owner.error;
+    const uid = owner.uid;
+    if (!uid || request !== latestSessionRequest) return;
+    // Session state is one row per account, so writes for different documents
+    // must also serialize. Skip stale requests delayed by either queue.
+    return enqueueSessionWrite(uid, async () => {
+      const currentUid = await userId();
+      if (currentUid !== uid || request !== latestSessionRequest) return;
+      await saveSessionStateNow(uid, docId, virtualIndex);
+    });
+  });
 }
