@@ -1,4 +1,6 @@
+export { getConversation, markMessagesRead } from './messages';
 import { deleteLocalDocument } from '@/lib/documentLocalData';
+import { enqueueDocumentDeletion, enqueueDocumentRegistration } from '@/lib/persistence/documentQueue';
 export { saveTextNotes, saveBookmarks, saveKeyTerms, saveBlankPages, saveFlashcards } from './annotations';
 import { createClient } from './client';
 import type { VoiceNote, TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
@@ -36,21 +38,28 @@ async function ensureDoc(uid: string, docId: string): Promise<void> {
 
 // Persist metadata by stable document ID, never by a potentially duplicated filename.
 export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }): Promise<string> {
-  const uid = await userId(); if (!uid) return doc.id;
+  return enqueueDocumentRegistration(doc.id, async () => {
+    const uid = await userId(); if (!uid) throw new Error('Sign in to open a document');
 
-  const canonicalId = doc.id;
+    const canonicalId = doc.id;
 
-  const { error } = await sb().from('documents').upsert({
-    id: canonicalId, user_id: uid, name: doc.name, type: doc.type,
-    page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' });
+    const { error } = await sb().from('documents').upsert({
+      id: canonicalId, user_id: uid, name: doc.name, type: doc.type,
+      page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
 
-  if (error) console.error('[DB] upsertDocument error:', error.message, 'canonicalId:', canonicalId);
-  else {
-    console.log('[DB] upsertDocument OK — canonicalId:', canonicalId, 'localId:', doc.id, 'name:', doc.name);
-    registeredDocs.add(canonicalId);
-  }
-  return canonicalId;
+    if (error) throw new Error(`Could not register document: ${error.message}`);
+    else {
+      console.log('[DB] upsertDocument OK — canonicalId:', canonicalId, 'localId:', doc.id, 'name:', doc.name);
+      registeredDocs.add(canonicalId);
+    }
+    return canonicalId;
+  }).catch((error: unknown) => {
+    // Preserve the metadata API's best-effort contract; failed registration
+    // must leave the deletion barrier in place.
+    console.error('[DB] upsertDocument error:', error);
+    return doc.id;
+  });
 }
 
 export async function fetchDocuments(): Promise<Array<{ id: string; name: string; type: string }>> {
@@ -60,7 +69,11 @@ export async function fetchDocuments(): Promise<Array<{ id: string; name: string
 }
 
 export async function deleteDocument(docId: string) {
-  await sb().from('documents').delete().eq('id', docId);
+  return enqueueDocumentDeletion(docId, async () => {
+    const { error } = await sb().from('documents').delete().eq('id', docId);
+    if (error) throw error;
+    registeredDocs.delete(docId);
+  });
 }
 
 export async function deleteAllVoiceNotesForDocument(docId: string): Promise<void> {
@@ -78,25 +91,27 @@ export async function deleteAllVoiceNotesForDocument(docId: string): Promise<voi
 }
 
 export async function deleteAllDataForDocument(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
-  await deleteAllVoiceNotesForDocument(docId);
-  const results = await Promise.all([
-    sb().from('drawings').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('text_notes').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('key_terms').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId }),
-    sb().from('page_image_annotations').delete().match({ user_id: uid, document_id: docId }),
-    // flashcards uses doc_id (not document_id)
-    sb().from('flashcards').delete().match({ user_id: uid, doc_id: docId }),
-    // session_state: one row per user keyed on user_id; delete only if it points to this doc
-    sb().from('session_state').delete().match({ user_id: uid, doc_id: docId }),
-  ]);
-  for (const result of results) if (result.error) throw result.error;
-  const { error } = await sb().from('documents').delete().match({ id: docId, user_id: uid });
-  if (error) throw error;
-  // Remove from in-process cache so a re-add starts fresh
-  registeredDocs.delete(docId);
+  return enqueueDocumentDeletion(docId, async () => {
+    const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
+    await deleteAllVoiceNotesForDocument(docId);
+    const results = await Promise.all([
+      sb().from('drawings').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('text_notes').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('key_terms').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId }),
+      sb().from('page_image_annotations').delete().match({ user_id: uid, document_id: docId }),
+      // flashcards uses doc_id (not document_id)
+      sb().from('flashcards').delete().match({ user_id: uid, doc_id: docId }),
+      // session_state: one row per user keyed on user_id; delete only if it points to this doc
+      sb().from('session_state').delete().match({ user_id: uid, doc_id: docId }),
+    ]);
+    for (const result of results) if (result.error) throw result.error;
+    const { error } = await sb().from('documents').delete().match({ id: docId, user_id: uid });
+    if (error) throw error;
+    // Remove from in-process cache so a re-add starts fresh
+    registeredDocs.delete(docId);
+  });
 }
 
 // ── Library ───────────────────────────────────────────────────────────────────
@@ -1581,32 +1596,6 @@ export async function sendDirectMessage(
   return mapDirectMessage(data as DirectMessageRow);
 }
 
-export async function getConversation(
-  friendId: string,
-  limit:    number = 100,
-): Promise<DirectMessage[]> {
-  const uid = await userId(); if (!uid) return [];
-  // RLS already restricts visibility to rows where caller is sender or
-  // recipient. Filtering on the pair narrows to this specific conversation.
-  const { data, error } = await sb()
-    .from('direct_messages')
-    .select('id, sender_id, recipient_id, content, read, created_at')
-    .or(`and(sender_id.eq.${uid},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${uid})`)
-    .order('created_at', { ascending: true })
-    .limit(limit);
-  if (error) { console.error('[DB] getConversation error:', error.message); return []; }
-  return (data ?? []).map((r) => mapDirectMessage(r as DirectMessageRow));
-}
-
-export async function markMessagesRead(friendId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  // Only flips rows the trigger + UPDATE policy allow: caller is recipient.
-  await sb().from('direct_messages')
-    .update({ read: true })
-    .eq('sender_id', friendId)
-    .eq('recipient_id', uid)
-    .eq('read', false);
-}
 
 // ── Study Rooms — listing ─────────────────────────────────────────────────────
 

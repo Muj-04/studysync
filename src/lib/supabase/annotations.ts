@@ -1,17 +1,18 @@
 import { createClient } from './client';
-import { createSerialQueue } from '@/lib/persistence/serialQueue';
+import { ensureDocument } from './ensureDocument';
+import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 import type { TextNote, Bookmark, KeyTerm, BlankPage } from '@/types';
 
-const enqueue = createSerialQueue();
 type Collection = 'text_notes' | 'bookmarks' | 'key_terms' | 'blank_pages' | 'flashcards';
 
 /** A single RPC transaction replaces a collection; failures never delete old rows. */
 function replace(collection: Collection, docId: string, rows: object[], pageKey: string | null = null) {
   // Queue before authentication so slower auth responses cannot reorder edits.
-  return enqueue(`${collection}:${docId}:${pageKey ?? ''}`, async () => {
+  return enqueueDocumentWrite(docId, async () => {
     const client = createClient();
     const { data: { user }, error: authError } = await client.auth.getUser();
     if (authError || !user) throw new Error('Sign in to sync study data');
+    await ensureDocument(client, user.id, docId);
     const { error } = await client.rpc('replace_study_collection', {
       p_collection: collection, p_document_id: docId, p_page_key: pageKey, p_rows: rows,
     });
