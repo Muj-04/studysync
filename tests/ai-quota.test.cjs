@@ -110,12 +110,12 @@ test('AI route finalizes successful results and attempts refunds for provider fa
       messages = { create: async () => { if (providerFails) throw Error('provider unavailable'); return { content: [{ type: 'text', text: 'answer' }] }; } };
     } },
   });
-  const request = { headers: new Headers({ authorization: 'Bearer test' }), json: async () => ({ action: 'summary', text: 'text' }) };
+  const request = () => new Request('http://localhost/api/ai', { method: 'POST', headers: { authorization: 'Bearer test' }, body: JSON.stringify({ action: 'summary', text: 'text' }) });
   try {
-    assert.equal((await POST(request)).status,200);
+    assert.equal((await POST(request())).status,200);
     assert.deepEqual(operations,['reserve_ai_request_v2','complete_ai_request']);
     operations.length = 0; providerFails = true;
-    assert.equal((await POST(request)).status,500);
+    assert.equal((await POST(request())).status,500);
     assert.deepEqual(operations,['reserve_ai_request_v2','refund_ai_request']);
   } finally {
     if (oldKey === undefined) delete process.env.ANTHROPIC_API_KEY;
