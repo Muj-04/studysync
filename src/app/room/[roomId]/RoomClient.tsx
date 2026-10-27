@@ -1,4 +1,5 @@
 'use client';
+import { enqueueRoomMembership } from '@/lib/roomMembershipQueue';
 import { mergeRoomStroke } from '@/lib/roomStrokes';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -665,16 +666,20 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // ── Init ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    let joined = false;
     async function init() {
       const supabase = createClient();
       // Cache the access token before doing anything else — needed
       // synchronously by the pagehide handler for the keepalive fetch.
       const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled) return;
       accessTokenRef.current = session?.access_token ?? null;
       const { data: { user } } = await supabase.auth.getUser();
+      if (cancelled) return;
       if (!user) { router.replace('/login'); return; }
 
       const profile = await getProfile();
+      if (cancelled) return;
       const name = profile?.username
         ?? (user.user_metadata?.full_name as string | undefined)
         ?? (user.user_metadata?.name as string | undefined)
@@ -694,7 +699,17 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       // First-time invitees are not room members yet, so fetching first can
       // make a valid private room look missing. The SECURITY DEFINER RPC
       // validates the invitation server-side and establishes membership.
-      const joinResult = await joinRoom(roomId);
+      const joinResult = await enqueueRoomMembership(roomId, async () => {
+        if (cancelled) return { error: 'cancelled' };
+        const result = await joinRoom(roomId);
+        if (!result.error) {
+          if (cancelled) { await leaveRoom(roomId); return { error: 'cancelled' }; }
+          joined = true;
+          hasJoinedRef.current = true;
+        }
+        return result;
+      });
+      if (cancelled) return;
       console.log('[Room] joinRoom result', { uid: user.id, roomId, joinResult });
       if (joinResult.error === 'full') {
         setErrorMsg('This room is full.'); setStatus('error'); return;
@@ -719,13 +734,9 @@ export default function RoomClient({ roomId }: { roomId: string }) {
         setErrorMsg('Could not join this room. Please try again.');
         setStatus('error'); return;
       }
-      if (cancelled) {
-        await leaveRoom(roomId);
-        return;
-      }
-      hasJoinedRef.current = true;
 
       const room = await fetchRoom(roomId);
+      if (cancelled) return;
       if (!room) { setErrorMsg(t('room_not_found')); setStatus('error'); return; }
       if (room.status === 'closed') { setErrorMsg(t('room_ended_msg')); setStatus('error'); return; }
       if (room.expiresAt && new Date(room.expiresAt) < new Date()) {
@@ -812,9 +823,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     });
     return () => {
       cancelled = true;
-      if (hasJoinedRef.current) {
+      if (joined) {
+        joined = false;
         hasJoinedRef.current = false;
-        leaveRoom(roomId).catch(() => {});
+        void enqueueRoomMembership(roomId, () => leaveRoom(roomId)).catch(console.error);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

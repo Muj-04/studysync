@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { releaseRealtimeChannel, waitForChannelRelease } from '@/lib/realtimeLifecycle';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { RoomStrokePayload } from '@/lib/supabase/db';
 
@@ -79,12 +80,13 @@ export function useStudyRoom(
   // Presence payloads are controlled by the sender. Resolve identities from
   // RLS-protected room membership instead of trusting websocket metadata.
   const loadAuthorizedMembers = useCallback(async () => {
+    const generation = generationRef.current;
     const client = createClient();
     const { data: memberRows, error: memberError } = await client
       .from('room_members')
       .select('user_id')
       .eq('room_id', roomId);
-    if (memberError || deadRef.current) return;
+    if (memberError || deadRef.current || generation !== generationRef.current) return;
 
     const userIds = [...new Set((memberRows ?? []).map((row) => String(row.user_id)))];
     if (userIds.length === 0) {
@@ -97,7 +99,7 @@ export function useStudyRoom(
       .from('profiles')
       .select('id, username, avatar_url, is_vip')
       .in('id', userIds);
-    if (deadRef.current) return;
+    if (deadRef.current || generation !== generationRef.current) return;
 
     const profileById = new Map((profiles ?? []).map((profile) => [String(profile.id), profile]));
     const authorized = userIds.map((userId) => {
@@ -117,24 +119,26 @@ export function useStudyRoom(
     deadRef.current = false;
     connectedOnceRef.current = false;
     retryRef.current = 0;
-    generationRef.current = 0;
+    generationRef.current += 1;
+    let disposed = false;
 
     function scheduleReconnect() {
-      if (deadRef.current) return;
+      if (disposed || deadRef.current) return;
       if (timerRef.current) clearTimeout(timerRef.current);
       const delay = BACKOFF_MS[Math.min(retryRef.current, BACKOFF_MS.length - 1)];
       retryRef.current += 1;
-      timerRef.current = setTimeout(() => { void connect(); }, delay);
+      timerRef.current = setTimeout(() => { void connect().catch((error: unknown) => { console.error(error); scheduleReconnect(); }); }, delay);
     }
 
     async function connect() {
-      if (deadRef.current) return;
+      if (disposed || deadRef.current) return;
 
       const generation = ++generationRef.current;
 
       if (channelRef.current) {
-        channelRef.current.unsubscribe();
+        const previous = channelRef.current;
         channelRef.current = null;
+        await releaseRealtimeChannel(createClient(), previous);
       }
 
       const channelName = `room:${roomId}`;
@@ -152,6 +156,8 @@ export function useStudyRoom(
       await client.realtime.setAuth(session.access_token);
       if (deadRef.current || generation !== generationRef.current) return;
 
+      await waitForChannelRelease(client, channelName);
+      if (disposed || deadRef.current || generation !== generationRef.current) return;
       const channel = client.channel(channelName, {
         config: { private: true, broadcast: { self: false } },
       });
@@ -272,7 +278,9 @@ export function useStudyRoom(
           if (status === 'SUBSCRIBED') {
             retryRef.current = 0;
             await channel.track({ onlineAt: new Date().toISOString() });
+            if (deadRef.current || generation !== generationRef.current) return;
             await loadAuthorizedMembers();
+            if (deadRef.current || generation !== generationRef.current) return;
             if (connectedOnceRef.current) {
               console.log('[StudyRoom] reconnected — calling onReconnect');
               onReconnectRef.current?.();
@@ -288,13 +296,16 @@ export function useStudyRoom(
       channelRef.current = channel;
     }
 
-    void connect();
+    void connect().catch((error: unknown) => { console.error(error); scheduleReconnect(); });
 
     return () => {
+      disposed = true;
+      generationRef.current += 1;
       deadRef.current = true;
       if (timerRef.current) clearTimeout(timerRef.current);
-      channelRef.current?.unsubscribe();
+      const previous = channelRef.current;
       channelRef.current = null;
+      if (previous) void releaseRealtimeChannel(createClient(), previous).catch(console.error);
     };
   }, [roomId, loadAuthorizedMembers]);
 
@@ -362,7 +373,8 @@ export function useStudyRoom(
     if (timerRef.current) clearTimeout(timerRef.current);
     if (!ch) return;
     ch.untrack().catch(() => {});
-    ch.unsubscribe();
+    generationRef.current += 1;
+    void releaseRealtimeChannel(createClient(), ch).catch(console.error);
     channelRef.current = null;
   }, []);
 
