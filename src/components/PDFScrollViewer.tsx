@@ -183,7 +183,7 @@ function VoiceNoteBadge({
         </button>
       )}
       <button
-        onClick={(e) => { e.stopPropagation(); isRecordingHere ? onRecordStop() : onRecordStart(); }}
+        onClick={(e) => { e.stopPropagation(); if (isRecordingHere) onRecordStop(); else onRecordStart(); }}
         title={isRecordingHere ? 'Stop recording' : 'Record voice note'}
         style={{
           ...pillBase,
@@ -212,7 +212,7 @@ interface PageItemProps {
   isRecordingHere: boolean;
   onRecordStart: () => void;
   onRecordStop: () => void;
-  pageRefsMap: Map<number, HTMLDivElement>;
+  pageRefsMap: React.RefObject<Map<number, HTMLDivElement>>;
   index: number;
   tool: Tool;
   penType: PenType;
@@ -319,8 +319,9 @@ const ScrollPageItem = memo(function ScrollPageItem({
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return;
-    pageRefsMap.set(index, el);
-    return () => { pageRefsMap.delete(index); };
+    const pages = pageRefsMap.current;
+    pages.set(index, el);
+    return () => { pages.delete(index); };
   }, [index, pageRefsMap]);
 
   // Initial lazy-load observer — triggers first render when within 600px
@@ -353,7 +354,6 @@ const ScrollPageItem = memo(function ScrollPageItem({
     obs.observe(el);
     return () => obs.disconnect();
   // vp.type is stable per page; re-running on type change is intentional
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vp.type]);
 
   // PDF render — nearViewport added so pages re-render when returning to window
@@ -1137,7 +1137,7 @@ export default function PDFScrollViewer({
             isRecordingHere={isRecordingHere}
             onRecordStart={() => onRecordStart(document.id, pageId)}
             onRecordStop={onRecordStop}
-            pageRefsMap={pageRefsMap.current}
+            pageRefsMap={pageRefsMap}
             index={idx}
             tool={tool}
             penType={penType}

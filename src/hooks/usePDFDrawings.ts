@@ -1,3 +1,4 @@
+import { useClientReady } from './useClientReady';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
@@ -7,10 +8,15 @@ export function usePDFDrawings() {
   const [drawings, setDrawings] = useState<Record<string, string>>({});
   const userIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  const clientReady = useClientReady();
+  const [restored, setRestored] = useState(false);
+  if (clientReady && !restored) {
+    setRestored(true);
     const stored = storageGet<Record<string, string>>(KEYS.DRAWINGS);
     if (stored && Object.keys(stored).length > 0) setDrawings(stored);
+  }
 
+  useEffect(() => {
     createClient().auth.getUser().then(({ data: { user } }) => {
       userIdRef.current = user?.id ?? null;
     });

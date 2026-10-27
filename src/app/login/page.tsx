@@ -1,4 +1,5 @@
 'use client';
+import { useClientReady } from '@/hooks/useClientReady';
 import { safeReturnPath } from '@/lib/accessPolicy';
 
 import { useEffect, useRef, useState } from 'react';
@@ -72,17 +73,20 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [wasKicked, setWasKicked] = useState(false);
+  const clientReady = useClientReady();
+  const wasKicked = clientReady && new URLSearchParams(window.location.search).get('kicked') === '1';
+  const [restoredEmail, setRestoredEmail] = useState(false);
   const [showConflict, setShowConflict] = useState(false);
   const [conflictLoading, setConflictLoading] = useState(false);
 
+  if (clientReady && !restoredEmail) {
+    setRestoredEmail(true);
+    let savedEmail: string | null = null;
+    try { savedEmail = localStorage.getItem('studysync_login_email'); } catch { /* unavailable storage */ }
+    if (savedEmail) setEmail(savedEmail);
+  }
+
   useEffect(() => {
-    setWasKicked(new URLSearchParams(window.location.search).get('kicked') === '1');
-    const savedEmail = localStorage.getItem('studysync_login_email');
-    if (savedEmail) {
-      setEmail(savedEmail);
-      if (emailRef.current) emailRef.current.value = savedEmail;
-    }
     createClient().auth.getUser().then(({ data: { user } }) => {
       if (user) window.location.replace(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')));
     }).catch(() => {});

@@ -1,6 +1,6 @@
 'use client';
 import { useRecordingLifetime } from './useRecordingLifetime';
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useSyncExternalStore } from 'react';
 import type { VoiceNote } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
@@ -72,9 +72,44 @@ function deserializeNotes(persisted: PersistedNote[]): VoiceNote[] {
   });
 }
 
+// Blob URLs belong to the mounted client store, never to a speculative render.
+// Subscribe restores local notes before any asynchronous account lookup finishes.
+function createVoiceNoteStore() {
+  const initialSnapshot = { notes: [] as VoiceNote[], ready: false };
+  let snapshot = initialSnapshot;
+  const listeners = new Set<() => void>();
+  const emit = () => { listeners.forEach((listener) => listener()); };
+  return {
+    getSnapshot: () => snapshot,
+    getServerSnapshot: () => initialSnapshot,
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      if (!snapshot.ready) {
+        const persisted = storageGet<PersistedNote[]>(KEYS.VOICE_NOTES);
+        let restored: VoiceNote[] = [];
+        if (persisted?.length) {
+          try { restored = deserializeNotes(persisted); } catch { /* corrupted */ }
+        }
+        snapshot = { notes: restored, ready: true };
+        emit();
+      }
+      return () => { listeners.delete(listener); };
+    },
+    setNotes(update: VoiceNote[] | ((previous: VoiceNote[]) => VoiceNote[])) {
+      const notes = typeof update === 'function' ? update(snapshot.notes) : update;
+      if (notes !== snapshot.notes) {
+        snapshot = { ...snapshot, notes };
+        emit();
+      }
+    },
+  };
+}
+
 export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
   const onLimitRef = useRef(opts?.onStorageLimitReached);
-  const [notes, setNotes] = useState<VoiceNote[]>([]);
+  const [store] = useState(createVoiceNoteStore);
+  const { notes, ready } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
+  const setNotes = store.setNotes;
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [recordingContext, setRecordingContext] = useState<{
@@ -85,18 +120,16 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
   const acquireStream = useRecordingLifetime(recordingRef);
   const userIdRef = useRef<string | null>(null);
 
-  // Load from localStorage, then merge Supabase notes on top
+  // Merge Supabase notes into the already-restored local store.
   useEffect(() => {
-    const persisted = storageGet<PersistedNote[]>(KEYS.VOICE_NOTES);
-    if (persisted?.length) {
-      try { setNotes(deserializeNotes(persisted)); } catch { /* corrupted */ }
-    }
-
+    let cancelled = false;
     createClient().auth.getUser().then(({ data: { user } }) => {
+      if (cancelled) return;
       if (!user) { console.warn('[VoiceNotes] getUser returned no user — Supabase fetch skipped'); return; }
       userIdRef.current = user.id;
       console.log('[VoiceNotes] userId resolved:', user.id, '— fetching all voice notes from Supabase');
-      fetchVoiceNotes().then((remote) => {
+      return fetchVoiceNotes().then((remote) => {
+        if (cancelled) return;
         console.log('[VoiceNotes] fetchVoiceNotes returned', remote.length, 'rows');
         remote.forEach((r, i) => {
           console.log(`[VoiceNotes]   [${i}] id:${r.id} doc:${r.documentId} page:${r.pageNumber} audioUrl:${r.audioUrl ? r.audioUrl.slice(0, 80) + '…' : 'NULL'}`);
@@ -119,12 +152,16 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
           return fromSupabase.length > 0 ? [...prev, ...fromSupabase] : prev;
         });
       });
+    }).catch((error: unknown) => {
+      if (!cancelled) console.warn('[VoiceNotes] remote restore failed:', error);
     });
-  }, []);
+    return () => { cancelled = true; };
+  }, [setNotes]);
 
   // Persist notes to localStorage whenever they change
   // Only serialize notes that have real blob data (size > 0)
   useEffect(() => {
+    if (!ready) return;
     const withBlob = notes.filter((n) => n.audioBlob.size > 0);
     if (withBlob.length === 0 && notes.length > 0) {
       // All notes are from Supabase (no local blobs) — preserve existing localStorage
@@ -159,7 +196,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
       }
     });
     return () => { cancelled = true; };
-  }, [notes]);
+  }, [notes, ready]);
 
   const startRecording = useCallback(async (documentId: string, pageNumber: number | string) => {
     console.log('[VoiceNotes] startRecording called — docId:', documentId, 'pageNumber:', pageNumber);
@@ -244,7 +281,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     setIsRecording(true);
     setRecordingDuration(0);
     setRecordingContext({ documentId, pageNumber });
-  }, [acquireStream]);
+  }, [acquireStream, setNotes]);
 
   const stopRecording = useCallback(() => {
     const rec = recordingRef.current;
@@ -269,14 +306,14 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
       }
       return prev.filter((n) => n.id !== id);
     });
-  }, []);
+  }, [setNotes]);
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title: title || undefined } : n)));
     if (userIdRef.current) {
       updateVoiceNoteTitle(id, title || undefined);
     }
-  }, []);
+  }, [setNotes]);
 
   const getNotesForPage = useCallback(
     (documentId: string, pageNumber: number | string): VoiceNote[] =>
@@ -290,7 +327,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
       return prev.filter((n) => n.documentId !== docId);
     });
     if (userIdRef.current) deleteAllVoiceNotesForDocument(docId);
-  }, []);
+  }, [setNotes]);
 
   // Called from syncDoc after canonical docId is resolved. Adds any remote notes
   // not already in local state (idempotent — duplicate IDs are skipped).
@@ -315,7 +352,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
       console.log('[VoiceNotes] seedVoiceNotes — incoming:', remote.length, 'new to add:', incoming.length);
       return incoming.length > 0 ? [...prev, ...incoming] : prev;
     });
-  }, []);
+  }, [setNotes]);
 
   return {
     notes,

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { TextNote, NoteCategory } from '@/types';
 
@@ -366,7 +366,7 @@ export default function TextNotesLayer({
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   const notesRef = useRef(notes);
-  notesRef.current = notes;
+  useLayoutEffect(() => { notesRef.current = notes; }, [notes]);
 
   const dragRef = useRef<{
     noteId: string;
@@ -385,9 +385,11 @@ export default function TextNotesLayer({
   const cancelDrag = useCallback(() => { dragRef.current = null; }, []);
 
   // Clear hover indicator when text tool is deactivated
-  useEffect(() => {
+  const [previousToolActive, setPreviousToolActive] = useState(toolActive);
+  if (previousToolActive !== toolActive) {
+    setPreviousToolActive(toolActive);
     if (!toolActive) setHoverPos(null);
-  }, [toolActive]);
+  }
 
   const handleCreateClick = useCallback((e: React.MouseEvent) => {
     if (!toolActive || !wrapperRef.current) return;

@@ -2,6 +2,7 @@
 exports.createHookHarness = function () {
   const slots = []; let cursor = 0; let pending = []; let effects = []; const cleanups = new Map();
   const react = {
+    useSyncExternalStore(_subscribe, getSnapshot) { return getSnapshot(); },
     useState(initial) {
       const i = cursor++;
       if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial;
