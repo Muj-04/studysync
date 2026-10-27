@@ -370,6 +370,7 @@ export default function WorkspacePage() {
   // effect re-run with the canonical ID before fetching any data.
   useEffect(() => {
     if (!activeDocumentId || !activeDocument || !userId) return;
+    let cancelled = false;
 
     const syncDoc = async () => {
       const canonicalId = await upsertDocument({
@@ -379,6 +380,7 @@ export default function WorkspacePage() {
         pageCount: activeDocument.pageCount,
       });
 
+      if (cancelled) return;
       if (canonicalId !== activeDocumentId) {
         // Another device registered this doc first — adopt its ID everywhere.
         // updateDocumentId updates React state + localStorage docMap; the effect
@@ -396,6 +398,7 @@ export default function WorkspacePage() {
         fetchAllPageImages(canonicalId),
       ]);
 
+      if (cancelled) return;
       console.log('[StudySync] fetchDrawings:', Object.keys(remoteDrawings).length, 'rows');
       console.log('[StudySync] fetchBlankPages:', remoteBlankPages.length, 'rows');
       console.log('[StudySync] fetchTextNotes:', Object.keys(remoteTextNotes).length, 'pages');
@@ -407,9 +410,9 @@ export default function WorkspacePage() {
         prefixedDrawings[`${canonicalId}:${pageKey}`] = data;
       }
       seedDrawings(prefixedDrawings);
-      seedBlankPages(remoteBlankPages);
+      seedBlankPages(remoteBlankPages, canonicalId);
 
-      // Text notes: remote wins for pages not present locally
+      // Text notes: refresh clean pages while the hook preserves unsynced edits.
       const prefixedNotes: Record<string, TextNote[]> = {};
       for (const [subKey, notes] of Object.entries(remoteTextNotes)) {
         prefixedNotes[`${canonicalId}:${subKey}`] = notes;
@@ -443,6 +446,7 @@ export default function WorkspacePage() {
     };
 
     syncDoc().catch(console.error);
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDocumentId, userId]);
 

@@ -88,8 +88,9 @@ export async function fetchDrawings(docId: string): Promise<Record<string, strin
 // ── Blank Pages ───────────────────────────────────────────────────────────────
 
 export async function fetchBlankPages(docId: string): Promise<BlankPage[]> {
-  const uid = await userId(); if (!uid) return [];
-  const { data } = await sb().from('blank_pages').select('*').match({ user_id: uid, document_id: docId });
+  const uid = await userId(); if (!uid) throw new Error('Sign in to load blank pages');
+  const { data, error } = await sb().from('blank_pages').select('*').match({ user_id: uid, document_id: docId });
+  if (error) throw new Error(`Could not load blank pages: ${error.message}`);
   return (data ?? []).map((r) => ({
     id: r.id, documentId: r.document_id, insertAfterPage: r.insert_after_page,
     images: r.images ?? [], canvasData: r.canvas_data, bgTheme: r.bg_theme as 'white' | 'dark', createdAt: r.created_at,
