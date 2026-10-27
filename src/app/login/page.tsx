@@ -6,6 +6,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { AlertCircle, BookOpen, Eye, EyeOff, FileText, Layers, Loader2, Search, Sparkles, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import AuthCaptcha from '@/components/AuthCaptcha';
+import { useAuthCaptcha } from '@/hooks/useAuthCaptcha';
 import {
   checkActiveSession, registerSession, getOrCreateSessionId,
   ensureReferralCode, processReferral,
@@ -58,6 +60,7 @@ function LoginWorkspacePreview() {
 }
 
 export default function LoginPage() {
+  const captcha = useAuthCaptcha();
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
@@ -127,7 +130,9 @@ export default function LoginPage() {
     setError(''); setLoading(true);
     const cleanEmail = rawEmail.trim().replace(/[^\x20-\x7e]/g, '');
     try {
-      const { error: authError } = await createClient().auth.signInWithPassword({ email: cleanEmail, password: rawPassword });
+      const { error: authError } = await captcha.run(captchaToken => createClient().auth.signInWithPassword({
+        email: cleanEmail, password: rawPassword, options: { captchaToken },
+      }));
       if (authError) {
         setError(/invalid login credentials/i.test(authError.message) ? 'Incorrect email or password. Please try again.' : authError.message);
         return;
@@ -143,7 +148,7 @@ export default function LoginPage() {
 
       await processPendingReferral();
       window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
-    } catch { setError('Login failed. Check your connection and try again.'); }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Login failed. Check your connection and try again.'); }
     finally { setLoading(false); }
   };
 
@@ -238,7 +243,8 @@ export default function LoginPage() {
               <Link href="/forgot-password">Forgot password?</Link>
             </div>
 
-            <button className="login-submit" type="submit" disabled={loading || googleLoading}>
+            <AuthCaptcha control={captcha} />
+            <button className="login-submit" type="submit" disabled={loading || googleLoading || !captcha.ready}>
               {loading ? <><Loader2 className="spin" size={16} />Signing in…</> : 'Log In'}
             </button>
           </form>
