@@ -37,3 +37,13 @@ This audit fixes demonstrated issues and improves maintainability; it does not e
 ## Combined local verification
 
 All five branches were merged into an unpublished local integration branch without conflicts. Results: 136/136 tests passed, TypeScript passed, production build passed using public staging configuration, ESLint reported zero errors and 28 warnings, and npm audit reported zero known vulnerabilities. These checks do not replace real provider acceptance or Vercel deployment verification.
+
+## Published pull requests
+
+- [#16 Database services and write ordering](https://github.com/Muj-04/studysync/pull/16)
+- [#17 Workspace controls and ordering](https://github.com/Muj-04/studysync/pull/17)
+- [#18 API boundaries](https://github.com/Muj-04/studysync/pull/18)
+- [#19 Background persistence and Pomodoro](https://github.com/Muj-04/studysync/pull/19)
+- [#20 Settings sections and error recovery](https://github.com/Muj-04/studysync/pull/20)
+
+All target `fix/dev-readiness` and are intentionally unmerged.
