@@ -9,7 +9,7 @@ function setup(config = { siteKey: 'real-site-key', required: true }) {
   const render = () => harness.render(() => useAuthCaptcha(config));
   let captcha = render();
   let resets = 0;
-  captcha.attachWidget({ resetCaptcha() { resets++; } });
+  captcha.attachWidget({ reset() { resets++; } });
   return { render, captcha, resets: () => resets, harness };
 }
 
@@ -50,11 +50,11 @@ test('explicitly required CAPTCHA without a site key fails closed; unconfigured 
   assert.equal(await legacy.captcha.run(async token => token ?? 'legacy'), 'legacy');
 });
 
-test('the public always-pass hCaptcha key cannot enable protection in a production build', async () => {
+test('the public always-pass Turnstile key cannot enable protection in a production build', async () => {
   const previous = process.env.NODE_ENV;
   process.env.NODE_ENV = 'production';
   try {
-    const s = setup({ siteKey: '10000000-ffff-ffff-ffff-000000000001', required: true });
+    const s = setup({ siteKey: '1x00000000000000000000AA', required: true });
     assert.equal(s.captcha.ready, false);
     await assert.rejects(s.captcha.run(async () => assert.fail('test key bypass')), /unavailable/i);
   } finally {

@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import type HCaptcha from '@hcaptcha/react-hcaptcha';
+import type { TurnstileInstance } from '@marsidev/react-turnstile';
 
 const defaultConfig = {
-  siteKey: process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY?.trim() ?? '',
+  siteKey: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? '',
   required: process.env.NEXT_PUBLIC_AUTH_CAPTCHA_REQUIRED === 'true',
 };
 const unavailable = 'Security verification is temporarily unavailable. Please refresh the page and try again.';
@@ -14,14 +14,14 @@ const unavailable = 'Security verification is temporarily unavailable. Please re
 export function useAuthCaptcha(config = defaultConfig) {
   const enabled = config.required || Boolean(config.siteKey);
   const misconfigured = enabled && (!config.siteKey || (
-    process.env.NODE_ENV === 'production' && config.siteKey === '10000000-ffff-ffff-ffff-000000000001'
+    process.env.NODE_ENV === 'production' && /^[123]x0{20}(AA|BB|FF)$/.test(config.siteKey)
   ));
-  const widgetRef = useRef<HCaptcha | null>(null);
+  const widgetRef = useRef<TurnstileInstance | null>(null);
   const tokenRef = useRef<string | undefined>(undefined);
   const busy = useRef(false);
   const [verified, setVerified] = useState(false);
   const [problem, setProblem] = useState('');
-  const attachWidget = useCallback((widget: HCaptcha | null) => { widgetRef.current = widget; }, []);
+  const attachWidget = useCallback((widget: TurnstileInstance | null) => { widgetRef.current = widget; }, []);
 
   const clear = useCallback(() => {
     tokenRef.current = undefined;
@@ -48,7 +48,7 @@ export function useAuthCaptcha(config = defaultConfig) {
     } finally {
       busy.current = false;
       if (enabled) {
-        try { widgetRef.current?.resetCaptcha(); }
+        try { widgetRef.current?.reset(); }
         catch { setProblem(unavailable); }
       }
     }

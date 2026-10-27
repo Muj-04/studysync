@@ -24,9 +24,9 @@ function mount(t, scenario, request) {
   const harness = createHookHarness();
   const previousWindow = global.window;
   const previousStorage = global.localStorage;
-  const envNames = ['NEXT_PUBLIC_HCAPTCHA_SITE_KEY', 'NEXT_PUBLIC_AUTH_CAPTCHA_REQUIRED'];
+  const envNames = ['NEXT_PUBLIC_TURNSTILE_SITE_KEY', 'NEXT_PUBLIC_AUTH_CAPTCHA_REQUIRED'];
   const previousEnv = envNames.map(name => process.env[name]);
-  process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY = 'synthetic-site-key';
+  process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = 'synthetic-site-key';
   delete process.env.NEXT_PUBLIC_AUTH_CAPTCHA_REQUIRED;
   global.window = {
     location: { search: '', origin: 'https://study.example', replace() {} },
