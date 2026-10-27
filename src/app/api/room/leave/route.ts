@@ -1,3 +1,4 @@
+import { apiErrorResponse, bearerToken, readJsonObject, isUuid } from '@/lib/api/request';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
@@ -18,17 +19,21 @@ export const runtime = 'nodejs';
  * comes from the verified session, never from the request body.
  */
 export async function POST(req: NextRequest) {
-  let roomId: string | undefined;
+  try { return await handlePost(req); } catch (error) { return apiErrorResponse(error); }
+}
+
+async function handlePost(req: NextRequest) {
+  let roomId: unknown;
   try {
-    const body = await req.json() as { roomId?: string };
+    const body = await readJsonObject(req);
     roomId = body.roomId;
-  } catch {
-    return NextResponse.json({ error: 'invalid body' }, { status: 400 });
+  } catch (error) {
+    return apiErrorResponse(error);
   }
   if (!roomId) {
     return NextResponse.json({ error: 'missing roomId' }, { status: 400 });
   }
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(roomId)) {
+  if (!isUuid(roomId)) {
     return NextResponse.json({ error: 'invalid roomId' }, { status: 400 });
   }
 
@@ -43,7 +48,7 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  const bearer = bearerToken(req);
   let userId: string | null = null;
   if (bearer) {
     const { data: { user } } = await admin.auth.getUser(bearer);

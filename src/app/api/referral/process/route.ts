@@ -1,3 +1,4 @@
+import { apiErrorResponse, bearerToken, readJsonObject } from '@/lib/api/request';
 import { isIP } from 'node:net';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -8,7 +9,7 @@ export const runtime = 'nodejs';
 
 // Authenticate the caller before the service-only reward transaction.
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-  const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  const bearer = bearerToken(req);
   if (bearer) {
     const anon = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,17 +29,21 @@ async function resolveUserId(req: NextRequest): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
+  try { return await handlePost(req); } catch (error) { return apiErrorResponse(error); }
+}
+
+async function handlePost(req: NextRequest) {
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
-  let referralCode: string | undefined;
+  let referralCode: unknown;
   try {
-    const body = await req.json() as { referralCode?: string };
+    const body = await readJsonObject(req);
     referralCode = body.referralCode;
-  } catch {
-    return NextResponse.json({ error: 'invalid body' }, { status: 400 });
+  } catch (error) {
+    return apiErrorResponse(error);
   }
   if (typeof referralCode !== 'string' || !referralCode.trim() || referralCode.length > 128) {
     return NextResponse.json({ error: 'missing referralCode' }, { status: 400 });
