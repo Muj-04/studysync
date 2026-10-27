@@ -30,7 +30,7 @@ device, and cross-account ID rejection. Production dependency audit reports zero
 
 ## Review still pending
 
-The supplied review summary mentions inconsistent session exemptions in PR #4 but
-omits its exact scenario and file references. That finding is not claimed resolved here;
-request the full finding. PR #4 remains draft, with its existing Stripe staging gates.
+The reviewer retracted the session-exemption finding on October 7: free and VIP
+accounts bypass both login conflict enforcement and the runtime guard. No session
+change is required. PR #4 remains draft for the existing Stripe staging gates.
 All previously documented staging/RLS checks still apply. Nothing was merged or migrated.

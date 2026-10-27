@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Send } from 'lucide-react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import { releaseRealtimeChannel } from '@/lib/realtimeLifecycle';
 import {
   sendDirectMessage,
   markMessagesRead,
@@ -49,6 +50,17 @@ export default function ChatConversationView({
   const [text,     setText]     = useState('');
   const [sending,  setSending]  = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const onReadRef = useRef(onConversationRead);
+  const conversationGeneration = useRef(0);
+  useEffect(() => { onReadRef.current = onConversationRead; }, [onConversationRead]);
+  useEffect(() => {
+    conversationGeneration.current += 1;
+    // A different external conversation owns a fresh composer and pending-send state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setText('');
+    setSending(false);
+    return () => { conversationGeneration.current += 1; };
+  }, [friendId, myUserId]);
 
   // Tell useNotifications (via shared module ref) that THIS friend's chat
   // is currently active. Lets it suppress the bell-badge bump for new
@@ -76,8 +88,11 @@ export default function ChatConversationView({
   // where we're the recipient (or sender).
   useEffect(() => {
     const supabase = createClient();
+    // Separate views may show the same friend at once; each owns its subscription.
+    const topic = `direct_messages:${myUserId}:${friendId}:${crypto.randomUUID()}`;
+    let disposed = false;
     const channel: RealtimeChannel = supabase
-      .channel(`direct_messages:${myUserId}:${friendId}`)
+      .channel(topic)
       .on(
         'postgres_changes',
         {
@@ -89,6 +104,7 @@ export default function ChatConversationView({
           filter: `sender_id=eq.${friendId}`,
         },
         (payload) => {
+          if (disposed) return;
           const r = payload.new as {
             id: string; sender_id: string; recipient_id: string;
             content: string; read: boolean; created_at: string;
@@ -102,19 +118,26 @@ export default function ChatConversationView({
             }];
           });
           // Mark this fresh message as read since the view is open.
-          void markMessagesRead(friendId, [r.id]).then(() => onConversationRead?.(friendId)).catch(console.error);
+          void markMessagesRead(friendId, [r.id]).then(() => {
+            if (!disposed) onReadRef.current?.(friendId);
+          }).catch(console.error);
         },
       )
       .subscribe();
-    return () => { channel.unsubscribe(); };
-  }, [friendId, myUserId, onConversationRead]);
+    return () => {
+      disposed = true;
+      void releaseRealtimeChannel(supabase, channel).catch(console.error);
+    };
+  }, [friendId, myUserId, setMessages]);
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
+    const generation = conversationGeneration.current;
     setSending(true);
     setText('');
     const saved = await sendDirectMessage(friendId, trimmed);
+    if (generation !== conversationGeneration.current) return;
     if (saved) {
       setMessages((prev) => prev.some((m) => m.id === saved.id) ? prev : [...prev, saved]);
     } else {
@@ -122,7 +145,7 @@ export default function ChatConversationView({
       setText(trimmed);
     }
     setSending(false);
-  }, [text, sending, friendId]);
+  }, [text, sending, friendId, setMessages]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

@@ -1,10 +1,11 @@
-import { reserveAiRequest, refundAiRequest } from '@/lib/aiQuota';
+import { reserveAiRequest, refundAiRequest, completeAiRequest } from '@/lib/aiQuota';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { PLAN_LIMITS, PLAN_LABELS, nextUpgradePlan, effectivePlanLimits, type Plan } from '@/lib/planLimits';
 
 export const runtime = 'nodejs';
+export const maxDuration = 120;
 
 // ── In-memory rate limiter (30 req/min per IP) ────────────────────────────────
 const WINDOW_MS  = 60_000;
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
   let reservation: string | null = null;
 
   // Process the AI request
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000, maxRetries: 0 });
   try {
     const { action, text, language, message: chatMessage } = await req.json();
 
@@ -158,8 +159,8 @@ export async function POST(req: NextRequest) {
 
     const result = (message.content[0] as { type: string; text: string }).text ?? '';
 
-    // Increment counter for all non-VIP plans (fire-and-forget — don't block response)
-
+    // Commit quota before returning a successful response.
+    await completeAiRequest(admin, reservation);
 
     return NextResponse.json({ result });
   } catch (err) {

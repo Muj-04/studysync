@@ -13,6 +13,8 @@ import {
   UserRound,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import AuthCaptcha from '@/components/AuthCaptcha';
+import { useAuthCaptcha } from '@/hooks/useAuthCaptcha';
 import {
   PROFILE_HANDLE_MAX_LENGTH,
   normalizeProfileHandle,
@@ -61,6 +63,7 @@ function OAuthButtons() {
 }
 
 export default function RegisterPage() {
+  const captcha = useAuthCaptcha();
   const [username, setUsername] = useState('');
   const [handle, setHandle] = useState('');
   const [handleStatus, setHandleStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'error'>('idle');
@@ -112,6 +115,7 @@ export default function RegisterPage() {
   ]);
 
   const handleRegister = async () => {
+    if (loading) return;
     const displayName = username.trim();
     const normalizedHandle = normalizeProfileHandle(handle);
     if (!displayName || !normalizedHandle || !email || !password) { setError('Please fill in all fields.'); return; }
@@ -126,64 +130,68 @@ export default function RegisterPage() {
     }
     setError('');
     setLoading(true);
-    const supabase = createClient();
-    const { data: handleAvailable, error: availabilityError } = await supabase
-      .rpc('is_handle_available', { p_handle: normalizedHandle });
-    if (availabilityError) {
-      setLoading(false);
-      setError('Could not verify this handle. Please try again.');
-      return;
-    }
-    if (handleAvailable !== true) {
-      setLoading(false);
-      setHandleStatus('taken');
-      setError('This handle is already taken.');
-      return;
-    }
-    const { data, error: err } = await supabase.auth.signUp({
-      email: email.trim().toLowerCase(),
-      password,
-      options: {
-        data: { username: displayName, handle: normalizedHandle },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    setLoading(false);
-    if (err) {
-      const { data: stillAvailable } = await supabase
+    try {
+      const supabase = createClient();
+      const { data: handleAvailable, error: availabilityError } = await supabase
         .rpc('is_handle_available', { p_handle: normalizedHandle });
-      if (stillAvailable === false) {
-        setHandleStatus('taken');
-        setError('This handle was just taken. Please choose another.');
-      } else {
-        setError(err.message);
+      if (availabilityError) {
+          setError('Could not verify this handle. Please try again.');
+        return;
       }
-      return;
-    }
+      if (handleAvailable !== true) {
+          setHandleStatus('taken');
+        setError('This handle is already taken.');
+        return;
+      }
+      const { data, error: err } = await captcha.run(captchaToken => supabase.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password,
+        options: {
+          captchaToken,
+          data: { username: displayName, handle: normalizedHandle },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      }));
+      if (err) {
+        const { data: stillAvailable } = await supabase
+          .rpc('is_handle_available', { p_handle: normalizedHandle });
+        if (stillAvailable === false) {
+          setHandleStatus('taken');
+          setError('This handle was just taken. Please choose another.');
+        } else {
+          setError(err.message);
+        }
+        return;
+      }
 
-    // Supabase Auth, with email-confirm enabled, returns error=null even
-    // when the email is already in use — an intentional anti-enumeration
-    // behavior. The discriminator is data.user.identities:
-    //   * length === 0  → email belongs to a CONFIRMED user; the returned
-    //                     user object is a placeholder, no row is created,
-    //                     no email is sent. We must surface this clearly
-    //                     so the visitor doesn't think they own a new
-    //                     account (and isn't lured into checking an inbox
-    //                     they don't control).
-    //   * length  >= 1  → genuine new signup OR an existing UNCONFIRMED
-    //                     user (Supabase re-sent the confirmation email).
-    //                     Both cases legitimately need "check your email";
-    //                     the only side effect for the unconfirmed-existing
-    //                     case is a confirmation re-send, which is the
-    //                     desired UX (user lost the previous email).
-    const identities = data?.user?.identities;
-    if (identities && identities.length === 0) {
-      setError(
-        'An account with this email already exists. Try logging in, or use Forgot password to reset it.',
-      );
-      return;
+      // Supabase Auth, with email-confirm enabled, returns error=null even
+      // when the email is already in use — an intentional anti-enumeration
+      // behavior. The discriminator is data.user.identities:
+      //   * length === 0  → email belongs to a CONFIRMED user; the returned
+      //                     user object is a placeholder, no row is created,
+      //                     no email is sent. We must surface this clearly
+      //                     so the visitor doesn't think they own a new
+      //                     account (and isn't lured into checking an inbox
+      //                     they don't control).
+      //   * length  >= 1  → genuine new signup OR an existing UNCONFIRMED
+      //                     user (Supabase re-sent the confirmation email).
+      //                     Both cases legitimately need "check your email";
+      //                     the only side effect for the unconfirmed-existing
+      //                     case is a confirmation re-send, which is the
+      //                     desired UX (user lost the previous email).
+      const identities = data?.user?.identities;
+      if (identities && identities.length === 0) {
+        setError(
+          'An account with this email already exists. Try logging in, or use Forgot password to reset it.',
+        );
+        return;
+      }
+      setMessage('Account created! Check your email to confirm, then log in.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create your account. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setMessage('Account created! Check your email to confirm, then log in.');
   };
 
   return (
@@ -321,10 +329,11 @@ export default function RegisterPage() {
             </div>
           </div>
 
+          <AuthCaptcha control={captcha} />
           <button
             type="button"
             onClick={handleRegister}
-            disabled={loading || !!message}
+            disabled={loading || !!message || !captcha.ready}
             className={styles.submitButton}
           >
             {loading ? 'Creating account…' : 'Create Account'}

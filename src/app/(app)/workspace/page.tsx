@@ -1,5 +1,6 @@
 'use client';
 import { useTextNotes } from '@/hooks/useTextNotes';
+import { deletePendingDocumentNotes } from '@/lib/documentLocalData';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
@@ -1198,7 +1199,7 @@ export default function WorkspacePage() {
         prefixedNotes[`${canonicalId}:${subKey}`] = notes;
       }
       if (Object.keys(prefixedNotes).length > 0) {
-        setPageTextNotes((prev) => ({ ...prefixedNotes, ...prev }));
+        seedTextNotes(prefixedNotes);
       }
 
       // Upload local-only text note pages that Supabase doesn't have yet
@@ -1358,7 +1359,7 @@ export default function WorkspacePage() {
   }, [setActiveDocument, handleNavigateToPdfPage]);
 
   // ── Text notes (persisted per doc+page) ──────────────────────────────────
-  const [pageTextNotes, setPageTextNotes] = useTextNotes(userId);
+  const [pageTextNotes, setPageTextNotes, seedTextNotes] = useTextNotes(userId);
 
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
@@ -1819,9 +1820,12 @@ export default function WorkspacePage() {
 
   // ── Remove document (with confirmation) ──────────────────────────────────
   const [confirmRemoveDocId, setConfirmRemoveDocId] = useState<string | null>(null);
-  const [showTour, setShowTour] = useState(() =>
-    typeof window !== 'undefined' ? shouldShowTour() : false
-  );
+  const [showTour, setShowTour] = useState(false);
+  useEffect(() => {
+    // Browser storage is only available after hydration; keep the first render identical.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowTour(shouldShowTour());
+  }, []);
 
   const handleRemoveDocument = useCallback((docId: string) => {
     setConfirmRemoveDocId(docId);
@@ -1836,6 +1840,7 @@ export default function WorkspacePage() {
 
     const textNotes = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES) ?? {};
     storageSet(KEYS.TEXT_NOTES, Object.fromEntries(Object.entries(textNotes).filter(([k]) => !k.startsWith(`${docId}:`))));
+    deletePendingDocumentNotes(docId);
 
     const storedBMs = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     delete storedBMs[docId];
