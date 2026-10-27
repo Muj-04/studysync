@@ -1,0 +1,56 @@
+{
+  "project": "xokiiepdpjvqnpzwmbtb",
+  "purpose": "Read-only migration history snapshot; not a production deployment manifest",
+  "captured_date": "2026-10-26",
+  "migrations": [
+    {
+      "version": "20261007120000",
+      "name": "free_launch_ai",
+      "statements": [
+        "-- Daily user allowance and conservative global provider-attempt ceiling.\r\n-- The old month text key also accepts YYYY-MM-DD; monthly history is retained.\r\nCREATE TABLE public.ai_daily_budget (\r\n  day date PRIMARY KEY,\r\n  attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0)\r\n)",
+        "ALTER TABLE public.ai_daily_budget ENABLE ROW LEVEL SECURITY",
+        "REVOKE ALL ON public.ai_daily_budget FROM PUBLIC, anon, authenticated",
+        "GRANT ALL ON public.ai_daily_budget TO service_role",
+        "CREATE FUNCTION public.reserve_free_ai_request(p_user_id uuid)\r\nRETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\r\nDECLARE\r\n  v_day date := (now() AT TIME ZONE 'UTC')::date;\r\n  v_attempts integer;\r\n  v_id uuid;\r\nBEGIN\r\n  INSERT INTO public.ai_daily_budget(day) VALUES(v_day) ON CONFLICT DO NOTHING;\r\n  SELECT attempts INTO v_attempts FROM public.ai_daily_budget WHERE day=v_day FOR UPDATE;\r\n  IF v_attempts >= 100 THEN RETURN NULL; END IF;\r\n  v_id := public.reserve_ai_request_v2(p_user_id, to_char(v_day,'YYYY-MM-DD'), 3);\r\n  IF v_id IS NULL THEN RETURN NULL; END IF;\r\n  UPDATE public.ai_daily_budget SET attempts=attempts+1 WHERE day=v_day;\r\n  RETURN v_id;\r\nEND;\r\n$$",
+        "REVOKE ALL ON FUNCTION public.reserve_free_ai_request(uuid) FROM PUBLIC,anon,authenticated",
+        "GRANT EXECUTE ON FUNCTION public.reserve_free_ai_request(uuid) TO service_role",
+        "-- Global attempts deliberately never refund: failures may already cost provider money.\r\n-- Per-user refunds and five-minute crash recovery retain their existing behavior."
+      ]
+    },
+    {
+      "version": "20261007121000",
+      "name": "free_launch_rooms",
+      "statements": [
+        "CREATE OR REPLACE FUNCTION public.join_room_atomic(p_room_id uuid)\r\nRETURNS text\r\nLANGUAGE plpgsql\r\nSECURITY DEFINER\r\nSET search_path = ''\r\nAS $$\r\nDECLARE\r\n  v_uid uuid := auth.uid();\r\n  v_max int;\r\n  v_status text;\r\n  v_host uuid;\r\n  v_expires_at timestamptz;\r\n  v_count int;\r\nBEGIN\r\n  IF v_uid IS NULL THEN RETURN 'unauthenticated'; END IF;\r\n\r\n  SELECT max_members, status, host_user_id, expires_at\r\n    INTO v_max, v_status, v_host, v_expires_at\r\n    FROM public.study_rooms\r\n   WHERE id = p_room_id\r\n   FOR UPDATE;\r\n  IF NOT FOUND THEN RETURN 'not_found'; END IF;\r\n  IF v_status <> 'active' THEN RETURN 'closed'; END IF;\r\n  IF v_expires_at IS NOT NULL AND v_expires_at <= now() THEN RETURN 'expired'; END IF;\r\n\r\n  IF EXISTS (\r\n    SELECT 1 FROM public.room_members\r\n     WHERE room_id = p_room_id AND user_id = v_uid\r\n  ) THEN\r\n    RETURN 'rejoined';\r\n  END IF;\r\n\r\n  IF v_uid <> v_host AND NOT EXISTS (\r\n    SELECT 1 FROM public.room_invitations ri\r\n     WHERE ri.room_id = p_room_id\r\n       AND ri.invitee_id = v_uid\r\n       AND ri.status IN ('pending', 'accepted')\r\n       AND ri.expires_at > now()\r\n  ) THEN\r\n    RETURN 'not_invited';\r\n  END IF;\r\n\r\n  SELECT count(*) INTO v_count\r\n    FROM public.room_members\r\n   WHERE room_id = p_room_id;\r\n  IF v_count >= LEAST(COALESCE(v_max, 5), 5) THEN RETURN 'full'; END IF;\r\n\r\n  INSERT INTO public.room_members (room_id, user_id)\r\n  VALUES (p_room_id, v_uid)\r\n  ON CONFLICT (room_id, user_id) DO NOTHING;\r\n\r\n  UPDATE public.room_invitations\r\n     SET status = 'accepted', accepted_at = COALESCE(accepted_at, now())\r\n   WHERE room_id = p_room_id AND invitee_id = v_uid;\r\n\r\n  RETURN 'joined';\r\nEND;\r\n$$",
+        "REVOKE ALL ON FUNCTION public.join_room_atomic(uuid) FROM PUBLIC",
+        "GRANT EXECUTE ON FUNCTION public.join_room_atomic(uuid) TO authenticated",
+        "-- Membership creation must go through the locked invitation/capacity RPC.\r\nREVOKE INSERT, UPDATE ON public.room_members FROM anon, authenticated",
+        "CREATE FUNCTION public.enforce_free_room_limits()\r\nRETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$\r\nBEGIN\r\n  IF TG_OP = 'UPDATE' AND NEW.host_user_id IS DISTINCT FROM OLD.host_user_id THEN\r\n    RAISE EXCEPTION 'Room ownership cannot be changed';\r\n  END IF;\r\n  IF NEW.status = 'active' THEN\r\n    PERFORM 1 FROM public.profiles WHERE id=NEW.host_user_id FOR UPDATE;\r\n    IF EXISTS (SELECT 1 FROM public.study_rooms WHERE host_user_id=NEW.host_user_id\r\n      AND id<>NEW.id AND status='active' AND (expires_at IS NULL OR expires_at>now())) THEN\r\n      RAISE EXCEPTION 'Close your existing room before creating another';\r\n    END IF;\r\n    NEW.max_members := LEAST(GREATEST(COALESCE(NEW.max_members,5),2),5);\r\n    NEW.expires_at := LEAST(COALESCE(NEW.expires_at,now()+interval '6 hours'),now()+interval '6 hours');\r\n  END IF;\r\n  RETURN NEW;\r\nEND;\r\n$$",
+        "REVOKE ALL ON FUNCTION public.enforce_free_room_limits() FROM PUBLIC,anon,authenticated",
+        "CREATE TRIGGER free_room_limits BEFORE INSERT OR UPDATE ON public.study_rooms\r\nFOR EACH ROW EXECUTE FUNCTION public.enforce_free_room_limits()"
+      ]
+    },
+    {
+      "version": "20261007122000",
+      "name": "free_launch_storage",
+      "statements": [
+        "-- Supabase Storage remains authoritative for object metadata and upload ownership.\r\nUPDATE storage.buckets SET file_size_limit=10485760 WHERE id='voice-notes'",
+        "UPDATE storage.buckets SET file_size_limit=20971520 WHERE id='pdfs'",
+        "CREATE FUNCTION public.launch_upload_fits(p_user uuid,p_bucket text,p_name text,p_metadata jsonb)\r\nRETURNS boolean LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public, pg_temp AS $$\r\nDECLARE\r\n  v_uid uuid := p_user;\r\n  v_used bigint;\r\n  v_size bigint;\r\n  v_max bigint;\r\n  v_cap bigint;\r\nBEGIN\r\n  IF v_uid IS NULL THEN RETURN false; END IF;\r\n  CASE p_bucket\r\n    WHEN 'voice-notes' THEN v_max:=10485760; v_cap:=31457280;\r\n    WHEN 'pdfs' THEN v_max:=20971520; v_cap:=104857600;\r\n    WHEN 'office-files' THEN v_max:=52428800; v_cap:=104857600;\r\n    WHEN 'avatars' THEN v_max:=5242880; v_cap:=10485760;\r\n    ELSE RETURN false;\r\n  END CASE;\r\n  -- Serialize concurrent admissions for the same account. Missing size reserves a full file.\r\n  PERFORM 1 FROM public.profiles WHERE id=v_uid FOR UPDATE;\r\n  IF NOT FOUND THEN RETURN false; END IF;\r\n  v_size:=COALESCE((p_metadata->>'size')::bigint,v_max);\r\n  IF v_size<0 OR v_size>v_max THEN RETURN false; END IF;\r\n  IF p_bucket='voice-notes' AND split_part(p_name,'/',1)='rooms' THEN\r\n    IF NOT EXISTS(SELECT 1 FROM public.room_members rm JOIN public.study_rooms r ON r.id=rm.room_id\r\n      WHERE rm.user_id=v_uid AND rm.room_id::text=split_part(p_name,'/',2)\r\n      AND r.status='active' AND r.expires_at>now()) THEN RETURN false; END IF;\r\n  ELSIF split_part(p_name,'/',1)<>v_uid::text THEN RETURN false;\r\n  END IF;\r\n  -- An upsert cannot take another uploader's room recording.\r\n  IF EXISTS(SELECT 1 FROM storage.objects WHERE bucket_id=p_bucket AND name=p_name\r\n    AND COALESCE(owner_id,'')<>v_uid::text) THEN RETURN false; END IF;\r\n  SELECT COALESCE(sum(COALESCE((metadata->>'size')::bigint,v_max)),0) INTO v_used\r\n    FROM storage.objects WHERE bucket_id=p_bucket AND name<>p_name\r\n    AND (owner_id=v_uid::text OR split_part(name,'/',1)=v_uid::text);\r\n  RETURN v_used+v_size<=v_cap;\r\nEND;\r\n$$",
+        "REVOKE ALL ON FUNCTION public.launch_upload_fits(uuid,text,text,jsonb) FROM PUBLIC,anon,authenticated",
+        "CREATE FUNCTION public.allow_launch_upload(p_bucket text,p_name text,p_metadata jsonb)\r\nRETURNS boolean LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=public,pg_temp AS $$\r\n  SELECT public.launch_upload_fits(auth.uid(),p_bucket,p_name,p_metadata);\r\n$$",
+        "REVOKE ALL ON FUNCTION public.allow_launch_upload(text,text,jsonb) FROM PUBLIC,anon",
+        "GRANT EXECUTE ON FUNCTION public.allow_launch_upload(text,text,jsonb) TO authenticated",
+        "CREATE POLICY launch_upload_limit ON storage.objects AS RESTRICTIVE FOR INSERT TO authenticated\r\n  WITH CHECK(public.allow_launch_upload(bucket_id,name,metadata))",
+        "CREATE POLICY launch_update_limit ON storage.objects AS RESTRICTIVE FOR UPDATE TO authenticated\r\n  USING(owner_id=auth.uid()::text OR split_part(name,'/',1)=auth.uid()::text)\r\n  WITH CHECK(public.allow_launch_upload(bucket_id,name,metadata))",
+        "-- Storage permission preflights roll back and completion uses an elevated role.\r\n-- Therefore RLS alone cannot serialize aggregate limits. Enforce again at commit,\r\n-- using the uploader identity written by Storage (never client custom metadata).\r\n-- No object metadata is mutated by this trigger; rejected uploads are cleaned up by Storage.\r\nCREATE FUNCTION public.enforce_launch_storage_limit()\r\nRETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$\r\nBEGIN\r\n  IF NEW.bucket_id NOT IN ('voice-notes','pdfs','office-files','avatars') THEN RETURN NEW; END IF;\r\n  -- Trusted administrative uploads have no end-user owner_id.\r\n  IF NEW.owner_id IS NULL OR NEW.owner_id='' THEN RETURN NEW; END IF;\r\n  IF NOT public.launch_upload_fits(NEW.owner_id::uuid,NEW.bucket_id,NEW.name,NEW.metadata) THEN\r\n    RAISE EXCEPTION 'Storage limit reached or upload is not permitted';\r\n  END IF;\r\n  RETURN NEW;\r\nEND;\r\n$$",
+        "REVOKE ALL ON FUNCTION public.enforce_launch_storage_limit() FROM PUBLIC,anon,authenticated",
+        "CREATE TRIGGER launch_storage_limit BEFORE INSERT OR UPDATE ON storage.objects\r\nFOR EACH ROW EXECUTE FUNCTION public.enforce_launch_storage_limit()",
+        "-- Let uploaders remove their room recordings to recover storage capacity.\r\nCREATE POLICY room_recording_owner_delete ON storage.objects FOR DELETE TO authenticated\r\nUSING(bucket_id='voice-notes' AND owner_id=auth.uid()::text)",
+        "CREATE FUNCTION public.get_recording_storage_bytes()\r\nRETURNS bigint LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$\r\n  SELECT COALESCE(sum(COALESCE((metadata->>'size')::bigint,10485760)),0)::bigint\r\n  FROM storage.objects WHERE bucket_id='voice-notes'\r\n  AND (owner_id=auth.uid()::text OR split_part(name,'/',1)=auth.uid()::text);\r\n$$",
+        "REVOKE ALL ON FUNCTION public.get_recording_storage_bytes() FROM PUBLIC,anon",
+        "GRANT EXECUTE ON FUNCTION public.get_recording_storage_bytes() TO authenticated"
+      ]
+    }
+  ]
+}

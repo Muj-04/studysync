@@ -9,7 +9,23 @@ export async function fingerprintPdf(blob: Blob): Promise<string> {
 /** File bytes determine identity; a filename alone must never replace a document. */
 export async function identifyPdf(file: File, explicitId?: string) {
   const fingerprint = await fingerprintPdf(file);
-  if (explicitId) return { id: explicitId, fingerprint };
+  const { data: { user }, error } = await createClient().auth.getUser();
+  if (error || !user) throw new Error('Sign in to open a document');
+  const identity = await fingerprintPdf(new Blob([`${user.id}:${fingerprint}`]));
+  const contentId = `${identity.slice(0, 8)}-${identity.slice(8, 12)}-8${identity.slice(13, 16)}-a${identity.slice(17, 20)}-${identity.slice(20, 32)}`;
+  if (explicitId) {
+    const existing = await getStoredPdf(explicitId);
+    if (existing) {
+      // Compare actual bytes before replacing any blob, even if cached metadata exists.
+      if (await fingerprintPdf(existing.blob) !== fingerprint) {
+        throw new Error('This PDF does not match the selected document. Open it as a new document instead.');
+      }
+    } else if (explicitId !== contentId) {
+      // Older random IDs have no verifiable content identity on another device.
+      throw new Error('Cannot verify this older document on this device. Reopen it on the original device, or open this PDF as a new document.');
+    }
+    return { id: explicitId, fingerprint };
+  }
   for (const id of await getAllStoredDocIds()) {
     const stored = await getStoredPdf(id);
     if (!stored) continue;
@@ -17,10 +33,6 @@ export async function identifyPdf(file: File, explicitId?: string) {
     if (!stored.fingerprint) await savePdfBlob(id, stored.blob, { filename: stored.filename, fingerprint: existingFingerprint });
     if (existingFingerprint === fingerprint) return { id, fingerprint };
   }
-  const { data: { user }, error } = await createClient().auth.getUser();
-  if (error || !user) throw new Error('Sign in to open a document');
   // Stable per account across devices, without uploading any PDF bytes.
-  const identity = await fingerprintPdf(new Blob([`${user.id}:${fingerprint}`]));
-  const id = `${identity.slice(0, 8)}-${identity.slice(8, 12)}-8${identity.slice(13, 16)}-a${identity.slice(17, 20)}-${identity.slice(20, 32)}`;
-  return { id, fingerprint };
+  return { id: contentId, fingerprint };
 }

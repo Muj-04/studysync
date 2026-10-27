@@ -64,9 +64,9 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
         if (filename && !stored?.filename) await savePdfBlob(docId, blob, { filename, fingerprint: stored?.fingerprint });
         const url = URL.createObjectURL(blob);
         try {
-          const pdf = await pdfjs.getDocument(url).promise;
+          const pdf = await pdfjs.getDocument({ url }).promise;
           const pageCount = pdf.numPages;
-          await pdf.destroy();
+          await pdf.loadingTask.destroy();
           restored.push({
             id: docId,
             name: filename?.replace(/\.pdf$/i, '') ?? 'Document',
@@ -120,9 +120,9 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
       } else {
         const url = URL.createObjectURL(file);
         const pdfjs = await getPDFJS();
-        const pdf = await pdfjs.getDocument(url).promise;
+        const pdf = await pdfjs.getDocument({ url }).promise;
         const pageCount = pdf.numPages;
-        await pdf.destroy();
+        await pdf.loadingTask.destroy();
         if (persist) await savePdfBlob(id, file, { filename: file.name, fingerprint });
         const doc: PDFDocument = {
           id,

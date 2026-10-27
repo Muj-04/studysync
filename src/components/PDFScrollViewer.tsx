@@ -38,7 +38,7 @@ const docCache = new Map<string, Promise<PDFDocumentProxy>>();
 async function getDocProxy(url: string): Promise<PDFDocumentProxy> {
   if (!docCache.has(url)) {
     const pdfjs = await getPDFJS();
-    docCache.set(url, pdfjs.getDocument(url).promise);
+    docCache.set(url, pdfjs.getDocument({ url }).promise);
   }
   return docCache.get(url)!;
 }
