@@ -2,15 +2,15 @@
 
 Prepared 2026-10-26. This is an activation runbook and a proposed firewall rule, not evidence of live enforcement. Available Supabase SQL access does not inspect or configure hosted Auth settings; Vercel provider access was unavailable (plugin discovery reported not installed). No Auth settings, Vercel rules, alert subscriptions, or production configuration were changed by this work. Exactly two authorized staging diagnostic password-sign-in probes ran on 2026-10-26: both returned HTTP 400, and the pair did not verify `captcha_failed` rejection (`captchaRejectionVerified: false`). No rate probe ran and no 429 was observed. The tool discarded other response details; generic HTTP 400 cannot establish CAPTCHA enforcement. Current production CAPTCHA enforcement and actual Auth rate-limit values remain unknown; no provider Auth configuration has been inspected or verified.
 
-## Enable hCaptcha at the enforcement point
+## Enable Turnstile at the enforcement point
 
 Public variables are compiled into the Next.js client bundle. After setting or
 changing them, rebuild and redeploy the frontend; changing runtime variables
 alone is insufficient. A public-only template is in `auth-protection.env.example`.
 
-Deploy the compatible password-auth frontend to isolated staging first. Set `NEXT_PUBLIC_HCAPTCHA_SITE_KEY` to its public hCaptcha site key (presence enables the widget) and `NEXT_PUBLIC_AUTH_CAPTCHA_REQUIRED=true` to fail closed when that key is missing. The well-known always-pass public test site key is rejected in production builds; reserve them for local/development testing. Restrict the hCaptcha site to the intended deployment hostnames. Keep the matching secret only in Supabase, never in `NEXT_PUBLIC_*`, repository files, logs, or CLI arguments. Test keys are suitable only for isolated testing; they provide no production bot protection.
+Deploy the compatible password-auth frontend to isolated staging first. Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to its public Turnstile site key (presence enables the widget) and `NEXT_PUBLIC_AUTH_CAPTCHA_REQUIRED=true` to fail closed when that key is missing. The well-known always-pass public test site key is rejected in production builds; reserve them for local/development testing. Restrict the Turnstile site to the intended deployment hostnames. Keep the matching secret only in Supabase, never in `NEXT_PUBLIC_*`, repository files, logs, or CLI arguments. Test keys are suitable only for isolated testing; they provide no production bot protection.
 
-For staging project `xokiiepdpjvqnpzwmbtb`, open Supabase Dashboard → Settings → Authentication → Bot and Abuse Protection → Enable CAPTCHA protection. Select **hCaptcha**, enter the matching secret, save, and confirm the switch remains enabled. The frontend must pass each fresh solved token as `options.captchaToken` and reset it after each request. [Supabase CAPTCHA documentation](https://supabase.com/docs/guides/auth/auth-captcha).
+For staging project `xokiiepdpjvqnpzwmbtb`, open Supabase Dashboard → Settings → Authentication → Bot and Abuse Protection → Enable CAPTCHA protection. Select **Turnstile**, enter the matching secret, save, and confirm the switch remains enabled. The frontend must pass each fresh solved token as `options.captchaToken` and reset it after each request. [Supabase CAPTCHA documentation](https://supabase.com/docs/guides/auth/auth-captcha).
 
 Record confirmation of the provider, enabled state, site-key/environment association and operator/time without copying secret values. Verify missing/invalid token rejection with the two-request check below. Separately verify a solved challenge through the staging UI with a designated disposable test account: login, signup, password-reset request, and Settings password confirmation. Such manual lifecycle tests are separate from this script and may send mail; use only designated test inboxes. Check expiry, retry, and network failure as well. Never reuse challenge tokens.
 
@@ -93,4 +93,8 @@ npm test
 - Production build with required-CAPTCHA configuration passed. New hook/widget,
   probe and tests pass scoped lint. The touched pages retain their existing lint
   baseline (one login effect error and four Settings warnings); no new findings.
-- The pinned hCaptcha dependency installation reported zero audit vulnerabilities.
+- The pinned Turnstile dependency installation reported zero audit vulnerabilities.
+
+## Turnstile switch — 2026-10-27
+
+User selected Turnstile and supplied public site key `0x4AAAAAAFoCA1H-DldK5ptA`. The frontend now uses Turnstile. Set the public build variables from `auth-protection.env.example` in Vercel and rebuild. The secret is not available here and must be entered privately in Supabase. Do not enable production enforcement until the compatible frontend is deployed. Validate staging with an allowed staging hostname and a real solved challenge before production activation. Widget creation and local tests alone do not prove live protection.

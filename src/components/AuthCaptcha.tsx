@@ -1,6 +1,6 @@
 'use client';
 
-import HCaptcha from '@hcaptcha/react-hcaptcha';
+import { Turnstile } from '@marsidev/react-turnstile';
 import type { AuthCaptchaControl } from '@/hooks/useAuthCaptcha';
 
 export default function AuthCaptcha({ control }: { control: AuthCaptchaControl }) {
@@ -9,15 +9,13 @@ export default function AuthCaptcha({ control }: { control: AuthCaptchaControl }
   return (
     <div aria-label="Security verification" style={{ margin: '12px 0' }}>
       {!misconfigured && (
-        <HCaptcha
+        <Turnstile
           ref={attachWidget}
-          sitekey={siteKey}
-          size="compact"
-          reCaptchaCompat={false}
-          sentry={false}
-          onVerify={onVerify}
+          siteKey={siteKey}
+          options={{ size: 'compact' }}
+          onSuccess={onVerify}
           onExpire={onExpire}
-          onChalExpired={onExpire}
+          onTimeout={onExpire}
           onError={onError}
         />
       )}
