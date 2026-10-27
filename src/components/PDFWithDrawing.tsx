@@ -449,7 +449,7 @@ const PDFWithDrawing = forwardRef<DrawingCanvasHandle, Props>(
     }, [emitDrawing]);
 
     const startDraw = (pos: { x: number; y: number }, shiftKey = false) => {
-      hydration.current.invalidate();
+      if (!hydration.current.beginEdit()) return;
       const canvas = drawCanvasRef.current;
       const ctx = canvas?.getContext('2d');
       if (!canvas || !ctx || !canvasDimsRef.current) return;
