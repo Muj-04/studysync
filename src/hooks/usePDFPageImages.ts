@@ -1,14 +1,19 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { savePageImages as dbSavePageImages, fetchAllPageImages } from '@/lib/supabase/db';
+import { createDocumentSaveQueue } from '@/lib/persistence/documentSaveQueue';
 import type { PDFPageImage } from '@/types';
 
 type PageImagesMap = Record<number, PDFPageImage[]>;
 
 export function usePDFPageImages() {
   const [allPageImages, setAllPageImages] = useState<Record<string, PageImagesMap>>({});
-  const saveTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const imagesRef = useRef<Record<string, PageImagesMap>>({});
+  const [saves] = useState(() => createDocumentSaveQueue((error) => {
+    console.warn('[PageImages] remote save failed; local images retained:', error);
+  }));
+  useEffect(() => () => saves.clear(), [saves]);
   const userIdRef = useRef<string | null>(null);
 
   const ensureUserId = useCallback(async () => {
@@ -23,22 +28,16 @@ export function usePDFPageImages() {
   }, [allPageImages]);
 
   const setPageImages = useCallback((docId: string, pageNumber: number, images: PDFPageImage[]) => {
-    setAllPageImages((prev) => {
-      const docMap = { ...(prev[docId] ?? {}), [pageNumber]: images };
-      const next = { ...prev, [docId]: docMap };
-      // Persist all images for this doc to localStorage
-      const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
-      storageSet(KEYS.PAGE_IMAGES, { ...stored, [docId]: docMap });
-      return next;
-    });
-    // Debounced Supabase save
-    const timerKey = `${docId}:${pageNumber}`;
-    if (saveTimerRef.current[timerKey]) clearTimeout(saveTimerRef.current[timerKey]);
-    saveTimerRef.current[timerKey] = setTimeout(async () => {
+    const docMap = { ...(imagesRef.current[docId] ?? {}), [pageNumber]: images };
+    imagesRef.current = { ...imagesRef.current, [docId]: docMap };
+    setAllPageImages(imagesRef.current);
+    const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
+    storageSet(KEYS.PAGE_IMAGES, { ...stored, [docId]: docMap });
+    saves.schedule(docId, String(pageNumber), async (isCurrent) => {
       const uid = await ensureUserId();
-      if (uid) dbSavePageImages(docId, pageNumber, images);
-    }, 600);
-  }, [ensureUserId]);
+      if (uid && isCurrent()) await dbSavePageImages(docId, pageNumber, images);
+    });
+  }, [ensureUserId, saves]);
 
   const seedPageImages = useCallback((docId: string, remote: Record<number, PDFPageImage[]>) => {
     // Load from localStorage first
@@ -49,13 +48,11 @@ export function usePDFPageImages() {
       merged[Number(k)] = v;
     }
     const hasRemote = Object.keys(remote).length > 0;
-    setAllPageImages((prev) => {
-      const existing = prev[docId] ?? {};
-      const existingKeys = Object.keys(existing).join(',');
-      const mergedKeys = Object.keys(merged).join(',');
-      if (!hasRemote && existingKeys === mergedKeys) return prev;
-      return { ...prev, [docId]: merged };
-    });
+    const existing = imagesRef.current[docId] ?? {};
+    if (hasRemote || Object.keys(existing).join(',') !== Object.keys(merged).join(',')) {
+      imagesRef.current = { ...imagesRef.current, [docId]: merged };
+      setAllPageImages(imagesRef.current);
+    }
     if (hasRemote) {
       const stored2 = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
       storageSet(KEYS.PAGE_IMAGES, { ...stored2, [docId]: merged });
@@ -66,41 +63,26 @@ export function usePDFPageImages() {
     const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
     const local = stored[docId];
     if (!local) return;
-    setAllPageImages((prev) => {
-      if (prev[docId]) return prev; // already have data
-      return { ...prev, [docId]: local };
-    });
+    if (imagesRef.current[docId]) return;
+    imagesRef.current = { ...imagesRef.current, [docId]: local };
+    setAllPageImages(imagesRef.current);
   }, []);
 
   const deletePageImage = useCallback((docId: string, pageNumber: number, imageId: string) => {
-    setAllPageImages((prev) => {
-      const pageImages = prev[docId]?.[pageNumber] ?? [];
-      const next = pageImages.filter((img) => img.id !== imageId);
-      const docMap = { ...(prev[docId] ?? {}), [pageNumber]: next };
-      const newState = { ...prev, [docId]: docMap };
-      const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
-      storageSet(KEYS.PAGE_IMAGES, { ...stored, [docId]: docMap });
-      // Debounced save
-      const timerKey = `${docId}:${pageNumber}`;
-      if (saveTimerRef.current[timerKey]) clearTimeout(saveTimerRef.current[timerKey]);
-      saveTimerRef.current[timerKey] = setTimeout(async () => {
-        const uid = await ensureUserId();
-        if (uid) dbSavePageImages(docId, pageNumber, next);
-      }, 600);
-      return newState;
-    });
-  }, [ensureUserId]);
+    const images = imagesRef.current[docId]?.[pageNumber] ?? [];
+    setPageImages(docId, pageNumber, images.filter((image) => image.id !== imageId));
+  }, [setPageImages]);
 
   const removePageImagesForDocument = useCallback((docId: string) => {
-    setAllPageImages((prev) => {
-      const next = { ...prev };
-      delete next[docId];
-      const stored = storageGet<Record<string, unknown>>(KEYS.PAGE_IMAGES) ?? {};
-      delete stored[docId];
-      storageSet(KEYS.PAGE_IMAGES, stored);
-      return next;
-    });
-  }, []);
+    saves.cancelDocument(docId);
+    const next = { ...imagesRef.current };
+    delete next[docId];
+    imagesRef.current = next;
+    setAllPageImages(next);
+    const stored = storageGet<Record<string, unknown>>(KEYS.PAGE_IMAGES) ?? {};
+    delete stored[docId];
+    storageSet(KEYS.PAGE_IMAGES, stored);
+  }, [saves]);
 
   return { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages, fetchAllPageImages };
 }
