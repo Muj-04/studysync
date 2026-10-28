@@ -16,7 +16,7 @@ function setup(t, update) {
   const h = createHookHarness(); const alerts = []; const oldAlert = global.alert;
   global.alert = message => alerts.push(message); t.mock.method(console, 'warn', () => {});
   t.after(() => { h.unmount(); global.alert = oldAlert; });
-  const { useRoomVoiceNotes } = loadSource('src/hooks/useRoomVoiceNotes.ts', { react: h.react, './useRecordingLifetime': { useRecordingLifetime: () => async () => null }, '@/lib/supabase/client': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'me' } } }) } }) }, '@/lib/supabase/db': { updateRoomVoiceNoteTitle: update } });
+  const { useRoomVoiceNotes } = loadSource('src/hooks/useRoomVoiceNotes.ts', { react: h.react, './useRecordingLifetime': { useRecordingLifetime: () => async () => null }, '@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'me' } } }) } }) }, '@/lib/supabase/db': { updateRoomVoiceNoteTitle: update } });
   const render = (room = 'room') => h.render(() => useRoomVoiceNotes(room));
   render().seedNotes([{ id: 'note', pageNumber: 1, duration: 2, title: 'old', timestamp: new Date().toISOString(), audioUrl: 'https://audio.invalid/old' }]);
   return { render, alerts, unmount: h.unmount };
@@ -55,7 +55,7 @@ test('room realtime refreshes authoritative metadata for a voice-note UPDATE', a
   const handlers = []; const received = []; const h = createHookHarness();
   const channel = { on(kind, filter, callback) { handlers.push({ kind, filter, callback }); return this; }, subscribe() { return this; } };
   const client = { auth: { getSession: async () => ({ data: { session: { access_token: 'mock' } } }) }, realtime: { setAuth: async () => {} }, channel: () => channel };
-  const { useStudyRoom } = loadSource('src/hooks/useStudyRoom.ts', { react: h.react, '@/lib/supabase/client': { createClient: () => client }, '@/lib/realtimeLifecycle': { releaseRealtimeChannel: async () => {}, waitForChannelRelease: async () => {} } });
+  const { useStudyRoom } = loadSource('src/hooks/useStudyRoom.ts', { react: h.react, '@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client': { createClient: () => client }, '@/lib/realtimeLifecycle': { releaseRealtimeChannel: async () => {}, waitForChannelRelease: async () => {} } });
   h.render(() => useStudyRoom('room', () => {}, undefined, id => received.push(id))); await tick();
   const event = handlers.find(({ filter }) => filter.event === 'UPDATE' && filter.table === 'room_voice_notes');
   assert.ok(event, 'subscribe to persisted voice-note title updates'); assert.equal(event.filter.filter, 'room_id=eq.room');

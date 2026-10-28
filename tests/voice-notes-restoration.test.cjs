@@ -35,7 +35,7 @@ function setup(t) {
     },
     './useRecordingLifetime': { useRecordingLifetime: () => async () => null },
     '@/lib/storage': { KEYS: { VOICE_NOTES: 'voice' }, storageGet: () => stored, storageSet: (_key, value) => { stored = value; writes.push(value); return true; } },
-    '@/lib/supabase/client': { createClient: () => ({ auth: { getUser: () => user } }) },
+    '@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client': { createClient: () => ({ auth: { getUser: () => user } }) },
     '@/lib/supabase/db': { fetchVoiceNotes: () => remote, deleteVoiceNote() {}, updateVoiceNoteTitle() {} },
   });
   const render = () => harness.render(() => {

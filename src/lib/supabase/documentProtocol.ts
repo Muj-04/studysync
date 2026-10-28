@@ -1,3 +1,4 @@
+import { cancelDocumentWrites } from '@/lib/documentOutbox';
 import { createClient } from './client';
 
 /** Identity is persisted independently of caches so retries never acquire a new lifetime. */
@@ -37,7 +38,10 @@ async function remoteDocument(ownerId: string, documentId: string) {
   const { data: tombstone, error: tombstoneError } = await client.from('document_tombstones').select('document_id').eq('document_id', documentId).eq('user_id', ownerId).maybeSingle();
   if (tombstoneError) throw tombstoneError;
   await assertDocumentOwner(ownerId);
-  if (tombstone) throw new DocumentConflictError('This document was deleted. Your unsynced edits require an explicit recovery copy.');
+  if (tombstone) {
+    cancelDocumentWrites(ownerId, documentId, 'This document was deleted. Export or create a recovery copy.');
+    throw new DocumentConflictError('This document was deleted. Your unsynced edits require an explicit recovery copy.');
+  }
   return null;
 }
 
