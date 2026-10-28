@@ -1,3 +1,4 @@
+import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 import { sb, userId } from './dbShared';
 import { readDocumentCollection, writeDocumentCollection } from './documentCollections';
 import type { TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
@@ -61,7 +62,7 @@ async function saveDrawingNow(docId: string, pageKey: string, canvasData: string
 }
 
 async function deleteAllDrawingsNow(docId: string): Promise<void> {
-  const drawings = await readDocumentCollection('drawings', docId);
+  const drawings = await enqueueDocumentWrite(docId, () => readDocumentCollection('drawings', docId));
   for (const row of drawings) await writeDocumentCollection('drawings', docId, [], String(row.page_key));
 }
 
