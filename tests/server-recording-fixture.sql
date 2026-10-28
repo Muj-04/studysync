@@ -1,0 +1,36 @@
+CREATE ROLE anon;
+CREATE ROLE authenticated;
+CREATE ROLE service_role;
+CREATE SCHEMA auth;
+CREATE SCHEMA storage;
+CREATE TABLE auth.users(id uuid PRIMARY KEY);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$SELECT current_setting('request.jwt.claim.role',true)$$;
+GRANT USAGE ON SCHEMA auth,storage TO authenticated,service_role;
+CREATE TABLE public.documents(id text PRIMARY KEY,user_id uuid NOT NULL,generation uuid NOT NULL);
+CREATE TABLE public.document_lifetimes(document_id text PRIMARY KEY,user_id uuid,generation uuid,deleted_at timestamptz);
+CREATE VIEW public.document_tombstones AS SELECT * FROM public.document_lifetimes WHERE deleted_at IS NOT NULL;
+CREATE FUNCTION public.assert_document_generation(p_document_id text,p_generation uuid,p_owner uuid DEFAULT auth.uid()) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+BEGIN
+ IF auth.role() <> 'service_role' AND auth.uid() IS DISTINCT FROM p_owner THEN RAISE EXCEPTION 'wrong owner' USING ERRCODE='42501'; END IF;
+ IF EXISTS(SELECT 1 FROM public.document_tombstones WHERE document_id=p_document_id) OR NOT EXISTS(SELECT 1 FROM public.documents WHERE id=p_document_id AND user_id=p_owner) THEN RAISE EXCEPTION 'deleted' USING ERRCODE='PDD01'; END IF;
+ PERFORM 1 FROM public.documents WHERE id=p_document_id AND user_id=p_owner AND generation=p_generation FOR SHARE;
+ IF NOT FOUND THEN RAISE EXCEPTION 'stale generation' USING ERRCODE='PDD02'; END IF;
+END$$;
+CREATE TABLE public.study_rooms(id uuid PRIMARY KEY,status text,expires_at timestamptz);
+CREATE TABLE public.room_members(room_id uuid,user_id uuid,PRIMARY KEY(room_id,user_id));
+CREATE TABLE public.voice_notes(id uuid PRIMARY KEY,user_id uuid NOT NULL,document_id text NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,page_number text NOT NULL,duration numeric NOT NULL,title text,audio_url text NOT NULL,audio_size_bytes bigint,timestamp timestamptz NOT NULL,document_generation uuid);
+CREATE TABLE public.room_voice_notes(id uuid PRIMARY KEY,user_id uuid NOT NULL,room_id uuid NOT NULL,page_number text NOT NULL,duration numeric NOT NULL,title text,audio_url text NOT NULL,timestamp timestamptz NOT NULL);
+CREATE FUNCTION storage.allow_only_operation(operation text) RETURNS boolean LANGUAGE sql STABLE AS $$SELECT current_setting('request.storage.operation',true)=operation$$;
+CREATE TABLE storage.buckets(id text PRIMARY KEY,public boolean NOT NULL DEFAULT false,versioning_status text NOT NULL DEFAULT 'DISABLED');
+INSERT INTO storage.buckets(id) VALUES('voice-notes');
+CREATE TABLE storage.objects(id uuid DEFAULT gen_random_uuid(),bucket_id text,name text,metadata jsonb,UNIQUE(bucket_id,name));
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+CREATE POLICY fixture_permissive_storage ON storage.objects FOR ALL TO authenticated USING(true) WITH CHECK(true);
+GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects,voice_notes,room_voice_notes TO authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public,storage TO service_role;
+GRANT USAGE ON SCHEMA public TO authenticated,service_role;
+INSERT INTO auth.users VALUES('11111111-1111-4111-8111-111111111111'),('22222222-2222-4222-8222-222222222222');
+INSERT INTO documents VALUES('doc','11111111-1111-4111-8111-111111111111','33333333-3333-4333-8333-333333333333');
+INSERT INTO study_rooms VALUES('44444444-4444-4444-8444-444444444444','active',now()+interval '1 day');
+INSERT INTO room_members VALUES('44444444-4444-4444-8444-444444444444','11111111-1111-4111-8111-111111111111');

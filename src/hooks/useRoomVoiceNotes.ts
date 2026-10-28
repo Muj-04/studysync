@@ -1,4 +1,5 @@
 'use client';
+import { retainRecoveryAudio } from '@/lib/recoveryAudio';
 import { createRoomSnapshotGate } from '@/lib/roomSnapshot';
 import { useRecordingLifetime } from './useRecordingLifetime';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -179,6 +180,7 @@ export function useRoomVoiceNotes(
       const blob = new Blob(chunks, { type: recordedType });
 
       const note: VoiceNote = {
+        syncStatus: 'pending',
         id: crypto.randomUUID(),
         documentId: roomId,
         pageNumber,
@@ -188,6 +190,7 @@ export function useRoomVoiceNotes(
         timestamp: new Date(),
       };
 
+      void retainRecoveryAudio(owner, note).catch(() => { if (isCurrent()) alert('Local audio backup failed. Export this recording before closing the tab.'); });
       unsavedNotes.current.add(note.id);
       snapshots.current.touch(note.id);
       setNotes((prev) => [...prev, note]);
@@ -201,10 +204,14 @@ export function useRoomVoiceNotes(
           retrySaves.current.delete(note.id);
           unsavedNotes.current.delete(note.id);
           snapshots.current.touch(note.id);
-          if (isCurrent()) onNoteAddedRef.current?.(note.id);
+          if (isCurrent()) {
+            setNotes(prev => prev.map(current => current.id === note.id ? { ...current, syncStatus: 'saved' } : current));
+            onNoteAddedRef.current?.(note.id);
+          }
         }).catch((error: unknown) => {
           console.warn('[VoiceNote] room recording save failed:', error);
           if (isCurrent()) {
+            setNotes(prev => prev.map(current => current.id === note.id ? { ...current, syncStatus: 'failed' } : current));
             retrySaves.current.set(note.id, sync);
             alert('Could not save this recording. The audio is still available in this tab, but has not been shared. Reconnect to retry.');
           }
@@ -268,11 +275,19 @@ export function useRoomVoiceNotes(
     snapshots.current.touch(id);
     const lifetime = titleLifetime.current;
     const previous = titleWrites.current.get(id) ?? Promise.resolve();
+    const ownerRequest = process.env.NEXT_PUBLIC_SERVER_RECORDING_RECOVERY === 'true'
+      ? createClient().auth.getUser().then(({ data: { user } }) => user?.id ?? null).catch(() => null)
+      : Promise.resolve(undefined);
     // Preserve edit order at the database as well as in the local view.
     const write = previous.then(async () => {
       if (!lifetime.active) return;
-      await updateRoomVoiceNoteTitle(id, title || undefined);
+      const owner = await ownerRequest;
       if (!lifetime.active) return;
+      if (owner === null) throw new Error('Sign in to rename recordings.');
+      await updateRoomVoiceNoteTitle(id, title || undefined, owner);
+      if (!lifetime.active) return;
+      const local = notes.find(note => note.id === id);
+      if (owner && local?.audioBlob.size) void retainRecoveryAudio(owner, { ...local, title: title || undefined }).catch(() => undefined);
       snapshots.current.touch(id);
       setNotes((prev) => prev.map((note) => note.id === id ? { ...note, title: title || undefined } : note));
     }).catch((error: unknown) => {
@@ -283,7 +298,7 @@ export function useRoomVoiceNotes(
     });
     titleWrites.current.set(id, write);
     return write;
-  }, []);
+  }, [notes]);
 
   const getNotesForPage = useCallback(
     (pageNumber: number | string) => notes.filter((n) => n.pageNumber === pageNumber),

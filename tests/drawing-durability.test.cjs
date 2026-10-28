@@ -36,32 +36,18 @@ test('failed drawing remains visible and stored after cloud hydration and remoun
   assert.equal(restored.getDrawing('doc', 2), 'new cloud page');
 });
 
+const { documentDomainFixture } = require('./document-domain-fixture.cjs');
 test('drawing database errors reject rather than acknowledging lost strokes', async () => {
-  const client = { from: () => ({ upsert: async () => ({ error: { message: 'offline' } }) }) };
-  const { saveDrawing } = loadSource('src/lib/supabase/documentAnnotations.ts', {
-    './dbShared': { sb: () => client, userId: async () => 'owner', ensureDoc: async () => {} },
-  });
-  await assert.rejects(saveDrawing('doc', '1', 'new'), /offline/);
+  const h=documentDomainFixture();await h.prepare('doc','drawings');h.setFailure('offline');
+  await assert.rejects(h.api.saveDrawing('doc','1','new'),/offline/);
 });
-
 test('clear drawings waits for an earlier save so old strokes cannot reappear', async () => {
-  let release;
-  const gate = new Promise(resolve => { release = resolve; });
-  let remote = 'old';
-  const client = { from: () => ({
-    upsert: async row => { await gate; remote = row.canvas_data; return { error: null }; },
-    delete: () => ({ match: async () => { remote = null; return { error: null }; } }),
-  }) };
-  const api = loadSource('src/lib/supabase/documentAnnotations.ts', {
-    './dbShared': { sb: () => client, userId: async () => 'owner', ensureDoc: async () => {} },
-  });
-  const save = api.saveDrawing('doc', '1', 'new');
-  await new Promise(setImmediate);
-  const clear = api.deleteAllDrawings('doc');
-  await new Promise(setImmediate);
-  release();
-  await Promise.all([save, clear]);
-  assert.equal(remote, null);
+  const h=documentDomainFixture();await h.prepare('doc','drawings',[{page_key:'1',canvas_data:'old'}]);
+  let release;h.setGate(new Promise(resolve=>release=resolve));
+  const save=h.api.saveDrawing('doc','1','new');await new Promise(setImmediate);
+  const clear=h.api.deleteAllDrawings('doc');await new Promise(setImmediate);
+  assert.equal(h.calls.length,1);release();await Promise.all([save,clear]);
+  assert.deepEqual(h.calls.at(-1).args.p_rows,[]);
 });
 
 test('an older successful save cannot acknowledge a newer failed edit', async () => {

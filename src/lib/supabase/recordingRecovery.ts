@@ -3,6 +3,7 @@ import { createSerialQueue } from '@/lib/persistence/serialQueue';
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 import { sb, userId } from './dbShared';
 import type { VoiceNote } from '@/types';
+import { serverRecordingRecoveryEnabled, captureServerRecording, saveServerRecording, deleteServerRecording, renameServerRecording } from './serverRecordingAdapter';
 
 export type RecordingScope = 'room' | 'document';
 type RecordEntry = {
@@ -79,6 +80,10 @@ export async function saveRecording(scope: RecordingScope, scopeId: string, note
   if (expectedOwner && uid !== expectedOwner) throw new Error('The account changed before recording synchronization finished.');
   if (!note.audioBlob?.size) throw new Error('The recording is empty.');
   const id = idFor(scope, scopeId, note.id);
+  if (serverRecordingRecoveryEnabled()) {
+    const intent = captureServerRecording(uid, scope, scopeId, note);
+    return enqueue(`${uid}:server:${note.id}`, () => saveServerRecording(intent));
+  }
   return enqueue(`${uid}:${id}`, async () => {
     await assertOwner(uid);
     const previous = entries(uid)[id];
@@ -140,6 +145,7 @@ export async function deleteRecording(scope: RecordingScope, scopeId: string, no
   if (!uid) throw new Error('Sign in to delete recordings.');
   if (expectedOwner && uid !== expectedOwner) throw new Error('The account changed before recording synchronization finished.');
   const id = idFor(scope, scopeId, noteId);
+  if (serverRecordingRecoveryEnabled()) return enqueue(`${uid}:server:${noteId}`, () => deleteServerRecording(uid, scope, scopeId, noteId));
   return enqueue(`${uid}:${id}`, async () => {
     await assertOwner(uid);
     const previous = entries(uid)[id];
@@ -160,6 +166,7 @@ export async function deleteRecording(scope: RecordingScope, scopeId: string, no
 
 /** Retry tracked work only for the signed-in owner and requested scope. */
 export async function recoverRecordings(scope: RecordingScope, scopeId?: string): Promise<void> {
+  if (serverRecordingRecoveryEnabled()) return; // The durable server worker owns accepted intents.
   const uid = await userId();
   if (!uid) return;
   const pending = Object.values(entries(uid)).filter(entry => entry.owner === uid && entry.scope === scope
@@ -193,4 +200,10 @@ export async function recoverRecordings(scope: RecordingScope, scopeId?: string)
 export function pendingRecordingIds(uid: string, scope: RecordingScope, scopeId: string): string[] {
   return Object.values(entries(uid)).filter(entry => entry.owner === uid && entry.scope === scope
     && entry.scopeId === scopeId && entry.action !== 'deleted').map(entry => entry.id);
+}
+
+export async function renameRecording(noteId: string, title: string | undefined, expectedOwner?: string): Promise<void> {
+  const uid = await userId();
+  if (!uid || (expectedOwner && expectedOwner !== uid)) throw new Error('The account changed before recording synchronization finished.');
+  return enqueue(`${uid}:server:${noteId}`, () => renameServerRecording(uid, noteId, title));
 }

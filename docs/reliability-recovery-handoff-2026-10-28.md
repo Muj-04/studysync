@@ -1,3 +1,9 @@
+> Latest continuation: [data-integrity implementation handoff](data-integrity-handoff-2026-10-28.md).
+> PRs #35–#39 are merged at `18930427` with 323 passing tests; historical
+> candidate counts and no-merge statements below refer to their original runs.
+> Document deletion policy is now approved and implemented in a reviewed candidate,
+> with separate migration/hosted release gates.
+
 # StudySync reliability recovery — 28 October 2026
 
 This continuation starts at freshly fetched dev `7f187efce1f3644e525cfc5c20a62d9e743e80c2` (227 tests; PRs #21–#34 merged). The previous report's 179 and 225 counts were historical integration stages, followed by two independent-review regressions. No new PR is authorized to merge in this continuation. Production main remains `0b28bd297b4b05e1b7f1878bda5667c413f76f81`.

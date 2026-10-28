@@ -1,3 +1,4 @@
+import { assertDocumentOwner } from './documentProtocol';
 import { sb, userId } from './dbShared';
 
 export async function getUserStorageStats(): Promise<{
@@ -70,8 +71,10 @@ export async function deleteAllVoiceNotesForUser(): Promise<void> {
 
 export async function deleteAllDrawingsForUser(): Promise<void> {
   const uid = await userId(); if (!uid) throw new Error('Sign in to delete drawings');
-  const { error } = await sb().from('drawings').delete().eq('user_id', uid);
+  await assertDocumentOwner(uid);
+  const { error } = await sb().rpc('clear_account_drawings_v2', { p_expected_owner: uid });
   if (error) throw error;
+  await assertDocumentOwner(uid);
 }
 
 export async function exportAllUserData(): Promise<object> {

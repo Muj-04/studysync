@@ -9,7 +9,7 @@ function mount(t, remove) {
   const {useVoiceNotes}=loadSource('src/hooks/useVoiceNotes.ts',{
     react:h.react,
     '@/lib/storage':{KEYS:{VOICE_NOTES:'notes'},storageGet:()=>null,storageSet:()=>true},
-    '@/lib/supabase/client':{createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'alice'}}})}})},
+    '@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client':{createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'alice'}}})}})},
     '@/lib/supabase/db':{fetchVoiceNotes:async()=>[{id:'note',documentId:'doc',pageNumber:1,duration:1,audioUrl:'https://audio.invalid/note',timestamp:'2026-10-28T00:00:00Z'}],deleteVoiceNote:remove,deleteAllVoiceNotesForDocument:remove},
   });
   const render=()=>h.render(useVoiceNotes); render();

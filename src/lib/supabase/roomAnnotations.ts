@@ -1,4 +1,5 @@
-import { saveRecording, deleteRecording, recoverRecordings } from './recordingRecovery';
+import { serverRecordingRecoveryEnabled } from './serverRecordingAdapter';
+import { saveRecording, deleteRecording, recoverRecordings, renameRecording } from './recordingRecovery';
 import { sb, userId } from './dbShared';
 import type { VoiceNote } from '@/types';
 
@@ -91,7 +92,8 @@ export async function deleteRoomVoiceNote(noteId: string, roomId: string): Promi
   return deleteRecording('room', roomId, noteId);
 }
 
-export async function updateRoomVoiceNoteTitle(noteId: string, title: string | undefined): Promise<void> {
+export async function updateRoomVoiceNoteTitle(noteId: string, title: string | undefined, expectedOwner?: string): Promise<void> {
+  if (serverRecordingRecoveryEnabled()) return renameRecording(noteId, title, expectedOwner);
   const uid = await userId();
   if (!uid) throw new Error('Sign in to rename room voice notes.');
   const { data, error } = await sb().from('room_voice_notes')

@@ -1,4 +1,5 @@
 'use client';
+import { retainRecoveryAudio } from '@/lib/recoveryAudio';
 import { useRecordingLifetime } from './useRecordingLifetime';
 import { useState, useCallback, useRef, useEffect, useSyncExternalStore } from 'react';
 import type { VoiceNote } from '@/types';
@@ -253,6 +254,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
       console.log('[VoiceNotes] recording stopped — pageNumber:', pageNumber, 'blob size:', blob.size, 'bytes, mime:', blob.type, 'duration:', duration.toFixed(1) + 's');
 
       const note: VoiceNote = {
+        syncStatus: 'pending',
         id: crypto.randomUUID(),
         documentId,
         pageNumber,
@@ -267,6 +269,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
       // Upload to Supabase in background (with per-plan storage limit check)
       if (userIdRef.current) {
         const owner = userIdRef.current;
+        void retainRecoveryAudio(owner, note).catch(() => { if (mounted.current) alert('Local audio backup failed. Export this recording before closing the tab.'); });
         const sync = (): Promise<void> => {
           if (!mounted.current) return Promise.resolve();
           const pending = pendingSaves.current.get(note.id);
@@ -284,10 +287,12 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
             if (!mounted.current) return;
             const url = await saveVoiceNote(note, owner);
             retrySaves.current.delete(note.id);
+            if (mounted.current) setNotes(prev => prev.map(current => current.id === note.id ? { ...current, syncStatus: 'saved' } : current));
             console.log('[VoiceNotes] saveVoiceNote returned audioUrl:', url ? url.slice(0, 80) + '…' : null);
           })().catch((error: unknown) => {
             console.warn('[VoiceNotes] remote save failed; local recording retained:', error);
             if (mounted.current) {
+              setNotes(prev => prev.map(current => current.id === note.id ? { ...current, syncStatus: 'failed' } : current));
               retrySaves.current.set(note.id, sync);
               alert('Could not save this recording. The audio is still available in this tab. Reconnect to retry.');
             }
@@ -355,10 +360,16 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title: title || undefined } : n)));
-    if (userIdRef.current) {
-      updateVoiceNoteTitle(id, title || undefined);
+    const owner = userIdRef.current;
+    if (owner) {
+      const note = store.getSnapshot().notes.find(item => item.id === id);
+      if (note?.audioBlob.size) void retainRecoveryAudio(owner, { ...note, title: title || undefined }).catch(() => undefined);
+      void updateVoiceNoteTitle(id, title || undefined, owner).catch((error: unknown) => {
+        console.warn('[VoiceNotes] title remains local:', error);
+        if (mounted.current && userIdRef.current === owner) alert('Could not save this recording title. Your local title is retained; please retry.');
+      });
     }
-  }, [setNotes]);
+  }, [setNotes, store]);
 
   const getNotesForPage = useCallback(
     (documentId: string, pageNumber: number | string): VoiceNote[] =>
