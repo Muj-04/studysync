@@ -99,9 +99,15 @@ export async function saveRecording(scope: RecordingScope, scopeId: string, note
     put(entry, uid, id); // Durable intent precedes every possibly successful upload.
     await assertOwner(uid);
     const { error } = await sb().storage.from('voice-notes').upload(entry.path, note.audioBlob, { upsert: false, contentType: mime });
-    // A retry of a committed upload gets 409. Signing/readback then determine
-    // whether it can be published, without replacing or rolling back its bytes.
-    if (error && String((error as { statusCode?: string }).statusCode) !== '409') throw new Error(error.message);
+    // Storage reports existing objects as HTTP 400 with a specific message;
+    // older responses use 409. Other bad requests must still fail the save.
+    // Signing/readback confirm the existing object without replacing its bytes.
+    if (error) {
+      const status = String(error.statusCode);
+      const duplicate = status === '409' || (status === '400'
+        && /^(?:The resource already exists|Asset Already Exists)$/i.test(error.message));
+      if (!duplicate) throw new Error(error.message);
+    }
     const url = await publish(entry);
     put({ ...entry, title: undefined, action: 'published' }, uid, id);
     return url;
