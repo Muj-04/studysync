@@ -1,3 +1,4 @@
+import { requireDocumentGeneration, assertDocumentOwner } from './documentProtocol';
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 import { createSerialQueue } from '@/lib/persistence/serialQueue';
 import { sb, userId } from './dbShared';
@@ -8,10 +9,13 @@ const enqueueSessionWrite = createSerialQueue();
 let latestSessionRequest = 0;
 
 async function saveSessionStateNow(uid: string, docId: string, virtualIndex: number) {
-  await sb().from('session_state').upsert({
-    user_id: uid, doc_id: docId, virtual_index: virtualIndex,
+  const document_generation = await requireDocumentGeneration(uid, docId);
+  await assertDocumentOwner(uid);
+  const { error } = await sb().from('session_state').upsert({
+    user_id: uid, doc_id: docId, document_generation, virtual_index: virtualIndex,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' });
+  if (error) throw error;
 }
 
 export async function fetchSessionState(): Promise<{ docId: string; virtualIndex: number } | null> {
@@ -72,8 +76,10 @@ export async function fetchDashboardData() {
 
 export async function startStudySession(docId: string): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
+  const document_generation = await requireDocumentGeneration(uid, docId);
+  await assertDocumentOwner(uid);
   const { data, error } = await sb().from('study_sessions')
-    .insert({ user_id: uid, document_id: docId })
+    .insert({ user_id: uid, document_id: docId, document_generation })
     .select('id').single();
   if (error) { console.error('[DB] startStudySession error:', error.message); return null; }
   return data.id;
