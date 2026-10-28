@@ -108,3 +108,14 @@ test('real bookmark read failure cannot replace cloud bookmarks with stale cache
   await new Promise(setImmediate);
   assert.deepEqual(writes, []);
 });
+
+test('successful remote absence does not promote cached text pages into new cloud writes', async () => {
+  const cached = { 'doc:1': [{ id: 'deleted-note', content: 'older cached copy' }], 'other:1': [{ id: 'other' }] };
+  const { run, writes } = hydrationEffect({ pageTextNotes: cached });
+  run();
+  await new Promise(setImmediate);
+  assert.equal(writes.some(([kind]) => kind === 'save-notes'), false,
+    'an absent remote page may have been deleted; hydration must not resurrect its cache');
+  assert.equal(cached['doc:1'][0].content, 'older cached copy', 'retain ambiguous local work for recovery');
+  assert.equal(cached['other:1'][0].id, 'other');
+});

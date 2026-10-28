@@ -62,7 +62,6 @@ import {
   fetchVoiceNotes,
   fetchAllPageImages,
   saveBookmarks as dbSaveBookmarks,
-  saveTextNotes as dbSaveTextNotes,
   saveSessionState as dbSaveSessionState,
   uploadRoomPdf,
   createRoom,
@@ -421,17 +420,10 @@ export default function WorkspacePage() {
         seedTextNotes(prefixedNotes);
       }
 
-      // Upload local-only text note pages that Supabase doesn't have yet
-      const localPrefix = `${canonicalId}:`;
-      const remotePageKeys = new Set(Object.keys(remoteTextNotes));
-      for (const [fullKey, notes] of Object.entries(pageTextNotes)) {
-        if (!fullKey.startsWith(localPrefix)) continue;
-        const pageKey = fullKey.slice(localPrefix.length);
-        if (remotePageKeys.has(pageKey)) continue;
-        if (notes.length === 0) continue;
-        console.log('[StudySync] uploading local-only text notes for page:', pageKey, 'count:', notes.length);
-        void dbSaveTextNotes(canonicalId, pageKey, notes).catch(console.error);
-      }
+      // Remote absence is ambiguous: this can be a deletion from another device,
+      // not a new local page. Hydration must never promote a clean cache to a
+      // write. useTextNotes owns explicit edits and its account-scoped outbox;
+      // ambiguous cached content stays local until the user edits it.
 
       // Seed voice notes fetched with the canonical docId — happens after ID resolution
       // so documentId always matches and pageNumber is already normalized to number
