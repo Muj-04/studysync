@@ -15,6 +15,12 @@ export function deletePendingDocumentNotes(docId: string) {
 export async function deleteLocalDocument(docId: string) {
   await deletePdfBlob(docId);
   deletePendingDocumentNotes(docId);
+  const drawingPendingKey = `${KEYS.DRAWINGS}_pending`;
+  const drawingPending = storageGet<string[]>(drawingPendingKey);
+  if (drawingPending) storageSet(drawingPendingKey, drawingPending.filter((key) => !key.startsWith(`${docId}:`)));
+  const blankPendingKey = `${KEYS.BLANK_PAGES}_pending`;
+  const blankPending = storageGet<string[]>(blankPendingKey);
+  if (blankPending) storageSet(blankPendingKey, blankPending.filter((id) => id !== docId));
   for (const key of [KEYS.DRAWINGS, KEYS.TEXT_NOTES, KEYS.PAGE_IMAGES]) {
     const values = storageGet<Record<string, unknown>>(key) ?? {};
     storageSet(key, Object.fromEntries(Object.entries(values).filter(([id]) => id !== docId && !id.startsWith(`${docId}:`))));
