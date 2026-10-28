@@ -151,14 +151,21 @@ BEGIN
  SELECT * INTO STRICT o FROM recording_private.operations WHERE id=p_id FOR UPDATE;
  IF p_lease IS NOT NULL AND (o.lease_token IS DISTINCT FROM p_lease OR o.lease_until<=now()) THEN RAISE EXCEPTION 'Stale recording lease'; END IF;
  IF o.state<>'awaiting_upload' THEN RETURN recording_private.reply(o); END IF;
- IF NOT allowed OR o.upload_deadline<=now() THEN
+ IF NOT allowed THEN
   UPDATE recording_private.operations SET state='deleting',lease_token=NULL,lease_until=NULL,next_attempt_at=now() WHERE id=o.id RETURNING * INTO o;
   RETURN recording_private.reply(o);
  END IF;
  SELECT metadata INTO bytes FROM storage.objects WHERE bucket_id='voice-notes' AND name=o.object_path;
- IF NOT FOUND THEN RAISE EXCEPTION 'Recording bytes have not been uploaded'; END IF;
- IF coalesce((bytes->>'size')::bigint,-1)<>o.byte_size OR coalesce(bytes->>'mimetype','')<>o.mime THEN
-  UPDATE recording_private.operations SET state='deleting',lease_token=NULL,lease_until=NULL,last_error='Uploaded bytes did not match declared size/type' WHERE id=o.id RETURNING * INTO o;
+ IF NOT FOUND THEN
+  -- The deadline limits admission of new bytes, not recovery of committed audio.
+  -- A worker outage or metadata failure must never expire an uploaded recording.
+  IF o.upload_deadline>now() THEN RAISE EXCEPTION 'Recording bytes have not been uploaded'; END IF;
+  UPDATE recording_private.operations SET state='deleting',lease_token=NULL,lease_until=NULL,next_attempt_at=now() WHERE id=o.id RETURNING * INTO o;
+  RETURN recording_private.reply(o);
+ END IF;
+ IF (bytes->'size') IS DISTINCT FROM to_jsonb(o.byte_size) OR coalesce(bytes->>'mimetype','')<>o.mime THEN
+  -- Retain uncertain bytes for explicit owner deletion or operator reconciliation.
+  UPDATE recording_private.operations SET state='blocked',lease_token=NULL,lease_until=NULL,last_error='Uploaded bytes did not match declared size/type; retained for reconciliation' WHERE id=o.id RETURNING * INTO o;
   RETURN recording_private.reply(o);
  END IF;
  UPDATE recording_private.operations SET state='published',lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=o.id RETURNING * INTO o;
