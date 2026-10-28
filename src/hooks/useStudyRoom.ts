@@ -193,6 +193,15 @@ export function useStudyRoom(
         )
         .on(
           'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'room_voice_notes', filter: `room_id=eq.${roomId}` },
+          (payload) => {
+            if (generation !== generationRef.current) return;
+            const noteId = (payload.new as { id?: string } | undefined)?.id;
+            if (noteId) onVoiceNoteAddedRef.current?.(noteId);
+          },
+        )
+        .on(
+          'postgres_changes',
           { event: 'DELETE', schema: 'public', table: 'room_voice_notes', filter: `room_id=eq.${roomId}` },
           (payload) => {
             if (generation !== generationRef.current) return;

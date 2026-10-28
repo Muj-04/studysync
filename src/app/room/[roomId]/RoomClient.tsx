@@ -462,6 +462,11 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // Refs to wire useStudyRoom callbacks → useRoomVoiceNotes (defined after hooks)
   const addIncomingNoteRef    = useRef<((p: RoomVoiceNotePayload) => void) | null>(null);
   const removeIncomingNoteRef = useRef<((id: string) => void) | null>(null);
+  const voiceNoteRequestsRef = useRef(new Map<string, symbol>());
+  useEffect(() => {
+    const requests = voiceNoteRequestsRef.current;
+    return () => { requests.clear(); };
+  }, [roomId]);
   const seedNotesRef          = useRef<((remote: Parameters<ReturnType<typeof useRoomVoiceNotes>['seedNotes']>[0]) => void) | null>(null);
 
   const { activeDocument, addDocument, removeDocument, goToPage } = usePDF({ persist: false });
@@ -549,8 +554,22 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [roomId, appendStrokeLocal]);
 
   const handleIncomingVoiceNoteAdded = useCallback(async (noteId: string) => {
+    const requests = voiceNoteRequestsRef.current;
+    const request = Symbol(noteId);
+    requests.set(noteId, request);
     console.log('[Room] received voice_note_added, fetching from DB:', noteId);
-    const note = await fetchSingleRoomVoiceNote(noteId, roomId);
+    let note: Awaited<ReturnType<typeof fetchSingleRoomVoiceNote>>;
+    try {
+      note = await fetchSingleRoomVoiceNote(noteId, roomId);
+    } catch (error) {
+      if (requests.get(noteId) === request) {
+        requests.delete(noteId);
+        console.warn('[Room] voice-note metadata refresh failed:', error);
+      }
+      return;
+    }
+    if (requests.get(noteId) !== request) return;
+    requests.delete(noteId);
     console.log('[Room] fetched note from DB:', note);
     if (note && note.audioUrl) {
       addIncomingNoteRef.current?.({
@@ -567,6 +586,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, [roomId]);
 
   const handleIncomingVoiceNoteDelete = useCallback((id: string) => {
+    voiceNoteRequestsRef.current.delete(id);
     removeIncomingNoteRef.current?.(id);
   }, []);
 
