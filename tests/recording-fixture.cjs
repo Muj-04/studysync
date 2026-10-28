@@ -47,6 +47,7 @@ function fixture(kind = 'room') {
     return q;
   } };
   const mocks = {
+    './documentProtocol': { assertDocumentOwner: async owner => { if (state.uid !== owner) throw Error('account changed'); } },
     './dbShared': { sb: () => client, userId: async () => state.uid, ensureDoc: async () => { if (state.registrationGate) await state.registrationGate; } },
     '@/lib/storage': { storageGet: k => values[k] ?? null, storageSet: (k,v) => { if (state.denyStorage) return false; values[k]=JSON.parse(JSON.stringify(v)); return true; } },
   };

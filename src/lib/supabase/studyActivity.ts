@@ -11,10 +11,9 @@ let latestSessionRequest = 0;
 async function saveSessionStateNow(uid: string, docId: string, virtualIndex: number) {
   const document_generation = await requireDocumentGeneration(uid, docId);
   await assertDocumentOwner(uid);
-  const { error } = await sb().from('session_state').upsert({
-    user_id: uid, doc_id: docId, document_generation, virtual_index: virtualIndex,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' });
+  const { error } = await sb().rpc('save_document_position_v2', {
+    p_document_id: docId, p_generation: document_generation, p_virtual_index: virtualIndex,
+  });
   if (error) throw error;
 }
 
