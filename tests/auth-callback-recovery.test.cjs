@@ -30,7 +30,7 @@ function mount(t, overrides = {}) {
     } }) },
     '@/lib/supabase/db': {
       ensureProfile: async () => {}, ensureReferralCode: async () => null,
-      processReferral: async () => {}, ...overrides.db,
+      recoverPendingReferral: async () => 'none', ...overrides.db,
     },
   });
   return { render: () => nodes(harness.render(Page)), destinations, unmount: harness.unmount };
@@ -75,7 +75,7 @@ test('callback rejects invalid initialization without running profile setup', as
   assert.equal(profiles, 0);
 });
 
-for (const method of ['ensureReferralCode', 'processReferral']) {
+for (const method of ['ensureReferralCode', 'recoverPendingReferral']) {
   test(`optional ${method} failure does not block authenticated navigation`, async t => {
     const app = mount(t, { db: { [method]: async () => { throw new Error('referral unavailable'); } } });
     global.localStorage = { getItem: () => 'PENDING', removeItem() {} };

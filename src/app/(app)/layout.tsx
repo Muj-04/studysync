@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import LeftRail from '@/components/LeftRail';
+import ReferralRecovery from '@/components/ReferralRecovery';
 
 /**
  * Shared layout for authenticated app pages — Workspace, Library,
@@ -15,6 +16,7 @@ import LeftRail from '@/components/LeftRail';
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+      <ReferralRecovery />
       <LeftRail />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         {children}
