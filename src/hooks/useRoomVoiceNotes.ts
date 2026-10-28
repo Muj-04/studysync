@@ -1,4 +1,5 @@
 'use client';
+import { createRoomSnapshotGate } from '@/lib/roomSnapshot';
 import { useRecordingLifetime } from './useRecordingLifetime';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
@@ -39,7 +40,13 @@ export function useRoomVoiceNotes(
   const lifetime = useRef({ active: false, generation: 0 });
   const retrySaves = useRef(new Map<string, () => Promise<void>>());
   useEffect(() => {
+    const gate = snapshots.current;
     lifetime.current = { active: true, generation: lifetime.current.generation + 1 };
+    unsavedNotes.current.clear();
+    deletingNotes.current.clear();
+    // A replacement room must never render the previous room's recordings.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNotes([]);
     const retries = retrySaves.current;
     const retry = () => {
       for (const [id, save] of [...retries.entries()].slice(0, 20)) {
@@ -51,10 +58,14 @@ export function useRoomVoiceNotes(
     if (typeof window !== 'undefined') window.addEventListener('online', retry);
     return () => {
       lifetime.current.active = false;
+      gate.invalidate();
       retries.clear();
       if (typeof window !== 'undefined') window.removeEventListener('online', retry);
     };
   }, [roomId]);
+  const snapshots = useRef(createRoomSnapshotGate<VoiceNote>());
+  const unsavedNotes = useRef(new Set<string>());
+  const deletingNotes = useRef(new Set<string>());
   const pendingSaves = useRef(new Map<string, Promise<void>>());
   const recordingRef    = useRef<RecordingState | null>(null);
   const acquireStream = useRecordingLifetime(recordingRef, roomId);
@@ -92,7 +103,25 @@ export function useRoomVoiceNotes(
     return () => { lifetime.active = false; };
   }, [roomId]);
 
+  const beginReconcileNotes = useCallback((isCurrent: () => boolean = () => true) => {
+    const protectedIds = () => [...unsavedNotes.current, ...pendingSaves.current.keys(), ...titleWrites.current.keys(), ...deletingNotes.current];
+    const merge = snapshots.current.begin(protectedIds());
+    const generation = lifetime.current.generation;
+    return (remote: Parameters<typeof seedNotes>[0]) => {
+      if (!isCurrent() || !lifetime.current.active || generation !== lifetime.current.generation) return;
+      for (const note of remote) {
+        if (note.audioUrl && !pendingSaves.current.has(note.id)) unsavedNotes.current.delete(note.id);
+      }
+      const incoming: VoiceNote[] = remote.filter(note => note.audioUrl).map(note => ({
+        ...note, documentId: roomId, audioUrl: note.audioUrl!,
+        audioBlob: new Blob([], { type: 'audio/webm' }), timestamp: new Date(note.timestamp),
+      }));
+      setNotes(local => isCurrent() ? merge(local, incoming, protectedIds(), (current, next) => ({ ...current, title: next.title })) : local);
+    };
+  }, [roomId]);
+
   const addIncomingNote = useCallback((payload: RoomVoiceNotePayload) => {
+    snapshots.current.touch(payload.id);
     setNotes((prev) => {
       if (prev.some((n) => n.id === payload.id)) {
         return prev.map((note) => note.id === payload.id ? { ...note, title: payload.title } : note);
@@ -111,6 +140,7 @@ export function useRoomVoiceNotes(
   }, [roomId]);
 
   const removeIncomingNote = useCallback((noteId: string) => {
+    snapshots.current.touch(noteId);
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
   }, []);
 
@@ -158,6 +188,8 @@ export function useRoomVoiceNotes(
         timestamp: new Date(),
       };
 
+      unsavedNotes.current.add(note.id);
+      snapshots.current.touch(note.id);
       setNotes((prev) => [...prev, note]);
 
       const sync = (): Promise<void> => {
@@ -167,6 +199,8 @@ export function useRoomVoiceNotes(
         const save = saveRoomVoiceNote(roomId, note, owner).then((remoteUrl) => {
           if (!remoteUrl) throw new Error('The recording was not saved.');
           retrySaves.current.delete(note.id);
+          unsavedNotes.current.delete(note.id);
+          snapshots.current.touch(note.id);
           if (isCurrent()) onNoteAddedRef.current?.(note.id);
         }).catch((error: unknown) => {
           console.warn('[VoiceNote] room recording save failed:', error);
@@ -205,6 +239,8 @@ export function useRoomVoiceNotes(
   }, []);
 
   const deleteNote = useCallback(async (id: string) => {
+    deletingNotes.current.add(id);
+    snapshots.current.touch(id);
     const generation = lifetime.current.generation;
     const isCurrent = () => lifetime.current.active && lifetime.current.generation === generation;
     // Finish an in-flight upload first so it cannot recreate a deleted note.
@@ -219,14 +255,17 @@ export function useRoomVoiceNotes(
         if (note && note.audioBlob.size > 0) URL.revokeObjectURL(note.audioUrl);
         return prev.filter((n) => n.id !== id);
       });
+      unsavedNotes.current.delete(id);
+      snapshots.current.touch(id);
       onNoteDeletedRef.current?.(id);
     } catch (error) {
       console.warn('[VoiceNote] room recording deletion failed:', error);
       if (isCurrent()) alert('Could not delete this recording. Please try again.');
-    }
+    } finally { deletingNotes.current.delete(id); }
   }, [roomId]);
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
+    snapshots.current.touch(id);
     const lifetime = titleLifetime.current;
     const previous = titleWrites.current.get(id) ?? Promise.resolve();
     // Preserve edit order at the database as well as in the local view.
@@ -234,6 +273,7 @@ export function useRoomVoiceNotes(
       if (!lifetime.active) return;
       await updateRoomVoiceNoteTitle(id, title || undefined);
       if (!lifetime.active) return;
+      snapshots.current.touch(id);
       setNotes((prev) => prev.map((note) => note.id === id ? { ...note, title: title || undefined } : note));
     }).catch((error: unknown) => {
       console.warn('[VoiceNote] room title update failed:', error);
@@ -253,6 +293,6 @@ export function useRoomVoiceNotes(
   return {
     notes, isRecording, recordingDuration, recordingContext,
     startRecording, stopRecording, deleteNote, updateNoteTitle,
-    getNotesForPage, seedNotes, addIncomingNote, removeIncomingNote,
+    getNotesForPage, seedNotes, beginReconcileNotes, addIncomingNote, removeIncomingNote,
   };
 }
