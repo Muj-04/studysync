@@ -78,8 +78,21 @@ test('failed room upload retries retained audio on reconnect and stops after suc
   const s=setup(t,async(room,note,owner)=>{owners.push(owner);if(++attempts===1)throw Error('offline');return 'url';});
   await s.record();s.online();await tick();assert.equal(attempts,2);assert.equal(s.added,1);assert.deepEqual(owners,['user','user']);
   s.online();await tick();assert.equal(attempts,2);
+  s.render().beginReconcileNotes()([]);
+  assert.equal(s.render().notes.length,0,'a confirmed retry releases the unsaved guard for later authoritative removal');
 });
 test('room retry is cancelled after scope change',async t=>{
   let attempts=0;const s=setup(t,async()=>{attempts++;throw Error('offline');});await s.record();
   s.render('other');s.online();await tick();assert.equal(attempts,1);
+});
+test('reconnect preserves failed local audio until remote recovery confirms it', async t => {
+  const s = setup(t, async () => { throw Error('offline'); });
+  const n = await s.record();
+  s.render().beginReconcileNotes()([]);
+  assert.equal(s.render().notes.length, 1);
+  s.render().beginReconcileNotes()([{ id: n.id, pageNumber: 1, duration: 1, audioUrl: 'https://audio.invalid/recovered', timestamp: n.timestamp.toISOString() }]);
+  assert.equal(s.render().notes.length, 1);
+  // Once confirmed remotely, a subsequent authoritative removal is honored.
+  s.render().beginReconcileNotes()([]);
+  assert.equal(s.render().notes.length, 0);
 });

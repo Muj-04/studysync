@@ -13,12 +13,14 @@ export async function fetchRoomVoiceNotes(roomId: string): Promise<Array<{
   duration: number; title?: string; audioUrl?: string; timestamp: string;
 }>> {
   await recoverRecordings('room', roomId);
-  const { data, error } = await sb()
+  const { data, error, count } = await sb()
     .from('room_voice_notes')
-    .select('id, page_number, duration, title, audio_url, timestamp')
+    .select('id, page_number, duration, title, audio_url, timestamp', { count: 'exact' })
     .eq('room_id', roomId)
     .order('timestamp', { ascending: false });
-  if (error) { console.error('[DB] fetchRoomVoiceNotes error:', error.message); return []; }
+  if (error) throw new Error(error.message);
+  // Never use a capped response as evidence that omitted rows were deleted.
+  if (count === null || count !== (data ?? []).length) throw new Error('Room snapshot is incomplete.');
   return (data ?? []).map((r) => ({
     id: r.id,
     pageNumber: isNaN(Number(r.page_number)) ? r.page_number : Number(r.page_number),
@@ -54,7 +56,7 @@ export async function saveRoomBlankPage(
   roomId: string,
   page: { id: string; insertAfterPage: number; bgTheme: 'white' | 'dark'; createdAt: number },
 ): Promise<void> {
-  const uid = await userId(); if (!uid) return;
+  const uid = await userId(); if (!uid) throw new Error('Sign in to save room pages.');
   const { error } = await sb().from('room_blank_pages').upsert({
     id: page.id,
     room_id: roomId,
@@ -63,18 +65,20 @@ export async function saveRoomBlankPage(
     created_at: page.createdAt,
     created_by: uid,
   }, { onConflict: 'id' });
-  if (error) console.error('[DB] saveRoomBlankPage error:', error.message);
+  if (error) throw new Error(error.message);
 }
 
 export async function fetchRoomBlankPages(
   roomId: string,
 ): Promise<Array<{ id: string; insertAfterPage: number; bgTheme: 'white' | 'dark'; createdAt: number }>> {
-  const { data, error } = await sb()
+  const { data, error, count } = await sb()
     .from('room_blank_pages')
-    .select('id, insert_after_page, bg_theme, created_at')
+    .select('id, insert_after_page, bg_theme, created_at', { count: 'exact' })
     .eq('room_id', roomId)
     .order('created_at', { ascending: true });
-  if (error) { console.error('[DB] fetchRoomBlankPages error:', error.message); return []; }
+  if (error) throw new Error(error.message);
+  // Never use a capped response as evidence that omitted rows were deleted.
+  if (count === null || count !== (data ?? []).length) throw new Error('Room snapshot is incomplete.');
   return (data ?? []).map((r) => ({
     id: r.id,
     insertAfterPage: r.insert_after_page as number,

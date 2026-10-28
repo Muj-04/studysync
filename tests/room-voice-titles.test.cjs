@@ -48,7 +48,7 @@ for (const action of ['unmount', 'switch']) for (const outcome of ['success', 'f
     const updating = s.render().updateNoteTitle('note', 'late'); await tick();
     if (action === 'unmount') s.unmount(); else s.render('next');
     gate.resolve(); await updating; await tick();
-    assert.equal(s.alerts.length, 0); assert.equal(s.render('next').notes[0].title, 'old');
+    assert.equal(s.alerts.length, 0); s.render('next'); assert.deepEqual(s.render('next').notes, []);
   });
 }
 test('room realtime refreshes authoritative metadata for a voice-note UPDATE', async () => {
