@@ -4,26 +4,26 @@ const { loadSource } = require('./load-source.cjs');
 const { createHookHarness } = require('./hook-harness.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
-const note = () => ({ id: 'note', pageNumber: 1, audioBlob: new Blob(['audio'], { type: 'audio/webm' }), timestamp: new Date(), duration: 1 });
+const { fixture } = require('./recording-fixture.cjs');
 for (const stage of ['upload', 'sign']) {
   test(`room audio ${stage} failure cannot persist unplayable metadata`, async () => {
-    let writes = 0;
-    const storage = { upload: async () => ({ error: stage === 'upload' ? { message: 'offline' } : null }), createSignedUrl: async () => ({ data: null, error: { message: 'denied' } }) };
-    const db = loadSource('src/lib/supabase/roomAnnotations.ts', { './dbShared': { userId: async () => 'user', sb: () => ({ storage: { from: () => storage }, from: () => ({ upsert: async () => { writes++; return { error: null }; } }) }) } });
-    await assert.rejects(db.saveRoomVoiceNote('room', note()));
-    assert.equal(writes, 0);
+    const f=fixture(); f.state.fail=stage;
+    await assert.rejects(f.save());
+    assert.equal(f.rows.size, 0);
   });
 }
 function setup(t, save, remove = async () => {}) {
   const harness = createHookHarness(); let recorder; const alerts = []; let added = 0; let deleted = 0;
-  const oldRecorder = global.MediaRecorder, oldAlert = global.alert;
+  const oldRecorder = global.MediaRecorder, oldAlert = global.alert, oldWindow=global.window;
+  const listeners=new Map();
+  global.window={addEventListener:(event,fn)=>listeners.set(event,fn),removeEventListener:event=>listeners.delete(event)};
   global.alert = message => alerts.push(message);
   global.MediaRecorder = class { static isTypeSupported() { return true; } constructor() { Object.assign(this, { state: 'inactive' }); Object.assign(global.MediaRecorder, { latest: this }); } start() { this.state = 'recording'; } stop() { this.state = 'inactive'; this.onstop?.(); } };
   t.mock.method(console, 'warn', () => {});
-  t.after(() => { harness.unmount(); global.MediaRecorder = oldRecorder; global.alert = oldAlert; });
+  t.after(() => { harness.unmount(); global.MediaRecorder = oldRecorder; global.alert = oldAlert; global.window=oldWindow; });
   const { useRoomVoiceNotes } = loadSource('src/hooks/useRoomVoiceNotes.ts', { react: harness.react, './useRecordingLifetime': { useRecordingLifetime: () => async () => ({ getTracks: () => [] }) }, '@/lib/supabase/client': { createClient: () => ({ auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) } }) }, '@/lib/supabase/db': { saveRoomVoiceNote: save, deleteRoomVoiceNote: remove } });
   const render = (room = 'room') => harness.render(() => useRoomVoiceNotes(room, () => added++, () => deleted++));
-  return { render, unmount: harness.unmount, alerts, get added() { return added; }, get deleted() { return deleted; }, async record() { const hook = render(); await tick(); await hook.startRecording(1); recorder = global.MediaRecorder.latest; recorder.ondataavailable({ data: new Blob(['audio']) }); hook.stopRecording(); await tick(); const n = render().notes[0]; t.after(() => URL.revokeObjectURL(n.audioUrl)); return n; } };
+  return { online:()=>listeners.get('online')?.(), render, unmount: harness.unmount, alerts, get added() { return added; }, get deleted() { return deleted; }, async record() { const hook = render(); await tick(); await hook.startRecording(1); recorder = global.MediaRecorder.latest; recorder.ondataavailable({ data: new Blob(['audio']) }); hook.stopRecording(); await tick(); const n = render().notes[0]; t.after(() => URL.revokeObjectURL(n.audioUrl)); return n; } };
 }
 test('room recording save rejection retains audio and reports the failed save', async t => {
   const s = setup(t, async () => { throw Error('offline'); });
@@ -45,19 +45,19 @@ test('room deletion rejection retains the visible audio and reports failure', as
 });
 for (const stage of ['storage', 'database']) {
   test(`room deletion propagates ${stage} errors instead of reporting success`, async () => {
-    let databaseDeletes = 0;
-    const db = loadSource('src/lib/supabase/roomAnnotations.ts', { './dbShared': { sb: () => ({ storage: { from: () => ({ remove: async () => ({ error: stage === 'storage' ? { message: 'offline' } : null }) }) }, from: () => ({ delete: () => ({ eq: async () => { databaseDeletes++; return { error: stage === 'database' ? { message: 'offline' } : null }; } }) }) }) } });
-    await assert.rejects(db.deleteRoomVoiceNote('note', 'room'));
-    assert.equal(databaseDeletes, stage === 'storage' ? 0 : 1);
+    const f=fixture(); await f.save();
+    f.state.fail=stage === 'storage' ? 'remove' : 'database-delete';
+    await assert.rejects(f.remove());
+    assert.equal(f.rows.size, stage === 'storage' ? 0 : 1);
+    assert.equal(f.objects.size, 1);
   });
 }
 test('successful room audio save publishes playable metadata and database failure rejects', async () => {
-  let row; let databaseFailure = false;
-  const db = loadSource('src/lib/supabase/roomAnnotations.ts', { './dbShared': { userId: async () => 'user', sb: () => ({ storage: { from: () => ({ upload: async () => ({ error: null }), createSignedUrl: async () => ({ data: { signedUrl: 'https://audio.invalid/note' }, error: null }) }) }, from: () => ({ upsert: async value => { row = value; return { error: databaseFailure ? { message: 'database unavailable' } : null }; } }) }) } });
-  assert.equal(await db.saveRoomVoiceNote('room', note()), 'https://audio.invalid/note');
-  assert.equal(row.audio_url, 'https://audio.invalid/note'); assert.equal(row.room_id, 'room');
-  databaseFailure = true;
-  await assert.rejects(db.saveRoomVoiceNote('room', note()), /database unavailable/);
+  const f=fixture();
+  assert.match(await f.save(), /voice-notes/);
+  assert.equal(f.rows.get('note').room_id, 'scope');
+  f.note.id='failed'; f.state.fail='database';
+  await assert.rejects(f.save(), /database failed/);
 });
 test('room recording null URL is reported as a save failure', async t => {
   const s = setup(t, async () => null);
@@ -72,6 +72,19 @@ for (const action of ['unmount', 'switch']) for (const outcome of ['success', 'f
     assert.equal(s.added, 0); assert.equal(s.alerts.length, 0);
   });
 }
+
+test('failed room upload retries retained audio on reconnect and stops after success', async t=>{
+  let attempts=0;const owners=[];
+  const s=setup(t,async(room,note,owner)=>{owners.push(owner);if(++attempts===1)throw Error('offline');return 'url';});
+  await s.record();s.online();await tick();assert.equal(attempts,2);assert.equal(s.added,1);assert.deepEqual(owners,['user','user']);
+  s.online();await tick();assert.equal(attempts,2);
+  s.render().beginReconcileNotes()([]);
+  assert.equal(s.render().notes.length,0,'a confirmed retry releases the unsaved guard for later authoritative removal');
+});
+test('room retry is cancelled after scope change',async t=>{
+  let attempts=0;const s=setup(t,async()=>{attempts++;throw Error('offline');});await s.record();
+  s.render('other');s.online();await tick();assert.equal(attempts,1);
+});
 test('reconnect preserves failed local audio until remote recovery confirms it', async t => {
   const s = setup(t, async () => { throw Error('offline'); });
   const n = await s.record();

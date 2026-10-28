@@ -1,63 +1,14 @@
+import { saveRecording, deleteRecording, recoverRecordings } from './recordingRecovery';
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 import { sb, userId, ensureDoc } from './dbShared';
 import type { VoiceNote } from '@/types';
 
 // ── Voice Notes ──────────────────────────────────────────────────────────────
 
-async function saveVoiceNoteNow(note: VoiceNote) {
-  const uid = await userId(); if (!uid) { console.error('[DB] saveVoiceNote — no uid, aborting'); return null; }
-  console.log('[DB] saveVoiceNote start — id:', note.id, 'blob size:', note.audioBlob?.size ?? 0, 'blob mime:', note.audioBlob?.type ?? 'none');
+async function saveVoiceNoteNow(note: VoiceNote, uid: string) {
+  if (await userId() !== uid) throw new Error('The account changed before recording synchronization finished.');
   await ensureDoc(uid, note.documentId);
-
-  let audioUrl: string | null = null;
-
-  if (note.audioBlob && note.audioBlob.size > 0) {
-    // Strip codecs parameter (e.g. "audio/webm;codecs=opus" → "audio/webm") so
-    // the upload content-type matches the bucket's allowed_mime_types exactly.
-    const mimeType = note.audioBlob.type.split(';')[0] || 'audio/webm';
-    const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
-    const path = `${uid}/${note.documentId}/${note.id}.${ext}`;
-    console.log('[DB] saveVoiceNote uploading — path:', path, 'mimeType:', mimeType, 'size:', note.audioBlob.size);
-
-    const { data: uploadData, error: uploadError } = await sb().storage
-      .from('voice-notes')
-      .upload(path, note.audioBlob, { upsert: true, contentType: mimeType });
-
-    if (uploadError) {
-      console.error('[DB] saveVoiceNote upload FAILED:', uploadError.message, '| statusCode:', (uploadError as { statusCode?: string }).statusCode, '| path:', path);
-    } else {
-      console.log('[DB] saveVoiceNote upload OK — path:', uploadData?.path ?? path);
-      // Bucket is private — getPublicUrl always returns a string (it's URL construction
-      // only, no auth check), so that URL would 403. Always use signed URL instead.
-      const { data: signed, error: signError } = await sb().storage
-        .from('voice-notes')
-        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10); // 10-year TTL
-      if (signError) {
-        console.error('[DB] saveVoiceNote createSignedUrl FAILED:', signError.message);
-      } else {
-        audioUrl = signed?.signedUrl ?? null;
-        console.log('[DB] saveVoiceNote signed URL:', audioUrl ? audioUrl.slice(0, 100) + '…' : 'NULL');
-      }
-    }
-  } else {
-    console.warn('[DB] saveVoiceNote — blob is empty or missing, skipping upload');
-  }
-
-  const { error: dbError } = await sb().from('voice_notes').upsert({
-    id: note.id,
-    user_id: uid,
-    document_id: note.documentId,
-    page_number: String(note.pageNumber),
-    duration: note.duration,
-    title: note.title ?? null,
-    audio_url: audioUrl,
-    audio_size_bytes: note.audioBlob?.size ?? 0,
-    timestamp: note.timestamp instanceof Date ? note.timestamp.toISOString() : note.timestamp,
-  }, { onConflict: 'id' });
-
-  if (dbError) console.error('[DB] saveVoiceNote DB upsert FAILED:', dbError.message, '| code:', dbError.code);
-  else console.log('[DB] saveVoiceNote DB upsert OK — id:', note.id, 'audio_url stored:', audioUrl ? 'yes' : 'NO (null)');
-  return dbError ? null : audioUrl;
+  return saveRecording('document', note.documentId, note, uid);
 }
 
 export async function fetchVoiceNotes(docId?: string): Promise<Array<{
@@ -65,6 +16,8 @@ export async function fetchVoiceNotes(docId?: string): Promise<Array<{
   duration: number; title?: string; audioUrl?: string; timestamp: string;
 }>> {
   const uid = await userId(); if (!uid) { console.warn('[DB] fetchVoiceNotes — no uid'); return []; }
+  await recoverRecordings('document', docId);
+  if (await userId() !== uid) throw new Error('The account changed while loading recordings.');
   let q = sb().from('voice_notes').select('*').eq('user_id', uid);
   if (docId) q = q.eq('document_id', docId);
   const { data, error } = await q.order('timestamp', { ascending: false });
@@ -88,17 +41,15 @@ export async function updateVoiceNoteTitle(noteId: string, title: string | undef
   await sb().from('voice_notes').update({ title: title ?? null }).eq('id', noteId).eq('user_id', uid);
 }
 
-export async function deleteVoiceNote(noteId: string, docId: string) {
-  const uid = await userId(); if (!uid) return;
-  const ext = ['webm', 'ogg', 'mp4'];
-  for (const e of ext) {
-    await sb().storage.from('voice-notes').remove([`${uid}/${docId}/${noteId}.${e}`]);
-  }
-  await sb().from('voice_notes').delete().eq('id', noteId);
+export async function deleteVoiceNote(noteId: string, docId: string, expectedOwner?: string) {
+  return deleteRecording('document', docId, noteId, expectedOwner);
 }
 
 
 /** Share the document lifetime with collection writes and deletion. */
-export function saveVoiceNote(...args: Parameters<typeof saveVoiceNoteNow>): ReturnType<typeof saveVoiceNoteNow> {
-  return enqueueDocumentWrite(args[0].documentId, () => saveVoiceNoteNow(...args));
+export async function saveVoiceNote(note: VoiceNote, expectedOwner?: string): Promise<string> {
+  const uid = await userId();
+  if (!uid) throw new Error('Sign in to save recordings.');
+  if (expectedOwner && uid !== expectedOwner) throw new Error('The account changed before recording synchronization finished.');
+  return enqueueDocumentWrite(note.documentId, () => saveVoiceNoteNow(note, uid));
 }

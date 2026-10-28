@@ -36,7 +36,7 @@ test('initial snapshot cannot undo a live deletion, insertion or title refresh',
 });
 for(const method of ['fetchRoomVoiceNotes','fetchRoomBlankPages']) test(`${method} rejects failed reads instead of an authoritative empty result`,async()=>{
   const query={select(){return this},eq(){return this},order:async()=>({data:null,error:{message:'offline'}})};
-  const db=loadSource('src/lib/supabase/roomAnnotations.ts',{'./dbShared':{sb:()=>({from:()=>query})}});
+  const db=loadSource('src/lib/supabase/roomAnnotations.ts',{'./dbShared':{userId:async()=> 'me',sb:()=>({from:()=>query})}});
   await assert.rejects(db[method]('room'),/offline/);
 });
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
@@ -111,7 +111,7 @@ test('an older successful blank fetch cannot replace a newer reconnect result',a
 });
 for(const method of ['fetchRoomVoiceNotes','fetchRoomBlankPages']) for (const count of [1, null]) test(`${method} rejects truncated/unknown-count (${count}) snapshots before missing rows can be treated as deletions`,async()=>{
   const query={select(){return this},eq(){return this},order:async()=>({data:[],count,error:null})};
-  const db=loadSource('src/lib/supabase/roomAnnotations.ts',{'./dbShared':{sb:()=>({from:()=>query})}});
+  const db=loadSource('src/lib/supabase/roomAnnotations.ts',{'./dbShared':{userId:async()=> 'me',sb:()=>({from:()=>query})}});
   await assert.rejects(db[method]('room'),/incomplete/i);
 });
 test('failed blank creation rejects so its local pending marker cannot be acknowledged',async()=>{
