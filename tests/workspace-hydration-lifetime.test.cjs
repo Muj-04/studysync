@@ -98,7 +98,7 @@ test('real bookmark read failure cannot replace cloud bookmarks with stale cache
   assert.ok(effect);
   const writes = [];
   const deps = {
-    activeDocumentId: 'doc', userId: 'owner', fetchBookmarks,
+    activeDocumentId: 'doc', userId: 'owner', fetchBookmarks, bookmarkEditVersions: { current: new Map() },
     KEYS: { BOOKMARKS: 'bookmarks' }, storageGet: () => ({ doc: [{ id: 'stale-bookmark' }] }),
     setBookmarks: marks => writes.push(['state', marks]), dbSaveBookmarks: async (...args) => writes.push(['save', ...args]),
     console: { error() {} },
