@@ -1,5 +1,7 @@
 # StudySync overnight QA handoff — 28 October 2026
 
+> This section records the overnight snapshot. The final independent review and authorized dev integration are recorded below. Production authorization remains excluded.
+
 ## State and boundaries
 
 Continued the authorized audit after the first report. No PR was merged, neither `dev` nor `main` was pushed directly, no production setting/data/infrastructure changed, and no paid operation occurred. Stripe acceptance remains deferred. Existing worktrees were preserved. All fix PRs target `dev`.
@@ -106,3 +108,52 @@ Useful evidence:
 - Component screenshots: `docs/qa/` on #33/#34 branches, linked from PR descriptions; capture script `/tmp/studysync-overnight-component-shots.cjs`.
 
 To resume: fetch remote state, check actual PR merge/status before editing, preserve existing changes, use the unpublished integration only as local verification evidence, and start with the unresolved items above. Do not merge or modify production without separate authorization.
+
+## Final review and dev integration — 28 October 2026
+
+The owner subsequently authorized merging reviewed, passing PRs #21–#34 into **dev only**. The overnight no-merge statements above describe completed historical work, not the current authorization.
+
+### Reconciliation of test counts and resolved findings
+
+- The first integration (`874b665`) had 179 passing tests from #22–#27. The overnight integration (`490f763`) had 225: five further #27 tests plus #29 (2), #30 (7), #31 (17), #32 (8), #33 (4), and #34 (3), totaling 46 additional tests. Branch suite totals share the original 136 tests and must not be added together.
+- #31 resolves live peer voice-note title synchronization, acknowledged title updates and delayed metadata ordering. It does **not** reconcile events missed while disconnected; that separate issue remains listed above.
+- Later #27 revisions resolve failed text/bookmark reads being treated as successful empty snapshots and in-flight bookmark reads restoring a local removal. Successful remote-absent text-page reconciliation and durable failed-delete replay remain separate limits.
+- #29, #30, #32, #33 and #34 resolve the login preference, image hydration, partial-export error, chat-send recovery and repeated-review schedule defects described above.
+- #21 now recognizes prior owner CAPTCHA login acceptance and the verified redirects, rather than requesting those already-completed checks again.
+
+### Independent review follow-ups
+
+Three reviewers inspected every final code PR diff and its tests, including combined #23/#27/#30 persistence and #24/#31 recording behavior. A separate reviewer cleared the follow-up corrections and documentation.
+
+- #27 at `8c14271`: fixed an introduced replay-versus-hydration race. After a recovered edit saves successfully, a stale initial fetch can no longer overwrite it. The regression failed before correction and passed after; a subsequent clean mount still receives newer cloud notes. Final individual suite: 153 tests; TypeScript passed; lint 0 errors / 28 warnings.
+- #34 at `ca0d189`: now requires a returned flashcard row before acknowledging a review. Deleted/hidden rows produce retryable failure instead of false success. Regression failed before correction and passed after. Final individual suite: 140 tests; TypeScript passed; lint 0 errors / 28 warnings.
+- No remaining important introduced findings were identified in the reviewed fixes. Existing limitations remain: pending-upload recording rename can fail visibly and require retry; initial room snapshots can race live events; reconnect lacks voice/blank snapshots. These are not claims of hosted acceptance.
+
+### Final combined validation
+
+Tested integration `3827a5818de0b9b190254d1f4f5c9f1fc2768a57` is based on freshly fetched `origin/dev` (`179d789`) and includes all final code heads and #21 documentation. #28's subsequent edits are documentation only.
+
+| Check | Final result |
+| --- | --- |
+| `npm ci` | Passed; 0 known vulnerabilities; existing OpenTelemetry deprecation warning |
+| `npm test` | **227 passed**, 0 failed/cancelled/skipped/todo (225 overnight + 2 review regressions) |
+| `npx tsc --noEmit --incremental false` | Passed |
+| `npm run lint` | Passed; 0 errors / 28 existing warnings |
+| `npm run build` | Passed with verified public staging hostname |
+| `git diff --check` | Passed |
+| Local Chromium public/protected routes | 12 public renders and 18 protected redirects across desktop/mobile; 0 page exceptions or horizontal overflows |
+| Local Chromium callback failure/retry | Passed at 1440px and 390px; keyboard retry, destination retained, no duplicate exchange or page exceptions; intercepted synthetic provider responses |
+
+Local build warns that Anthropic, Stripe and service-role credentials are absent. Those provider operations were not exercised. Browser checks establish local application behavior, not hosted authenticated workflows. All final code heads and #21 passed GitHub `checks` and Vercel Preview before normal PR merges; branch protections were not bypassed.
+
+Logs: `/tmp/studysync-review-final-{tests,tsc,lint,build}.log`, `/tmp/studysync-review-browser-{public,callback}.log`. Integration worktree: `/tmp/studysync-reviewed-integration`.
+
+No production rollout is authorized.
+
+### Authorized merge outcome
+
+Merged through normal GitHub PR merges into dev, in order: #22, #23, #27, #30, #24, #31, #25, #29, #26, #32, #33, #34, then #21. The resulting code/release-checklist commit is **`9fad5defd323d051f77c204c442efa18ec60c29a`**. Its entire tree matches tested integration `3827a581` except for the two #28 audit documents being finalized here. No important review finding remains open on these PRs. #28 is the final documentation merge and its final dev/Preview verification is reported with the completion message; it cannot embed its own future merge hash.
+
+Production `main` remains **`0b28bd297b4b05e1b7f1878bda5667c413f76f81`**. No production service, Auth setting, data, migration or deployment was changed. Stripe acceptance remains deferred. Hosted protected Preview and two-account provider acceptance remain unclaimed. The existing release blockers above still apply; dev integration is not production approval.
+
+**Cleanup:** no external fixtures were created. Local browser contexts closed and this run's application server on port 3127 stopped. Audit scripts/logs and isolated worktrees remain as review evidence. Unrelated worktrees were preserved.
