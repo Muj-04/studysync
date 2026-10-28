@@ -11,7 +11,7 @@ function fixture() {
       then(resolve) { if (payload) { writes.push(payload); rows.set(payload.id,payload); } return Promise.resolve({ error:null }).then(resolve); } };
     return query;
   }};
-  const previous=global.localStorage; global.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v)};
+  const previous=global.localStorage; global.localStorage={get length(){return values.size;},key:i=>[...values.keys()][i]??null,getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
   const api=loadSource('src/lib/supabase/documentProtocol.ts', {'./client':{createClient:()=>client}});
   return { api,rows,deleted,writes,owner:v=>owner=v,restore:()=>global.localStorage=previous };
 }
