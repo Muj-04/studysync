@@ -275,11 +275,19 @@ export function useRoomVoiceNotes(
     snapshots.current.touch(id);
     const lifetime = titleLifetime.current;
     const previous = titleWrites.current.get(id) ?? Promise.resolve();
+    const ownerRequest = process.env.NEXT_PUBLIC_SERVER_RECORDING_RECOVERY === 'true'
+      ? createClient().auth.getUser().then(({ data: { user } }) => user?.id ?? null).catch(() => null)
+      : Promise.resolve(undefined);
     // Preserve edit order at the database as well as in the local view.
     const write = previous.then(async () => {
       if (!lifetime.active) return;
-      await updateRoomVoiceNoteTitle(id, title || undefined);
+      const owner = await ownerRequest;
       if (!lifetime.active) return;
+      if (owner === null) throw new Error('Sign in to rename recordings.');
+      await updateRoomVoiceNoteTitle(id, title || undefined, owner);
+      if (!lifetime.active) return;
+      const local = notes.find(note => note.id === id);
+      if (owner && local?.audioBlob.size) void retainRecoveryAudio(owner, { ...local, title: title || undefined }).catch(() => undefined);
       snapshots.current.touch(id);
       setNotes((prev) => prev.map((note) => note.id === id ? { ...note, title: title || undefined } : note));
     }).catch((error: unknown) => {
@@ -290,7 +298,7 @@ export function useRoomVoiceNotes(
     });
     titleWrites.current.set(id, write);
     return write;
-  }, []);
+  }, [notes]);
 
   const getNotesForPage = useCallback(
     (pageNumber: number | string) => notes.filter((n) => n.pageNumber === pageNumber),
