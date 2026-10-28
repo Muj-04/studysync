@@ -98,14 +98,21 @@ function StudyMode({ deck, onExit, onChanged }: { deck: FlashcardDeck; onExit: (
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [completed, setCompleted] = useState(0);
+  const [reviewError, setReviewError] = useState('');
 
   useEffect(() => { loadDeckFlashcards(deck.id).then((loaded) => { setCards(loaded); setLoading(false); }); }, [deck.id]);
   const card = cards[index];
   const next = useCallback(() => { setRevealed(false); setIndex((i) => cards.length ? (i + 1) % cards.length : 0); }, [cards.length]);
   const rate = async (rating: 'again' | 'hard' | 'good' | 'easy') => {
     if (!card || busy) return;
-    setBusy(true);
-    try { await reviewFlashcard(card, rating); setCompleted((n) => n + 1); next(); onChanged(); }
+    setBusy(true); setReviewError('');
+    try {
+      const saved = await reviewFlashcard(card, rating);
+      setCards((current) => current.map((item) => item.id === saved.id ? saved : item));
+      setCompleted((n) => n + 1); next(); onChanged();
+    } catch {
+      setReviewError('Could not save your review. Please try again.');
+    }
     finally { setBusy(false); }
   };
   useEffect(() => {
@@ -125,6 +132,7 @@ function StudyMode({ deck, onExit, onChanged }: { deck: FlashcardDeck; onExit: (
           <div style={{ fontSize: 12, color: 'var(--text-2)' }}>{cards.length ? `${index + 1} of ${cards.length}` : '0 cards'} · {completed} reviewed</div>
         </div>
         <div style={{ height: 5, borderRadius: 99, background: 'var(--bg-elevated)', overflow: 'hidden', marginBottom: 38 }}><div style={{ width: `${cards.length ? ((index + 1) / cards.length) * 100 : 0}%`, height: '100%', background: 'var(--accent)', transition: 'width .2s' }} /></div>
+        {reviewError && <p role="alert" style={{ color: 'var(--red)' }}>{reviewError}</p>}
         {loading ? <div style={{ textAlign: 'center', color: 'var(--text-3)', padding: 100 }}>Loading cards…</div> : !card ? (
           <div style={{ ...panel, padding: 60, textAlign: 'center' }}><Layers size={30} style={{ color: 'var(--text-3)', marginBottom: 12 }} /><h2>This deck has no cards</h2><button onClick={onExit} style={primaryButton}>Back to decks</button></div>
         ) : (
