@@ -11,7 +11,7 @@ function setup() {
     auth: { getUser: async () => ({ data: { user: owner ? { id: owner } : null } }) },
     from: () => ({ upsert: async row => { await onWrite(row); writes.push(row); return { error: null }; } }),
   };
-  const mocks = { './client': { createClient: () => client } };
+  const mocks = { './client': { createClient: () => client }, './documentProtocol': { requireDocumentGeneration: async () => 'generation', assertDocumentOwner: async uid => { if (uid !== owner) throw Error('account changed'); } } };
   return {
     api: loadSource('src/lib/supabase/studyActivity.ts', mocks, cache),
     queue: loadSource('src/lib/persistence/documentQueue.ts', mocks, cache),
