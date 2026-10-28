@@ -99,13 +99,13 @@ export async function fetchBlankPages(docId: string): Promise<BlankPage[]> {
 // ── Page Image Annotations ────────────────────────────────────────────────────
 
 async function savePageImagesNow(docId: string, pageNumber: number, images: PDFPageImage[]): Promise<void> {
-  const uid = await userId(); if (!uid) return;
+  const uid = await userId(); if (!uid) throw new Error('Sign in to sync page images');
   await ensureDoc(uid, docId);
   const { error } = await sb().from('page_image_annotations').upsert(
     { user_id: uid, document_id: docId, page_number: pageNumber, images: images as unknown as object[], updated_at: new Date().toISOString() },
     { onConflict: 'user_id,document_id,page_number' },
   );
-  if (error) console.error('[DB] savePageImages error:', error.message, 'docId:', docId, 'page:', pageNumber);
+  if (error) throw new Error(`Could not save page images: ${error.message}`);
 }
 
 export async function fetchAllPageImages(docId: string): Promise<Record<number, PDFPageImage[]>> {
