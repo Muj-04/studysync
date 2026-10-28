@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
 import { saveRoomVoiceNote, deleteRoomVoiceNote, updateRoomVoiceNoteTitle } from '@/lib/supabase/db';
 import type { RoomVoiceNotePayload } from './useStudyRoom';
+import { createClient } from '@/lib/supabase/client';
 
 
 interface RecordingState {
@@ -36,9 +37,23 @@ export function useRoomVoiceNotes(
   } | null>(null);
 
   const lifetime = useRef({ active: false, generation: 0 });
+  const retrySaves = useRef(new Map<string, () => Promise<void>>());
   useEffect(() => {
     lifetime.current = { active: true, generation: lifetime.current.generation + 1 };
-    return () => { lifetime.current.active = false; };
+    const retries = retrySaves.current;
+    const retry = () => {
+      for (const [id, save] of [...retries.entries()].slice(0, 20)) {
+        retries.delete(id);
+        retries.set(id, save);
+        void save();
+      }
+    };
+    if (typeof window !== 'undefined') window.addEventListener('online', retry);
+    return () => {
+      lifetime.current.active = false;
+      retries.clear();
+      if (typeof window !== 'undefined') window.removeEventListener('online', retry);
+    };
   }, [roomId]);
   const pendingSaves = useRef(new Map<string, Promise<void>>());
   const recordingRef    = useRef<RecordingState | null>(null);
@@ -101,6 +116,12 @@ export function useRoomVoiceNotes(
 
   const startRecording = useCallback(async (pageNumber: number | string) => {
     if (recordingRef.current) return;
+    const generation = lifetime.current.generation;
+    const isCurrent = () => lifetime.current.active && lifetime.current.generation === generation;
+    const { data: { user } } = await createClient().auth.getUser();
+    if (!isCurrent()) return;
+    if (!user) { alert('Sign in to record voice notes.'); return; }
+    const owner = user.id;
 
     let stream: MediaStream;
     try {
@@ -112,8 +133,7 @@ export function useRoomVoiceNotes(
       return;
     }
 
-    const generation = lifetime.current.generation;
-    const isCurrent = () => lifetime.current.active && lifetime.current.generation === generation;
+    if (!isCurrent()) { stream.getTracks().forEach(track => track.stop()); return; }
     const mimeType = getSupportedMimeType();
     let mediaRecorder: MediaRecorder;
     try { mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); }
@@ -140,14 +160,25 @@ export function useRoomVoiceNotes(
 
       setNotes((prev) => [...prev, note]);
 
-      const save = saveRoomVoiceNote(roomId, note).then((remoteUrl) => {
-        if (!remoteUrl) throw new Error('The recording was not saved.');
-        if (isCurrent()) onNoteAddedRef.current?.(note.id);
-      }).catch((error: unknown) => {
-        console.warn('[VoiceNote] room recording save failed:', error);
-        if (isCurrent()) alert('Could not save this recording. The audio is still available in this tab, but has not been shared.');
-      }).finally(() => { pendingSaves.current.delete(note.id); });
-      pendingSaves.current.set(note.id, save);
+      const sync = (): Promise<void> => {
+        if (!isCurrent()) return Promise.resolve();
+        const pending = pendingSaves.current.get(note.id);
+        if (pending) return pending;
+        const save = saveRoomVoiceNote(roomId, note, owner).then((remoteUrl) => {
+          if (!remoteUrl) throw new Error('The recording was not saved.');
+          retrySaves.current.delete(note.id);
+          if (isCurrent()) onNoteAddedRef.current?.(note.id);
+        }).catch((error: unknown) => {
+          console.warn('[VoiceNote] room recording save failed:', error);
+          if (isCurrent()) {
+            retrySaves.current.set(note.id, sync);
+            alert('Could not save this recording. The audio is still available in this tab, but has not been shared. Reconnect to retry.');
+          }
+        }).finally(() => { pendingSaves.current.delete(note.id); });
+        pendingSaves.current.set(note.id, save);
+        return save;
+      };
+      void sync();
     };
 
     const intervalId = setInterval(() => {
@@ -178,6 +209,8 @@ export function useRoomVoiceNotes(
     const isCurrent = () => lifetime.current.active && lifetime.current.generation === generation;
     // Finish an in-flight upload first so it cannot recreate a deleted note.
     await pendingSaves.current.get(id);
+    retrySaves.current.delete(id);
+    if (!isCurrent()) return;
     try {
       await deleteRoomVoiceNote(id, roomId);
       if (!isCurrent()) return;

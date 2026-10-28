@@ -279,7 +279,7 @@ test('deleting a document drains active writes, cancels queued collections, and 
     from(table) {
       return {
         upsert: async () => { exists = true; return { error: null }; },
-        select: () => ({ match: async () => ({ data: [], error: null }) }),
+        select: () => ({ match: async () => ({ data: [], count: 0, error: null }) }),
         delete: () => ({ match: async () => { if (table === 'documents') exists = false; return { error: null }; } }),
       };
     },

@@ -119,6 +119,27 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
   const recordingRef = useRef<RecordingState | null>(null);
   const acquireStream = useRecordingLifetime(recordingRef);
   const userIdRef = useRef<string | null>(null);
+  const pendingSaves = useRef(new Map<string, Promise<void>>());
+  const retrySaves = useRef(new Map<string, () => Promise<void>>());
+  const deletedNotes = useRef(new Set<string>());
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    const retries = retrySaves.current;
+    const retry = () => {
+      for (const [id, save] of [...retries.entries()].slice(0, 20)) {
+        retries.delete(id);
+        retries.set(id, save);
+        void save();
+      }
+    };
+    if (typeof window !== 'undefined') window.addEventListener('online', retry);
+    return () => {
+      mounted.current = false;
+      retries.clear();
+      if (typeof window !== 'undefined') window.removeEventListener('online', retry);
+    };
+  }, []);
 
   // Merge Supabase notes into the already-restored local store.
   useEffect(() => {
@@ -137,7 +158,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
         setNotes((prev) => {
           const prevIds = new Set(prev.map((n) => n.id));
           const fromSupabase: VoiceNote[] = remote
-            .filter((r) => !prevIds.has(r.id))
+            .filter((r) => !prevIds.has(r.id) && !deletedNotes.current.has(r.id))
             .map((r) => ({
               id: r.id,
               documentId: r.documentId,
@@ -245,21 +266,36 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
 
       // Upload to Supabase in background (with per-plan storage limit check)
       if (userIdRef.current) {
-        (async () => {
-          const [profile, usedBytes] = await Promise.all([getProfile(), getTotalVoiceStorageBytes()]);
-          const isVip = profile?.isVip ?? false;
-          const plan  = (profile?.plan ?? 'free') as Plan;
-          const storageLimit = effectivePlanLimits(plan, isVip).voiceStorageBytes;
-          if (usedBytes + blob.size > storageLimit) {
-            onLimitRef.current?.();
-            return;
-          }
-          console.log('[VoiceNotes] calling saveVoiceNote id:', note.id);
-          const url = await saveVoiceNote(note);
-          console.log('[VoiceNotes] saveVoiceNote returned audioUrl:', url ? url.slice(0, 80) + '…' : null);
-        })().catch((error: unknown) => {
-          console.warn('[VoiceNotes] remote save failed; local recording retained:', error);
-        });
+        const owner = userIdRef.current;
+        const sync = (): Promise<void> => {
+          if (!mounted.current) return Promise.resolve();
+          const pending = pendingSaves.current.get(note.id);
+          if (pending) return pending;
+          const saving = (async () => {
+            const [profile, usedBytes] = await Promise.all([getProfile(), getTotalVoiceStorageBytes()]);
+            const isVip = profile?.isVip ?? false;
+            const plan  = (profile?.plan ?? 'free') as Plan;
+            const storageLimit = effectivePlanLimits(plan, isVip).voiceStorageBytes;
+            if (usedBytes + blob.size > storageLimit) {
+              onLimitRef.current?.();
+              return;
+            }
+            console.log('[VoiceNotes] calling saveVoiceNote id:', note.id);
+            if (!mounted.current) return;
+            const url = await saveVoiceNote(note, owner);
+            retrySaves.current.delete(note.id);
+            console.log('[VoiceNotes] saveVoiceNote returned audioUrl:', url ? url.slice(0, 80) + '…' : null);
+          })().catch((error: unknown) => {
+            console.warn('[VoiceNotes] remote save failed; local recording retained:', error);
+            if (mounted.current) {
+              retrySaves.current.set(note.id, sync);
+              alert('Could not save this recording. The audio is still available in this tab. Reconnect to retry.');
+            }
+          }).finally(() => { pendingSaves.current.delete(note.id); });
+          pendingSaves.current.set(note.id, saving);
+          return saving;
+        };
+        void sync();
       } else {
         console.warn('[VoiceNotes] userIdRef is null — saveVoiceNote NOT called');
       }
@@ -297,18 +333,25 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     setRecordingContext(null);
   }, []);
 
-  const deleteNote = useCallback((id: string) => {
-    setNotes((prev) => {
-      const note = prev.find((n) => n.id === id);
-      if (note) {
-        URL.revokeObjectURL(note.audioUrl);
-        if (userIdRef.current) {
-          deleteVoiceNote(note.id, note.documentId);
-        }
-      }
-      return prev.filter((n) => n.id !== id);
-    });
-  }, [setNotes]);
+  const deleteNote = useCallback(async (id: string) => {
+    const note = store.getSnapshot().notes.find((n) => n.id === id);
+    if (!note) return;
+    const owner = userIdRef.current;
+    await pendingSaves.current.get(id);
+    retrySaves.current.delete(id);
+    if (!mounted.current) return;
+    try {
+      if (!owner) throw new Error('Sign in to delete this recording.');
+      await deleteVoiceNote(note.id, note.documentId, owner);
+      if (!mounted.current) return;
+      deletedNotes.current.add(id);
+      URL.revokeObjectURL(note.audioUrl);
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+    } catch (error) {
+      console.warn('[VoiceNotes] deletion failed; recording retained:', error);
+      if (mounted.current) alert('Could not delete this recording. Please try again.');
+    }
+  }, [setNotes, store]);
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title: title || undefined } : n)));
@@ -323,13 +366,23 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     [notes]
   );
 
-  const deleteNotesForDocument = useCallback((docId: string) => {
-    setNotes((prev) => {
-      prev.filter((n) => n.documentId === docId).forEach((n) => URL.revokeObjectURL(n.audioUrl));
-      return prev.filter((n) => n.documentId !== docId);
-    });
-    if (userIdRef.current) deleteAllVoiceNotesForDocument(docId);
-  }, [setNotes]);
+  const deleteNotesForDocument = useCallback(async (docId: string) => {
+    const owner = userIdRef.current;
+    const local = store.getSnapshot().notes.filter(note => note.documentId === docId);
+    await Promise.all(local.map(note => pendingSaves.current.get(note.id)));
+    local.forEach(note => retrySaves.current.delete(note.id));
+    if (!mounted.current) return;
+    try {
+      if (!owner) throw new Error('Sign in to delete recordings.');
+      await deleteAllVoiceNotesForDocument(docId, owner);
+      if (!mounted.current) return;
+      local.forEach(note => { deletedNotes.current.add(note.id); URL.revokeObjectURL(note.audioUrl); });
+      setNotes(prev => prev.filter(note => note.documentId !== docId));
+    } catch (error) {
+      console.warn('[VoiceNotes] deletion failed; recordings retained:', error);
+      if (mounted.current) alert('Could not delete these recordings. Please try again.');
+    }
+  }, [setNotes, store]);
 
   // Called from syncDoc after canonical docId is resolved. Adds any remote notes
   // not already in local state (idempotent — duplicate IDs are skipped).
@@ -340,7 +393,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     setNotes((prev) => {
       const prevIds = new Set(prev.map((n) => n.id));
       const incoming: VoiceNote[] = remote
-        .filter((r) => !prevIds.has(r.id))
+        .filter((r) => !prevIds.has(r.id) && !deletedNotes.current.has(r.id))
         .map((r) => ({
           id: r.id,
           documentId: r.documentId,
