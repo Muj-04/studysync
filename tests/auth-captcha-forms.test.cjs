@@ -20,7 +20,7 @@ function content(tree) {
   return typeof tree === 'string' ? tree : '';
 }
 
-function mount(t, scenario, request) {
+function mount(t, scenario, request, db = {}) {
   const harness = createHookHarness();
   const previousWindow = global.window;
   const previousStorage = global.localStorage;
@@ -63,7 +63,7 @@ function mount(t, scenario, request) {
     '@/lib/supabase/client': {
       createClient: () => ({ auth, rpc: async () => ({ data: true, error: null }) }),
     },
-    '@/lib/supabase/db': {},
+    '@/lib/supabase/db': db,
   });
   let tree;
   const render = () => { tree = harness.render(Page); return tree; };
@@ -86,7 +86,7 @@ function mount(t, scenario, request) {
   }
   render();
   return {
-    calls, render, widget, button,
+    calls, render, widget, button, unmount: harness.unmount,
     remember(value) { find(node => node.type === 'input' && node.props.type === 'checkbox').props.onChange({ target: { checked: value } }); render(); },
     solve(token) { widget().onVerify(token); render(); },
     async submit() {
@@ -144,7 +144,7 @@ for (const scenario of cases) {
 
 for (const remember of [true, false]) {
   test(`successful login reaches its destination when remembered-email ${remember ? 'write' : 'removal'} fails`, async t => {
-    const app = mount(t, cases[0], async () => ({ error: null }));
+    const app = mount(t, cases[0], async () => ({ data: { user: { id: 'owner' } }, error: null }));
     app.remember(remember);
     global.window.location.search = '?redirect=%2Flibrary';
     global.localStorage.setItem = () => { throw new Error('Storage unavailable'); };
@@ -156,3 +156,23 @@ for (const remember of [true, false]) {
     assert.equal(app.alerts(), '', 'optional preference storage must not report failed authentication');
   });
 }
+
+
+test('real login handler preserves a referral through HTTP503 and still navigates', async t => {
+  const requests = [];
+  t.mock.method(global, 'fetch', async url => {
+    requests.push(url);
+    return url === '/api/referral/code' ? Response.json({ referralCode: 'OWN' }) : Response.json({}, { status: 503 });
+  });
+  const referralApi = loadSource('src/lib/supabase/referrals.ts', {
+    './dbShared': { sb: () => ({ auth: { getSession: async () => ({ data: { session: { user: { id: 'owner' }, access_token: 'synthetic' } } }) } }) },
+  });
+  const app = mount(t, cases[0], async () => ({ data: { user: { id: 'owner' } }, error: null }), referralApi);
+  const storage = new Map([['studysync_pending_ref', 'CODE']]);
+  global.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+  app.solve('one-use-token'); await app.submit();
+  assert.equal(storage.get('studysync_pending_ref'), 'CODE');
+  assert.equal(requests.filter(url => url === '/api/referral/process').length, 2);
+  assert.equal(global.window.location.href, '/dashboard');
+  assert.equal(app.alerts(), '');
+});
