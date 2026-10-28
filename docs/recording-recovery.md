@@ -1,3 +1,5 @@
+> Historical browser-journal design. The dependent server recovery implementation and coordinated cutover are documented in [the server operations runbook](server-recording-recovery-operations.md) and [the latest handoff](data-integrity-handoff-2026-10-28.md). It is not deployed by this PR.
+
 # Recording recovery
 
 Recording upload, playback URL signing, metadata publication and file deletion are separate requests. Previously, personal recordings could publish null playback URLs after upload failure; room recordings could leave uploaded files without a recovery record; deletion could remove audio before the metadata request failed.
