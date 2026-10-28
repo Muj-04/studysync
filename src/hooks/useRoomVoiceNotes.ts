@@ -2,7 +2,6 @@
 import { useRecordingLifetime } from './useRecordingLifetime';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { VoiceNote } from '@/types';
-import { createClient } from '@/lib/supabase/client';
 import { saveRoomVoiceNote, deleteRoomVoiceNote, updateRoomVoiceNoteTitle } from '@/lib/supabase/db';
 import type { RoomVoiceNotePayload } from './useStudyRoom';
 
@@ -36,20 +35,19 @@ export function useRoomVoiceNotes(
     documentId: string; pageNumber: number | string;
   } | null>(null);
 
+  const lifetime = useRef({ active: false, generation: 0 });
+  useEffect(() => {
+    lifetime.current = { active: true, generation: lifetime.current.generation + 1 };
+    return () => { lifetime.current.active = false; };
+  }, [roomId]);
+  const pendingSaves = useRef(new Map<string, Promise<void>>());
   const recordingRef    = useRef<RecordingState | null>(null);
   const acquireStream = useRecordingLifetime(recordingRef, roomId);
-  const userIdRef       = useRef<string | null>(null);
   const onNoteAddedRef  = useRef(onNoteAdded);
   const onNoteDeletedRef = useRef(onNoteDeleted);
 
   useEffect(() => { onNoteAddedRef.current = onNoteAdded; }, [onNoteAdded]);
   useEffect(() => { onNoteDeletedRef.current = onNoteDeleted; }, [onNoteDeleted]);
-
-  useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
-      userIdRef.current = user?.id ?? null;
-    });
-  }, []);
 
   const seedNotes = useCallback((remote: Array<{
     id: string; pageNumber: number | string; duration: number;
@@ -104,6 +102,8 @@ export function useRoomVoiceNotes(
       return;
     }
 
+    const generation = lifetime.current.generation;
+    const isCurrent = () => lifetime.current.active && lifetime.current.generation === generation;
     const mimeType = getSupportedMimeType();
     let mediaRecorder: MediaRecorder;
     try { mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined); }
@@ -130,16 +130,14 @@ export function useRoomVoiceNotes(
 
       setNotes((prev) => [...prev, note]);
 
-      if (userIdRef.current) {
-        saveRoomVoiceNote(roomId, note).then((remoteUrl) => {
-          if (remoteUrl) {
-            console.log('[VoiceNote] broadcasting voice_note_added event:', { noteId: note.id, pageNumber: note.pageNumber });
-            onNoteAddedRef.current?.(note.id);
-          } else {
-            console.warn('[VoiceNote] saveRoomVoiceNote returned null — not broadcasting');
-          }
-        });
-      }
+      const save = saveRoomVoiceNote(roomId, note).then((remoteUrl) => {
+        if (!remoteUrl) throw new Error('The recording was not saved.');
+        if (isCurrent()) onNoteAddedRef.current?.(note.id);
+      }).catch((error: unknown) => {
+        console.warn('[VoiceNote] room recording save failed:', error);
+        if (isCurrent()) alert('Could not save this recording. The audio is still available in this tab, but has not been shared.');
+      }).finally(() => { pendingSaves.current.delete(note.id); });
+      pendingSaves.current.set(note.id, save);
     };
 
     const intervalId = setInterval(() => {
@@ -165,14 +163,24 @@ export function useRoomVoiceNotes(
     setRecordingContext(null);
   }, []);
 
-  const deleteNote = useCallback((id: string) => {
-    setNotes((prev) => {
-      const note = prev.find((n) => n.id === id);
-      if (note && note.audioBlob.size > 0) URL.revokeObjectURL(note.audioUrl);
-      return prev.filter((n) => n.id !== id);
-    });
-    deleteRoomVoiceNote(id, roomId);
-    onNoteDeletedRef.current?.(id);
+  const deleteNote = useCallback(async (id: string) => {
+    const generation = lifetime.current.generation;
+    const isCurrent = () => lifetime.current.active && lifetime.current.generation === generation;
+    // Finish an in-flight upload first so it cannot recreate a deleted note.
+    await pendingSaves.current.get(id);
+    try {
+      await deleteRoomVoiceNote(id, roomId);
+      if (!isCurrent()) return;
+      setNotes((prev) => {
+        const note = prev.find((n) => n.id === id);
+        if (note && note.audioBlob.size > 0) URL.revokeObjectURL(note.audioUrl);
+        return prev.filter((n) => n.id !== id);
+      });
+      onNoteDeletedRef.current?.(id);
+    } catch (error) {
+      console.warn('[VoiceNote] room recording deletion failed:', error);
+      if (isCurrent()) alert('Could not delete this recording. Please try again.');
+    }
   }, [roomId]);
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
