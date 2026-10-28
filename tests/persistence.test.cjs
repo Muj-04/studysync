@@ -100,7 +100,7 @@ test('an edit before authentication resolves is synced when the owner arrives', 
   harness.render(() => useTextNotes(null));
   harness.render(() => useTextNotes('owner'));
   await new Promise(resolve => setImmediate(resolve));
-  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'before auth' }]]]);
+  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'before auth' }], 'owner']]);
 });
 
 test('pending notes for a locally deleted document are never reuploaded', () => {
@@ -129,7 +129,7 @@ test('retrying an outbox uses the latest local snapshot after an interrupted sav
   });
   harness.render(() => useTextNotes('owner'));
   harness.render(() => useTextNotes('owner'));
-  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'newer local edit' }]]]);
+  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'newer local edit' }], 'owner']]);
 });
 
 test('cloud hydration does not enqueue writes but subsequent edits do', () => {
@@ -148,7 +148,7 @@ test('cloud hydration does not enqueue writes but subsequent edits do', () => {
   assert.deepEqual(saves, []);
   edit(prev => ({ ...prev, 'doc:1': [{ id: 'note', content: 'edited' }] }));
   harness.render(() => useTextNotes('owner'));
-  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'edited' }]]]);
+  assert.deepEqual(saves, [['doc', '1', [{ id: 'note', content: 'edited' }], 'owner']]);
 });
 
 test('failed text note edits survive remount and retry without uploading clean pages', async () => {
