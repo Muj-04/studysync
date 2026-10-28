@@ -7,9 +7,10 @@ import type { TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/typ
 export async function fetchTextNotes(docId: string): Promise<Record<string, TextNote[]>> {
   const uid = await userId();
   console.log('[DB] fetchTextNotes uid:', uid, 'docId:', docId);
-  if (!uid) return {};
+  if (!uid) throw new Error('Sign in to load text notes');
   const { data, error } = await sb().from('text_notes').select('*').match({ user_id: uid, document_id: docId });
-  console.log('[DB] fetchTextNotes rows:', data?.length ?? 0, 'error:', error?.message ?? null);
+  if (error) throw new Error(`Could not load text notes: ${error.message}`);
+  console.log('[DB] fetchTextNotes rows:', data?.length ?? 0);
   const map: Record<string, TextNote[]> = {};
   for (const r of data ?? []) {
     const cat = r.category as string | null | undefined;
@@ -28,10 +29,11 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
 // ── Bookmarks ────────────────────────────────────────────────────────────────
 
 export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
-  const uid = await userId(); if (!uid) return [];
+  const uid = await userId(); if (!uid) throw new Error('Sign in to load bookmarks');
   let q = sb().from('bookmarks').select('*').eq('user_id', uid);
   if (docId) q = q.eq('document_id', docId);
-  const { data } = await q.order('created_at', { ascending: true });
+  const { data, error } = await q.order('created_at', { ascending: true });
+  if (error) throw new Error(`Could not load bookmarks: ${error.message}`);
   return (data ?? []).map((r) => ({
     id: r.id, documentId: r.document_id, virtualIndex: r.virtual_index,
     label: r.label, createdAt: new Date(r.created_at).getTime(),

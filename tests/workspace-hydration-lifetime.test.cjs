@@ -68,3 +68,43 @@ test('real blank-page read failure leaves the existing workspace cache untouched
   assert.deepEqual(cached, [{ id: 'blank', documentId: 'doc', canvasData: 'retained' }]);
   assert.deepEqual(writes, []);
 });
+
+test('real text-note read failure cannot trigger replacement uploads from a stale local cache', async () => {
+  const { fetchTextNotes } = loadSource('src/lib/supabase/documentAnnotations.ts', {
+    './dbShared': { userId: async () => 'owner', sb: () => ({
+      from: () => ({ select: () => ({ match: async () => ({ data: null, error: { message: 'offline' } }) }) }),
+    }) },
+  });
+  const { run, writes } = hydrationEffect({ fetchTextNotes, pageTextNotes: { 'doc:1': [{ id: 'note', content: 'stale local text' }] } });
+  run();
+  await new Promise(setImmediate);
+  assert.deepEqual(writes, []);
+});
+
+test('real bookmark read failure cannot replace cloud bookmarks with stale cached bookmarks', async () => {
+  const query = { eq() { return this; }, order: async () => ({ data: null, error: { message: 'offline' } }) };
+  const { fetchBookmarks } = loadSource('src/lib/supabase/documentAnnotations.ts', {
+    './dbShared': { userId: async () => 'owner', sb: () => ({ from: () => ({ select: () => query }) }) },
+  });
+  const filename = 'src/app/(app)/workspace/page.tsx';
+  const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let effect;
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
+        && node.arguments[0]?.getText(source).includes('fetchBookmarks(activeDocumentId)')) effect = node.arguments[0];
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(effect);
+  const writes = [];
+  const deps = {
+    activeDocumentId: 'doc', userId: 'owner', fetchBookmarks,
+    KEYS: { BOOKMARKS: 'bookmarks' }, storageGet: () => ({ doc: [{ id: 'stale-bookmark' }] }),
+    setBookmarks: marks => writes.push(['state', marks]), dbSaveBookmarks: async (...args) => writes.push(['save', ...args]),
+    console: { error() {} },
+  };
+  const output = ts.transpileModule(`const effect = ${effect.getText(source)};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  new Function(...Object.keys(deps), `${output}; return effect;`)(...Object.values(deps))();
+  await new Promise(setImmediate);
+  assert.deepEqual(writes, []);
+});
