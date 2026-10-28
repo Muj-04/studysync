@@ -508,6 +508,7 @@ export default function WorkspacePage() {
 
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const bookmarkEditVersions = useRef(new Map<string, number>());
 
   const [bookmarkDocumentId, setBookmarkDocumentId] = useState(activeDocumentId);
   if (bookmarkDocumentId !== activeDocumentId) {
@@ -520,9 +521,10 @@ export default function WorkspacePage() {
   useEffect(() => {
     if (!activeDocumentId || !userId) return;
     let cancelled = false;
+    const version = bookmarkEditVersions.current.get(activeDocumentId) ?? 0;
     fetchBookmarks(activeDocumentId).then((remote) => {
-      if (cancelled) return;
-      // Read after the request: include bookmarks added while it was in flight.
+      if (cancelled || (bookmarkEditVersions.current.get(activeDocumentId) ?? 0) !== version) return;
+      // A response started before a local edit must not restore removed marks.
       const local = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS)?.[activeDocumentId] ?? [];
       const remoteIds = new Set(remote.map((b) => b.id));
       const localOnly = local.filter((b) => !remoteIds.has(b.id));
@@ -534,6 +536,7 @@ export default function WorkspacePage() {
   }, [activeDocumentId, userId]);
 
   const persistBookmarks = useCallback((docId: string, marks: Bookmark[]) => {
+    bookmarkEditVersions.current.set(docId, (bookmarkEditVersions.current.get(docId) ?? 0) + 1);
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     stored[docId] = marks;
     storageSet(KEYS.BOOKMARKS, stored);
