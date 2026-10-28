@@ -1,5 +1,11 @@
 # Cached edits and remote deletion
 
+> Historical pre-implementation analysis. The owner approved deletion-wins with
+> explicit recovery copies. The new implementation and rollout evidence are in
+> [the data-integrity handoff](data-integrity-handoff-2026-10-28.md) and
+> [document recovery](document-recovery.md). The discussion below describes the
+> older baseline, not unresolved code findings in that candidate.
+
 The bounded fix removes workspace hydration's unconditional upload of text-note
 pages missing from a successful cloud result. A missing page may have been deleted
 elsewhere. Hydration now performs no replacement write for that cache; local text
