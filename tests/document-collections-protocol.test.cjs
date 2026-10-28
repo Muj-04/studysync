@@ -13,7 +13,7 @@ function setup(){
   knownDocumentGeneration:()=> 'generation',requireDocumentGeneration:async()=> 'generation',
   assertDocumentOwner:async expected=>{if(owner!==expected)throw Error('account changed');},
   DocumentConflictError:class extends Error{code='DOCUMENT_CONFLICT';}
- },'@/lib/storage':{storageGet:k=>values.has(k)?JSON.parse(values.get(k)):null,storageSet:(k,v)=>{values.set(k,JSON.stringify(v));return true;}}
+ },'@/lib/storage':{storageKeys:prefix=>[...values.keys()].filter(key=>key.startsWith(prefix)),storageRemove:key=>values.delete(key),storageGet:k=>values.has(k)?JSON.parse(values.get(k)):null,storageSet:(k,v)=>{values.set(k,JSON.stringify(v));return true;}}
  });
  return{api,requests,values,setOwner:v=>owner=v,remote:()=>{remoteRevision++;rows=[{content:'peer'}];},lose:()=>lost=true,rows:()=>rows};
 }

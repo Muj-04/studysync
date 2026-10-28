@@ -1,6 +1,6 @@
 import { createClient } from './client';
 import { assertDocumentOwner, knownDocumentGeneration, requireDocumentGeneration, DocumentConflictError } from './documentProtocol';
-import { acknowledgeDocumentWrite, failDocumentWrite, nextDocumentWrite, observeDocumentCollection, stageDocumentWrite, retryDocumentWrites, type DocumentScope, type DocumentWrite } from '@/lib/documentOutbox';
+import { isDocumentRecoveryOnly, acknowledgeDocumentWrite, failDocumentWrite, nextDocumentWrite, observeDocumentCollection, stageDocumentWrite, retryDocumentWrites, type DocumentScope, type DocumentWrite } from '@/lib/documentOutbox';
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 
 export type DocumentCollection = 'text_notes' | 'bookmarks' | 'key_terms' | 'blank_pages' | 'flashcards' | 'drawings' | 'page_image_annotations' | 'session_state';
@@ -36,6 +36,7 @@ function protocolError(error: { message?: string; code?: string }) {
 }
 export async function executeDocumentWrite(entry: DocumentWrite): Promise<number> {
   await assertDocumentOwner(entry.ownerId);
+  if (isDocumentRecoveryOnly(entry.ownerId, entry.documentId)) throw new DocumentConflictError('Original document is retained for recovery only. Create a new copy.');
   if (entry.expectedRevision === null) throw new DocumentConflictError('No observed cloud revision. Keep these edits as a recovery copy.');
   const { data, error } = await createClient().rpc('replace_study_collection_v2', {
     p_collection: entry.collection, p_document_id: entry.documentId, p_generation: entry.generation,
