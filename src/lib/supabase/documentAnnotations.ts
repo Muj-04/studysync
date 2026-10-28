@@ -52,10 +52,11 @@ export async function fetchKeyTerms(docId: string): Promise<KeyTerm[]> {
 // ── Drawings ─────────────────────────────────────────────────────────────────
 
 async function saveDrawingNow(docId: string, pageKey: string, canvasData: string | null) {
-  const uid = await userId(); if (!uid) return;
+  const uid = await userId(); if (!uid) throw new Error('Sign in to sync study data');
   await ensureDoc(uid, docId);
   if (!canvasData) {
-    await sb().from('drawings').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
+    const { error } = await sb().from('drawings').delete().match({ user_id: uid, document_id: docId, page_key: pageKey });
+    if (error) throw new Error(`Could not clear drawing: ${error.message}`);
     return;
   }
   const { error } = await sb().from('drawings').upsert({
@@ -63,14 +64,14 @@ async function saveDrawingNow(docId: string, pageKey: string, canvasData: string
     user_id: uid, document_id: docId, page_key: pageKey,
     canvas_data: canvasData, updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id,document_id,page_key' });
-  if (error) console.error('[DB] saveDrawing error:', error.message, 'docId:', docId, 'pageKey:', pageKey);
+  if (error) throw new Error(`Could not save drawing: ${error.message}`);
   else console.log('[DB] saveDrawing OK — docId:', docId, 'pageKey:', pageKey);
 }
 
-export async function deleteAllDrawings(docId: string): Promise<void> {
-  const uid = await userId(); if (!uid) return;
+async function deleteAllDrawingsNow(docId: string): Promise<void> {
+  const uid = await userId(); if (!uid) throw new Error('Sign in to sync study data');
   const { error } = await sb().from('drawings').delete().match({ user_id: uid, document_id: docId });
-  if (error) console.error('[DB] deleteAllDrawings error:', error.message);
+  if (error) throw new Error(`Could not clear drawings: ${error.message}`);
   else console.log('[DB] deleteAllDrawings OK — docId:', docId);
 }
 
@@ -131,4 +132,9 @@ export function saveDrawing(...args: Parameters<typeof saveDrawingNow>): ReturnT
 /** Share the document lifetime with collection writes and deletion. */
 export function savePageImages(...args: Parameters<typeof savePageImagesNow>): ReturnType<typeof savePageImagesNow> {
   return enqueueDocumentWrite(args[0], () => savePageImagesNow(...args));
+}
+
+/** Clearing must follow earlier strokes in the same document queue. */
+export function deleteAllDrawings(docId: string): Promise<void> {
+  return enqueueDocumentWrite(docId, () => deleteAllDrawingsNow(docId));
 }
