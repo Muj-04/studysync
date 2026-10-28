@@ -53,6 +53,9 @@ export function useTextNotes(userId: string | null) {
         ...Object.fromEntries(Object.keys(storedPending).filter((key) => key in notes).map((key) => [key, notes[key]])),
         ...(pendingOwner.current === null ? pending.current : {}),
       };
+      // Replayed edits also belong to this mount: their save may finish before
+      // a hydration read carrying the older cloud snapshot returns.
+      for (const key of Object.keys(pending.current)) editedPages.current.add(key);
       pendingOwner.current = userId;
       inFlight.current = {};
     }
