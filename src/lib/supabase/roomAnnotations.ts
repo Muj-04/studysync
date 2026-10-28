@@ -1,48 +1,18 @@
+import { saveRecording, deleteRecording, recoverRecordings } from './recordingRecovery';
 import { sb, userId } from './dbShared';
 import type { VoiceNote } from '@/types';
 
 // ── Room Voice Notes ─────────────────────────────────────────────────────────
 
-export async function saveRoomVoiceNote(roomId: string, note: VoiceNote): Promise<string | null> {
-  const uid = await userId();
-  if (!uid) throw new Error('Sign in to save room voice notes.');
-  if (!note.audioBlob?.size) throw new Error('The recording is empty.');
-
-  const mimeType = note.audioBlob.type.split(';')[0] || 'audio/webm';
-  const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
-  const path = `rooms/${roomId}/${note.id}.${ext}`;
-  const { error: uploadError } = await sb().storage
-    .from('voice-notes')
-    .upload(path, note.audioBlob, { upsert: true, contentType: mimeType });
-  if (uploadError) throw new Error(uploadError.message);
-
-  const { data: signed, error: signingError } = await sb().storage
-    .from('voice-notes')
-    .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
-  if (signingError || !signed?.signedUrl) {
-    throw new Error(signingError?.message ?? 'Could not create a playback URL.');
-  }
-  const audioUrl = signed.signedUrl;
-
-  const { error } = await sb().from('room_voice_notes').upsert({
-    id: note.id,
-    room_id: roomId,
-    user_id: uid,
-    page_number: String(note.pageNumber),
-    duration: note.duration,
-    title: note.title ?? null,
-    audio_url: audioUrl,
-    timestamp: note.timestamp instanceof Date ? note.timestamp.toISOString() : note.timestamp,
-  }, { onConflict: 'id' });
-
-  if (error) throw new Error(error.message);
-  return audioUrl;
+export async function saveRoomVoiceNote(roomId: string, note: VoiceNote, expectedOwner?: string): Promise<string | null> {
+  return saveRecording('room', roomId, note, expectedOwner);
 }
 
 export async function fetchRoomVoiceNotes(roomId: string): Promise<Array<{
   id: string; pageNumber: number | string;
   duration: number; title?: string; audioUrl?: string; timestamp: string;
 }>> {
+  await recoverRecordings('room', roomId);
   const { data, error } = await sb()
     .from('room_voice_notes')
     .select('id, page_number, duration, title, audio_url, timestamp')
@@ -114,12 +84,7 @@ export async function fetchRoomBlankPages(
 }
 
 export async function deleteRoomVoiceNote(noteId: string, roomId: string): Promise<void> {
-  for (const ext of ['webm', 'ogg', 'mp4']) {
-    const { error } = await sb().storage.from('voice-notes').remove([`rooms/${roomId}/${noteId}.${ext}`]);
-    if (error) throw new Error(error.message);
-  }
-  const { error } = await sb().from('room_voice_notes').delete().eq('id', noteId);
-  if (error) throw new Error(error.message);
+  return deleteRecording('room', roomId, noteId);
 }
 
 export async function updateRoomVoiceNoteTitle(noteId: string, title: string | undefined): Promise<void> {
