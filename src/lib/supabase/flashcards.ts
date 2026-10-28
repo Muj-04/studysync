@@ -1,3 +1,5 @@
+import { requireDocumentGeneration, assertDocumentOwner } from './documentProtocol';
+import { readDocumentCollection } from './documentCollections';
 import { sb, userId } from './dbShared';
 
 // ── Flashcards ────────────────────────────────────────────────────────────────
@@ -13,21 +15,15 @@ export interface Flashcard {
 
 export async function loadFlashcards(docId: string, pageNum: number): Promise<Flashcard[]> {
   const uid = await userId(); if (!uid) return [];
-  const { data, error } = await sb()
-    .from('flashcards')
-    .select('id, doc_id, page_num, question, answer, created_at')
-    .eq('user_id', uid)
-    .eq('doc_id', docId)
-    .eq('page_num', pageNum)
-    .order('created_at', { ascending: true });
-  if (error) { console.error('[DB] loadFlashcards error:', error.message); return []; }
+  const rows = await readDocumentCollection('flashcards', docId);
+  const data = rows.filter(row => Number(row.page_num) === pageNum);
   return (data ?? []).map((r) => ({
-    id: r.id,
-    docId: r.doc_id,
-    pageNum: r.page_num,
-    question: r.question,
-    answer: r.answer,
-    createdAt: r.created_at,
+    id: String(r.id),
+    docId: String(r.doc_id),
+    pageNum: Number(r.page_num),
+    question: String(r.question),
+    answer: String(r.answer),
+    createdAt: String(r.created_at),
   }));
 }
 
@@ -89,11 +85,13 @@ export async function createFlashcardDeck(input: {
   cards: Array<{ question: string; answer: string }>;
 }): Promise<string> {
   const uid = await userId(); if (!uid) throw new Error('You must be signed in.');
+  const document_generation = input.docId ? await requireDocumentGeneration(uid, input.docId) : null;
+  await assertDocumentOwner(uid);
   const { data: deck, error } = await sb().from('flashcard_decks').insert({
     user_id: uid,
     name: input.name.trim(),
     description: input.description?.trim() ?? '',
-    doc_id: input.docId || null,
+    doc_id: input.docId || null, document_generation,
   }).select('id').single();
   if (error || !deck) throw new Error(error?.message ?? 'Could not create deck.');
   const cards = input.cards.filter((card) => card.question.trim() && card.answer.trim());
@@ -101,7 +99,7 @@ export async function createFlashcardDeck(input: {
     const { error: cardError } = await sb().from('flashcards').insert(cards.map((card) => ({
       user_id: uid,
       deck_id: deck.id,
-      doc_id: input.docId || `deck:${deck.id}`,
+      doc_id: input.docId || `deck:${deck.id}`, document_generation,
       page_num: 0,
       question: card.question.trim(),
       answer: card.answer.trim(),

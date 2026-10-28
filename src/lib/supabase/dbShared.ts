@@ -24,7 +24,6 @@ export function forgetDocumentRegistration(docId: string): void {
 
 /** Failed parent writes must reject before any dependent write and remain retryable. */
 export async function ensureDoc(uid: string, docId: string): Promise<void> {
-  if (registeredDocs.get(docId)?.has(uid)) return;
   await ensureDocument(sb(), uid, docId);
   markDocumentRegistered(uid, docId);
 }
