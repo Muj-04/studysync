@@ -49,6 +49,7 @@ export default function ChatConversationView({
   const prependScroll = useRef<{ top: number; height: number } | null>(null);
   const [text,     setText]     = useState('');
   const [sending,  setSending]  = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const onReadRef = useRef(onConversationRead);
   const conversationGeneration = useRef(0);
@@ -59,6 +60,7 @@ export default function ChatConversationView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setText('');
     setSending(false);
+    setSendError(null);
     return () => { conversationGeneration.current += 1; };
   }, [friendId, myUserId]);
 
@@ -135,16 +137,25 @@ export default function ChatConversationView({
     if (!trimmed || sending) return;
     const generation = conversationGeneration.current;
     setSending(true);
-    setText('');
-    const saved = await sendDirectMessage(friendId, trimmed);
-    if (generation !== conversationGeneration.current) return;
-    if (saved) {
+    setSendError(null);
+    // Keep the draft until the server confirms the send. A failure must not
+    // discard it or overwrite text the user edited while the request ran.
+    try {
+      const saved = await sendDirectMessage(friendId, trimmed);
+      if (generation !== conversationGeneration.current) return;
+      if (!saved) {
+        setSendError('Message could not be sent. Please try again.');
+        return;
+      }
       setMessages((prev) => prev.some((m) => m.id === saved.id) ? prev : [...prev, saved]);
-    } else {
-      // Restore typed text on send failure.
-      setText(trimmed);
+      setText((current) => current === text ? '' : current);
+    } catch {
+      if (generation === conversationGeneration.current) {
+        setSendError('Message could not be sent. Please try again.');
+      }
+    } finally {
+      if (generation === conversationGeneration.current) setSending(false);
     }
-    setSending(false);
   }, [text, sending, friendId, setMessages]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -168,6 +179,7 @@ export default function ChatConversationView({
         }}
       >
         {error && <p role="alert">{error}</p>}
+        {sendError && <p role="alert">{sendError}</p>}
         {hasOlder && !loading && <button disabled={loadingOlder} onClick={() => void loadOlder(() => {
           const el = scrollRef.current;
           if (el) prependScroll.current = { top: el.scrollTop, height: el.scrollHeight };
