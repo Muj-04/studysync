@@ -1,5 +1,6 @@
 'use client';
 import { enqueueRoomMembership } from '@/lib/roomMembershipQueue';
+import { createRoomSnapshotGate } from '@/lib/roomSnapshot';
 import { mergeRoomStroke } from '@/lib/roomStrokes';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -467,7 +468,20 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     const requests = voiceNoteRequestsRef.current;
     return () => { requests.clear(); };
   }, [roomId]);
-  const seedNotesRef          = useRef<((remote: Parameters<ReturnType<typeof useRoomVoiceNotes>['seedNotes']>[0]) => void) | null>(null);
+  const beginVoiceSnapshotRef = useRef<ReturnType<typeof useRoomVoiceNotes>['beginReconcileNotes'] | null>(null);
+  const blankSnapshots = useRef(createRoomSnapshotGate<RoomBlankPagePayload>());
+  const pendingBlankSaves = useRef(new Set<string>());
+  const snapshotLifetime = useRef({ active: false, roomId });
+  const snapshotUser = useRef<string | null>(null);
+  useEffect(() => {
+    const scope = { active: true, roomId };
+    const gate = blankSnapshots.current;
+    snapshotLifetime.current = scope;
+    pendingBlankSaves.current.clear();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRoomBlankPages([]);
+    return () => { scope.active = false; gate.invalidate(); };
+  }, [roomId]);
 
   const { activeDocument, addDocument, removeDocument, goToPage } = usePDF({ persist: false });
   const { getDrawing, saveDrawing }  = usePDFDrawings();
@@ -536,22 +550,60 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     appendStrokeLocal(pageKey, stroke);
   }, [appendStrokeLocal]);
 
-  // Reconnect → fetch every stroke with seq > maxLocalSeq and apply any we
-  // haven't seen. Recovers strokes whose realtime broadcast was dropped
-  // while we were offline (or even just briefly in transit). The dedupe via
-  // knownStrokeIdsRef makes this safe to call on every reconnect cycle.
+  // Initial load and reconnect share one authoritative, race-aware path.
+  const reconcileRoomSnapshots = useCallback(async () => {
+    const scope = snapshotLifetime.current;
+    if (!scope.active || scope.roomId !== roomId) return;
+    const applyVoice = beginVoiceSnapshotRef.current?.(() => scope.active);
+    const mergeBlanks = blankSnapshots.current.begin(pendingBlankSaves.current);
+    // Metadata reads begun before this snapshot cannot resurrect removed rows.
+    voiceNoteRequestsRef.current.clear();
+    // One immediate retry covers transient transport failures. A later online
+    // event or subscription retries again; do not spin while offline.
+    const read = async <T,>(load: () => Promise<T>): Promise<T> => {
+      try { return await load(); }
+      catch (error) { if (!scope.active) throw error; return load(); }
+    };
+    await Promise.allSettled([
+      read(() => fetchRoomVoiceNotes(roomId)).then(notes => {
+        if (scope.active) applyVoice?.(notes);
+      }),
+      read(() => fetchRoomBlankPages(roomId)).then(pages => {
+        if (!scope.active) return;
+        // An earlier response may have been lost after its write committed.
+        for (const page of pages) pendingBlankSaves.current.delete(page.id);
+        if (scope.active) setRoomBlankPages(local => scope.active ? mergeBlanks(local, pages, pendingBlankSaves.current) : local);
+      }),
+    ]).then(results => {
+      if (scope.active) for (const result of results) if (result.status === 'rejected') {
+        console.warn('Room snapshot refresh failed; retaining local state', result.reason);
+      }
+    });
+  }, [roomId]);
+
   const handleReconnect = useCallback(async () => {
     if (!roomId) return;
-    // Replay the complete paginated log: a maximum observed sequence is not a contiguous cursor.
+    const scope = snapshotLifetime.current;
+    if (!scope.active || scope.roomId !== roomId) return;
+    await reconcileRoomSnapshots();
+    if (!scope.active) return;
+    // Replay the complete log: an observed maximum is not a contiguous cursor.
     const rows = await fetchAllRoomStrokes(roomId).catch((error: unknown) => {
       console.error('Room stroke reconciliation failed', error);
       return [];
     });
+    if (!scope.active) return;
     for (const row of rows) {
       appendStrokeLocal(row.pageKey, row.stroke);
       if (row.seq > maxLocalSeqRef.current) maxLocalSeqRef.current = row.seq;
     }
-  }, [roomId, appendStrokeLocal]);
+  }, [roomId, appendStrokeLocal, reconcileRoomSnapshots]);
+
+  useEffect(() => {
+    const recover = () => { void handleReconnect(); };
+    window.addEventListener('online', recover);
+    return () => { window.removeEventListener('online', recover); };
+  }, [handleReconnect]);
 
   const handleIncomingVoiceNoteAdded = useCallback(async (noteId: string) => {
     const requests = voiceNoteRequestsRef.current;
@@ -591,6 +643,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   }, []);
 
   const handleIncomingBlankPage = useCallback((page: RoomBlankPagePayload) => {
+    blankSnapshots.current.touch(page.id);
     setRoomBlankPages((prev) => {
       if (prev.some((p) => p.id === page.id)) return prev;
       return [...prev, page];
@@ -670,7 +723,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     deleteNote: voiceDeleteNote,
     updateNoteTitle: voiceUpdateNoteTitle,
     getNotesForPage: voiceGetNotesForPage,
-    seedNotes: voiceSeedNotes,
+    beginReconcileNotes,
     addIncomingNote,
     removeIncomingNote,
   } = useRoomVoiceNotes(roomId, handleNoteAdded, handleNoteDeleted);
@@ -678,7 +731,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // Keep incoming + seed refs in sync
   useEffect(() => { addIncomingNoteRef.current    = addIncomingNote; },    [addIncomingNote]);
   useEffect(() => { removeIncomingNoteRef.current = removeIncomingNote; }, [removeIncomingNote]);
-  useEffect(() => { seedNotesRef.current          = voiceSeedNotes; },     [voiceSeedNotes]);
+  useEffect(() => { beginVoiceSnapshotRef.current = beginReconcileNotes; }, [beginReconcileNotes]);
 
   // Auto-open sheet when recording starts
   const [previouslyRecording, setPreviouslyRecording] = useState(voiceIsRecording);
@@ -698,6 +751,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       accessTokenRef.current = session?.access_token ?? null;
+      snapshotUser.current = session?.user.id ?? null;
       const { data: { user } } = await supabase.auth.getUser();
       if (cancelled) return;
       if (!user) { router.replace('/login'); return; }
@@ -774,17 +828,21 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
       const { data: signed, error: signErr } = await supabase.storage
         .from('pdfs').createSignedUrl(room.pdfPath, 3600);
+      if (cancelled) return;
       if (signErr || !signed?.signedUrl) {
         setErrorMsg(t('room_pdf_deleted'));
         setStatus('error'); return;
       }
 
       const resp = await fetch(signed.signedUrl);
+      if (cancelled) return;
       if (!resp.ok) { setErrorMsg(t('room_pdf_failed')); setStatus('error'); return; }
 
       const blob = await resp.blob();
+      if (cancelled) return;
       const file = new File([blob], room.documentName + '.pdf', { type: 'application/pdf' });
       const { id: newDocId } = await addDocument(file);
+      if (cancelled) return;
       docIdRef.current = newDocId;
       if (!cancelled) setDocId(newDocId);
 
@@ -796,26 +854,17 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       );
       storageSet(KEYS.DRAWINGS, filteredDrawings);
 
-      const [remoteVoiceNotes, remoteBlankPages, remoteStrokes] = await Promise.all([
-        fetchRoomVoiceNotes(roomId),
-        fetchRoomBlankPages(roomId),
+      const [, remoteStrokes] = await Promise.all([
+        reconcileRoomSnapshots(),
         fetchAllRoomStrokes(roomId),
       ]);
-
-      if (remoteVoiceNotes.length > 0 && !cancelled) {
-        seedNotesRef.current?.(remoteVoiceNotes);
-      }
-
-      if (remoteBlankPages.length > 0 && !cancelled) {
-        setRoomBlankPages(remoteBlankPages);
-      }
 
       // Seed roomStrokes from the append-only log. Strokes arrive in seq
       // order (DB orders by seq); group by page_key for PDFScrollViewer.
       // Merge into existing state rather than replace — a broadcast can
       // land in the gap between the fetch firing and this code running,
       // and dropping it on the floor would resurrect Bug A.
-      if (remoteStrokes.length > 0 && !cancelled) {
+      if (remoteStrokes.length > 0 && !cancelled && snapshotLifetime.current.active) {
         let maxSeq = maxLocalSeqRef.current;
         for (const row of remoteStrokes) {
           if (row.seq > maxSeq) maxSeq = row.seq;
@@ -862,9 +911,19 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     const supabase = createClient();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       accessTokenRef.current = session?.access_token ?? null;
+      const nextUser = session?.user.id ?? null;
+      if (snapshotUser.current && nextUser !== snapshotUser.current) {
+        snapshotLifetime.current.active = false;
+        blankSnapshots.current.invalidate();
+        voiceNoteRequestsRef.current.clear();
+        setStatus('error');
+        setErrorMsg('Your account changed. Reopen this room to continue.');
+        router.replace('/workspace');
+      }
+      snapshotUser.current = nextUser;
     });
     return () => { sub.subscription.unsubscribe(); };
-  }, []);
+  }, [router]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : (activeDocument?.currentPage ?? 1);
@@ -1010,6 +1069,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
     docIdRef.current = newDocId;
     setDocId(newDocId);
     setVirtualIndex(0);
+    blankSnapshots.current.invalidate();
     setRoomBlankPages([]);
     // Strokes are room-scoped (page_key='pdf:N' is page number, not doc id)
     // so they persist across PDF swaps without a refetch — handleReconnect
@@ -1083,9 +1143,18 @@ export default function RoomClient({ roomId }: { roomId: string }) {
       createdAt: Date.now(),
     };
     pendingBlankIdRef.current = page.id;
+    blankSnapshots.current.touch(page.id);
+    pendingBlankSaves.current.add(page.id);
     setRoomBlankPages((prev) => [...prev, page]);
-    saveRoomBlankPage(roomId, page);
-    broadcastBlankPageAdded(page);
+    const scope = snapshotLifetime.current;
+    void saveRoomBlankPage(roomId, page).then(() => {
+      if (!scope.active) return;
+      pendingBlankSaves.current.delete(page.id);
+      blankSnapshots.current.touch(page.id);
+      broadcastBlankPageAdded(page);
+    }).catch(error => {
+      if (scope.active) console.warn('Room page save failed; retaining local page', error);
+    });
   }, [currentVP, roomId, broadcastBlankPageAdded]);
 
   // Close blank menu on outside click
