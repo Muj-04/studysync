@@ -1,9 +1,11 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { PDFDocument } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { savePdfBlob, deletePdfBlob, getAllStoredDocIds, getStoredPdf } from '@/lib/pdfStore';
 
+import { isDocumentRecoveryOnly } from '@/lib/documentOutbox';
+import { retainDocumentSnapshot } from '@/lib/documentRecovery';
 import { identifyPdf } from '@/lib/documentIdentity';
 import { fetchDocuments } from '@/lib/supabase/db';
 
@@ -36,20 +38,30 @@ function hasStoredDataForDoc(docId: string): boolean {
   return false;
 }
 
-export function usePDF({ persist = true }: { persist?: boolean } = {}) {
+export function usePDF({ persist = true, ownerId }: { persist?: boolean; ownerId?: string | null } = {}) {
   const [documents, setDocuments] = useState<PDFDocument[]>([]);
   const [activeDocumentId, setActiveDocumentId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const ownerLifetime = useRef({ ownerId, version: 0 });
+  useEffect(() => {
+    if (ownerLifetime.current.ownerId && ownerLifetime.current.ownerId !== ownerId) {
+      ownerLifetime.current.version++;
+      setDocuments(previous => { for (const doc of previous) URL.revokeObjectURL(doc.url); return []; });
+      setActiveDocumentId(null);
+    }
+    ownerLifetime.current.ownerId = ownerId;
+  }, [ownerId]);
 
   const activeDocument = documents.find((d) => d.id === activeDocumentId) ?? null;
 
   // Auto-restore previously opened PDFs from IndexedDB on mount
   useEffect(() => {
-    if (!persist) return;
+    if (!persist || ownerId === null) return;
     let cancelled = false;
     (async () => {
       const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-      const storedIds = await getAllStoredDocIds();
+      const storedIds = await getAllStoredDocIds(ownerId ?? undefined);
       if (cancelled || storedIds.length === 0) return;
 
       const cloudDocuments = await fetchDocuments().catch(() => []);
@@ -57,11 +69,12 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
       const restored: PDFDocument[] = [];
 
       for (const docId of storedIds) {
-        const stored = await getStoredPdf(docId);
+        if (ownerId && isDocumentRecoveryOnly(ownerId, docId)) continue;
+        const stored = await getStoredPdf(docId, ownerId ?? undefined);
         const blob = stored?.blob;
         if (!blob || cancelled) continue;
         const filename = stored?.filename ?? Object.keys(docMap).find((k) => docMap[k] === docId) ?? cloudDocuments.find((d) => d.id === docId)?.name;
-        if (filename && !stored?.filename) await savePdfBlob(docId, blob, { filename, fingerprint: stored?.fingerprint });
+        if (filename && !stored?.filename) await savePdfBlob(docId, blob, { filename, fingerprint: stored?.fingerprint }, ownerId ?? undefined);
         const url = URL.createObjectURL(blob);
         try {
           const pdf = await pdfjs.getDocument({ url }).promise;
@@ -94,14 +107,16 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
       }
     })().catch(console.error);
     return () => { cancelled = true; };
-  }, [persist]);
+  }, [persist, ownerId]);
 
   const addDocument = useCallback(async (file: File, explicitId?: string): Promise<{ isRestored: boolean; id: string }> => {
+    const version = ownerLifetime.current.version;
+    const assertCurrent = () => { if (version !== ownerLifetime.current.version) throw new Error('Account changed while opening the source file'); };
     setIsLoading(true);
     try {
       const isPPTX = file.name.toLowerCase().endsWith('.pptx');
       const { id, fingerprint } = persist && !isPPTX
-        ? await identifyPdf(file, explicitId)
+        ? await identifyPdf(file, explicitId, ownerId ?? undefined)
         : { id: explicitId ?? crypto.randomUUID(), fingerprint: undefined };
       const isRestored = hasStoredDataForDoc(id);
 
@@ -123,7 +138,8 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
         const pdf = await pdfjs.getDocument({ url }).promise;
         const pageCount = pdf.numPages;
         await pdf.loadingTask.destroy();
-        if (persist) await savePdfBlob(id, file, { filename: file.name, fingerprint });
+        if (persist) await savePdfBlob(id, file, { filename: file.name, fingerprint }, ownerId ?? undefined);
+        assertCurrent();
         const doc: PDFDocument = {
           id,
           name: file.name.replace(/\.pdf$/i, ''),
@@ -144,11 +160,12 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
         setActiveDocumentId(doc.id);
       }
 
+      if (persist && ownerId) retainDocumentSnapshot(ownerId, id, 'source', { filename: file.name }, file.name.replace(/\.(pdf|pptx)$/i, ''));
       return { isRestored, id };
     } finally {
       setIsLoading(false);
     }
-  }, [persist]);
+  }, [persist, ownerId]);
 
   // Called when Supabase returns a canonical ID different from the locally-generated one.
   const updateDocumentId = useCallback((oldId: string, newId: string) => {
@@ -161,15 +178,15 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
       storageSet(KEYS.DOC_MAP, docMap);
     }
     // Migrate IndexedDB blob to new ID
-    getStoredPdf(oldId).then((stored) => {
+    getStoredPdf(oldId, ownerId ?? undefined).then((stored) => {
       if (stored) {
-        savePdfBlob(newId, stored.blob, { filename: stored.filename, fingerprint: stored.fingerprint }).then(() => deletePdfBlob(oldId)).catch(console.error);
+        savePdfBlob(newId, stored.blob, { filename: stored.filename, fingerprint: stored.fingerprint }, ownerId ?? undefined).then(() => deletePdfBlob(oldId, ownerId ?? undefined)).catch(console.error);
       }
     }).catch(console.error);
-  }, []);
+  }, [ownerId]);
 
   const removeDocument = useCallback(
-    (id: string) => {
+    (id: string, retainSource = false) => {
       setDocuments((prev) => {
         const doc = prev.find((d) => d.id === id);
         if (doc) URL.revokeObjectURL(doc.url);
@@ -180,9 +197,9 @@ export function usePDF({ persist = true }: { persist?: boolean } = {}) {
         const remaining = documents.filter((d) => d.id !== id);
         return remaining[remaining.length - 1]?.id ?? null;
       });
-      if (persist) deletePdfBlob(id).catch(console.error);
+      if (persist && !retainSource) deletePdfBlob(id, ownerId ?? undefined).catch(console.error);
     },
-    [documents, persist]
+    [documents, persist, ownerId]
   );
 
   const reorderDocuments = useCallback((newDocs: PDFDocument[]) => {

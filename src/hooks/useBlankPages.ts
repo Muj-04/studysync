@@ -1,10 +1,11 @@
 'use client';
+import { retainDocumentSnapshot } from '@/lib/documentRecovery';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { BlankPage, CanvasImage } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { saveBlankPages as dbSaveBlankPages } from '@/lib/supabase/db';
 
-export function useBlankPages() {
+export function useBlankPages(expectedOwner?: string | null) {
   const [blankPages, setBlankPages] = useState<BlankPage[]>([]);
   const blankPagesRef = useRef<BlankPage[]>([]);
   const pendingDocuments = useRef(new Set<string>());
@@ -27,25 +28,36 @@ export function useBlankPages() {
     return () => { mounted.current = false; };
   }, [pendingKey]);
 
+  const previousOwner = useRef(expectedOwner);
+  useEffect(() => {
+    if (previousOwner.current && previousOwner.current !== expectedOwner) {
+      blankPagesRef.current = []; pendingDocuments.current.clear(); editedDocuments.current.clear(); versions.current.clear();
+      // An account transition clears the visible cache; owner recovery remains separate.
+      setBlankPages([]);
+    }
+    previousOwner.current = expectedOwner;
+  }, [expectedOwner]);
+
   const commit = useCallback((pages: BlankPage[], docId?: string) => {
     blankPagesRef.current = pages;
     storageSet(KEYS.BLANK_PAGES, pages);
     setBlankPages(pages);
     if (docId) {
+      retainDocumentSnapshot(expectedOwner ?? null, docId, 'blank_pages', pages.filter(page => page.documentId === docId));
       const version = (versions.current.get(docId) ?? 0) + 1;
       versions.current.set(docId, version);
       pendingDocuments.current.add(docId);
       editedDocuments.current.add(docId);
       storageSet(pendingKey, [...pendingDocuments.current]);
-      void dbSaveBlankPages(docId, pages.filter((page) => page.documentId === docId))
+      void dbSaveBlankPages(docId, pages.filter((page) => page.documentId === docId), expectedOwner ?? undefined)
         .then(() => {
-          if (!mounted.current || versions.current.get(docId) !== version || storageGet(pendingKey) === null) return;
+          if (!mounted.current || previousOwner.current !== expectedOwner || versions.current.get(docId) !== version || storageGet(pendingKey) === null) return;
           pendingDocuments.current.delete(docId);
           storageSet(pendingKey, [...pendingDocuments.current]);
         })
         .catch((error: unknown) => console.error('Blank pages could not be synced; local copy retained', error));
     }
-  }, [pendingKey]);
+  }, [pendingKey, expectedOwner]);
 
   const insertBlankPage = useCallback((documentId: string, insertAfterPage: number, bgTheme: 'white' | 'dark' = 'white'): BlankPage => {
     const page: BlankPage = { id: crypto.randomUUID(), documentId, insertAfterPage, createdAt: Date.now(), bgTheme };

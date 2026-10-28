@@ -1,4 +1,5 @@
 'use client';
+import { retainRecoveryAudio } from '@/lib/recoveryAudio';
 import { createRoomSnapshotGate } from '@/lib/roomSnapshot';
 import { useRecordingLifetime } from './useRecordingLifetime';
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -179,6 +180,7 @@ export function useRoomVoiceNotes(
       const blob = new Blob(chunks, { type: recordedType });
 
       const note: VoiceNote = {
+        syncStatus: 'pending',
         id: crypto.randomUUID(),
         documentId: roomId,
         pageNumber,
@@ -188,6 +190,7 @@ export function useRoomVoiceNotes(
         timestamp: new Date(),
       };
 
+      void retainRecoveryAudio(owner, note).catch(() => { if (isCurrent()) alert('Local audio backup failed. Export this recording before closing the tab.'); });
       unsavedNotes.current.add(note.id);
       snapshots.current.touch(note.id);
       setNotes((prev) => [...prev, note]);
@@ -201,10 +204,14 @@ export function useRoomVoiceNotes(
           retrySaves.current.delete(note.id);
           unsavedNotes.current.delete(note.id);
           snapshots.current.touch(note.id);
-          if (isCurrent()) onNoteAddedRef.current?.(note.id);
+          if (isCurrent()) {
+            setNotes(prev => prev.map(current => current.id === note.id ? { ...current, syncStatus: 'saved' } : current));
+            onNoteAddedRef.current?.(note.id);
+          }
         }).catch((error: unknown) => {
           console.warn('[VoiceNote] room recording save failed:', error);
           if (isCurrent()) {
+            setNotes(prev => prev.map(current => current.id === note.id ? { ...current, syncStatus: 'failed' } : current));
             retrySaves.current.set(note.id, sync);
             alert('Could not save this recording. The audio is still available in this tab, but has not been shared. Reconnect to retry.');
           }
