@@ -11,24 +11,30 @@ type Payload = { collection: DocumentCollection; pageKey: string; rows: Row[] };
 export function recoveryPayloads(owner: string, documentId: string): Payload[] {
   const payloads = new Map<string, Payload>();
   const put = (collection: DocumentCollection, pageKey: string, rows: Row[]) => payloads.set(`${collection}:${pageKey}`, { collection, pageKey, rows });
-  const snapshot = listLocalDocumentRecovery(owner).find(entry => entry.documentId === documentId)?.snapshots ?? {};
+  const local = listLocalDocumentRecovery(owner).find(entry => entry.documentId === documentId);
   const text = (rows: Row[]) => rows.map(row => ({ ...row, font_size: row.fontSize ?? row.font_size }));
   const blanks = (rows: Row[]) => rows.map(row => ({ ...row, insert_after_page: row.insertAfterPage ?? row.insert_after_page, canvas_data: row.canvasData ?? row.canvas_data ?? null, bg_theme: row.bgTheme ?? row.bg_theme ?? 'white', created_at: row.createdAt ?? row.created_at }));
-  for (const entry of listDocumentWrites(owner).filter(entry => entry.documentId === documentId)) put(entry.collection as DocumentCollection, entry.pageKey, entry.rows as Row[]);
-  // Older whole-document recovery snapshots are the base; per-page edits win.
-  for (const [key, value] of Object.entries(snapshot[KEYS.DRAWINGS] as Record<string, string> ?? {})) put('drawings', key.slice(documentId.length + 1), [{ canvas_data: value }]);
-  for (const [key, value] of Object.entries(snapshot[KEYS.TEXT_NOTES] as Record<string, Row[]> ?? {})) put('text_notes', key.slice(documentId.length + 1), text(value));
-  for (const [page, value] of Object.entries(snapshot[KEYS.PAGE_IMAGES] as Record<string, unknown[]> ?? {})) put('page_image_annotations', page, [{ images: value }]);
-  if (Array.isArray(snapshot[KEYS.BLANK_PAGES])) put('blank_pages', '', blanks(snapshot[KEYS.BLANK_PAGES] as Row[]));
-  if (Array.isArray(snapshot[KEYS.BOOKMARKS])) put('bookmarks', '', (snapshot[KEYS.BOOKMARKS] as Row[]).map(row => ({ ...row, virtual_index: row.virtualIndex ?? row.virtual_index, created_at: new Date(row.createdAt as number).toISOString() })));
-  if (Array.isArray(snapshot[KEYS.KEY_TERMS])) put('key_terms', '', (snapshot[KEYS.KEY_TERMS] as Row[]).map(row => ({ ...row, created_at: new Date(row.createdAt as number).toISOString() })));
-  for (const [kind, value] of Object.entries(snapshot)) {
+  const applySnapshot = (kind: string, value: unknown) => {
+    if (kind === KEYS.DRAWINGS) for (const [key, row] of Object.entries(value as Record<string, string> ?? {})) put('drawings', key.slice(documentId.length + 1), row ? [{ canvas_data: row }] : []);
+    if (kind === KEYS.TEXT_NOTES) for (const [key, rows] of Object.entries(value as Record<string, Row[]> ?? {})) put('text_notes', key.slice(documentId.length + 1), text(rows));
+    if (kind === KEYS.PAGE_IMAGES) for (const [page, rows] of Object.entries(value as Record<string, unknown[]> ?? {})) put('page_image_annotations', page, [{ images: rows }]);
+    if (kind === KEYS.BLANK_PAGES && Array.isArray(value)) put('blank_pages', '', blanks(value));
+    if (kind === KEYS.BOOKMARKS && Array.isArray(value)) put('bookmarks', '', value.map(row => ({ ...row, virtual_index: row.virtualIndex ?? row.virtual_index, created_at: new Date(row.createdAt).toISOString() })));
+    if (kind === KEYS.KEY_TERMS && Array.isArray(value)) put('key_terms', '', value.map(row => ({ ...row, created_at: new Date(row.createdAt).toISOString() })));
     if (kind.startsWith('drawing:')) put('drawings', kind.slice(8), value ? [{ canvas_data: value }] : []);
     if (kind.startsWith('text_notes:')) put('text_notes', kind.slice(11), text(value as Row[]));
     if (kind.startsWith('page_images:')) put('page_image_annotations', kind.slice(12), [{ images: value }]);
     if (kind === 'blank_pages') put('blank_pages', '', blanks(value as Row[]));
+  };
+  // Both sources carry capture times. A raw edit can be newer than its debounced
+  // outbox, while an imported/adapter write can be newer than a retained snapshot.
+  const events: { at: number; apply: () => void }[] = [];
+  for (const entry of listDocumentWrites(owner).filter(entry => entry.documentId === documentId)) {
+    events.push({ at: entry.createdAt ?? 0, apply: () => put(entry.collection as DocumentCollection, entry.pageKey, entry.rows as Row[]) });
   }
-  // Acknowledged-order outbox payloads include all adapter-supported collections.
+  const retained = local?.alternatives ?? Object.entries(local?.snapshots ?? {}).map(([kind, value]) => ({ kind, value, updatedAt: local?.updatedAt ?? 0 }));
+  for (const snapshot of retained) events.push({ at: snapshot.updatedAt, apply: () => applySnapshot(snapshot.kind, snapshot.value) });
+  for (const event of events.sort((a, b) => a.at - b.at)) event.apply();
 
   const blankIds = new Map<string, string>();
   for (const row of payloads.get('blank_pages:')?.rows ?? []) if (typeof row.id === 'string') blankIds.set(row.id, crypto.randomUUID());

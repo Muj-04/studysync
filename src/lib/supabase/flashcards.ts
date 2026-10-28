@@ -88,7 +88,7 @@ export async function createFlashcardDeck(input: {
   const document_generation = input.docId ? await requireDocumentGeneration(uid, input.docId) : null;
   await assertDocumentOwner(uid);
   const { data: id, error } = await sb().rpc('create_flashcard_deck_v2', {
-    p_name: input.name.trim(), p_description: input.description?.trim() ?? '',
+    p_expected_owner: uid, p_name: input.name.trim(), p_description: input.description?.trim() ?? '',
     p_document_id: input.docId || null, p_generation: document_generation,
     p_cards: input.cards.filter(card => card.question.trim() && card.answer.trim()).map(card => ({ question: card.question.trim(), answer: card.answer.trim() })),
   });
@@ -128,6 +128,7 @@ export async function reviewFlashcard(card: StudyFlashcard, rating: 'again' | 'h
   } catch (error) {
     console.warn('[Flashcards] deck timestamp update failed:', error);
   }
+  await assertDocumentOwner(uid);
   return { ...card, intervalDays: saved.interval_days, reviewCount: saved.review_count,
     lastReviewedAt: saved.last_reviewed_at, nextReviewAt: saved.next_review_at };
 }

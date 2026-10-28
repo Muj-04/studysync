@@ -61,7 +61,7 @@ export function usePDF({ persist = true, ownerId }: { persist?: boolean; ownerId
     let cancelled = false;
     (async () => {
       const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-      const storedIds = await getAllStoredDocIds();
+      const storedIds = await getAllStoredDocIds(ownerId ?? undefined);
       if (cancelled || storedIds.length === 0) return;
 
       const cloudDocuments = await fetchDocuments().catch(() => []);
@@ -70,11 +70,11 @@ export function usePDF({ persist = true, ownerId }: { persist?: boolean; ownerId
 
       for (const docId of storedIds) {
         if (ownerId && isDocumentRecoveryOnly(ownerId, docId)) continue;
-        const stored = await getStoredPdf(docId);
+        const stored = await getStoredPdf(docId, ownerId ?? undefined);
         const blob = stored?.blob;
         if (!blob || cancelled) continue;
         const filename = stored?.filename ?? Object.keys(docMap).find((k) => docMap[k] === docId) ?? cloudDocuments.find((d) => d.id === docId)?.name;
-        if (filename && !stored?.filename) await savePdfBlob(docId, blob, { filename, fingerprint: stored?.fingerprint });
+        if (filename && !stored?.filename) await savePdfBlob(docId, blob, { filename, fingerprint: stored?.fingerprint }, ownerId ?? undefined);
         const url = URL.createObjectURL(blob);
         try {
           const pdf = await pdfjs.getDocument({ url }).promise;
@@ -178,12 +178,12 @@ export function usePDF({ persist = true, ownerId }: { persist?: boolean; ownerId
       storageSet(KEYS.DOC_MAP, docMap);
     }
     // Migrate IndexedDB blob to new ID
-    getStoredPdf(oldId).then((stored) => {
+    getStoredPdf(oldId, ownerId ?? undefined).then((stored) => {
       if (stored) {
-        savePdfBlob(newId, stored.blob, { filename: stored.filename, fingerprint: stored.fingerprint }).then(() => deletePdfBlob(oldId)).catch(console.error);
+        savePdfBlob(newId, stored.blob, { filename: stored.filename, fingerprint: stored.fingerprint }, ownerId ?? undefined).then(() => deletePdfBlob(oldId, ownerId ?? undefined)).catch(console.error);
       }
     }).catch(console.error);
-  }, []);
+  }, [ownerId]);
 
   const removeDocument = useCallback(
     (id: string, retainSource = false) => {
@@ -197,9 +197,9 @@ export function usePDF({ persist = true, ownerId }: { persist?: boolean; ownerId
         const remaining = documents.filter((d) => d.id !== id);
         return remaining[remaining.length - 1]?.id ?? null;
       });
-      if (persist && !retainSource) deletePdfBlob(id).catch(console.error);
+      if (persist && !retainSource) deletePdfBlob(id, ownerId ?? undefined).catch(console.error);
     },
-    [documents, persist]
+    [documents, persist, ownerId]
   );
 
   const reorderDocuments = useCallback((newDocs: PDFDocument[]) => {

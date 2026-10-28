@@ -58,6 +58,7 @@ for (const name of ['deleteAllDrawingsForUser', 'deleteAllVoiceNotesForUser']) {
   test(`${name} rejects server errors and missing identity`, async () => {
     let owner = 'alice';
     const api = loadSource('src/lib/supabase/accountData.ts', {
+      './documentProtocol': { assertDocumentOwner: async () => {} },
       './dbShared': {
         userId: async () => owner,
         sb: () => ({ rpc: async () => ({ error: new Error('offline') }), from: () => ({ delete: () => ({ eq: async () => ({ error: new Error('offline') }) }) }) }),
@@ -68,3 +69,8 @@ for (const name of ['deleteAllDrawingsForUser', 'deleteAllVoiceNotesForUser']) {
     await assert.rejects(api[name](), /sign in/i);
   });
 }
+
+test('bulk drawing clear carries the captured owner into the transactional boundary', async()=>{
+ let requested;const api=loadSource('src/lib/supabase/accountData.ts', {'./dbShared':{userId:async()=> 'alice',sb:()=>({rpc:async(name,args)=>{requested={name,args};return{error:Error('account changed')};}})},'./documentProtocol':{assertDocumentOwner:async()=>{}}});
+ await assert.rejects(api.deleteAllDrawingsForUser(),/account changed/);assert.deepEqual(requested,{name:'clear_account_drawings_v2',args:{p_expected_owner:'alice'}});
+});

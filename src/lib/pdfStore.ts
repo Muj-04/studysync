@@ -153,8 +153,9 @@ export async function getStoredPdf(docId: string, expectedOwner?: string): Promi
   }
 }
 
-export async function deletePdfBlob(docId: string): Promise<void> {
+export async function deletePdfBlob(docId: string, expectedOwner?: string): Promise<void> {
   const scope = await getStorageScope();
+  if (expectedOwner && scope.userId !== expectedOwner) throw new Error('Account changed before accessing the recovery file');
   const db = await openDb(scope.dbName);
   try {
     await removeBlob(db, docId);
@@ -163,8 +164,9 @@ export async function deletePdfBlob(docId: string): Promise<void> {
   }
 }
 
-export async function getAllStoredDocIds(): Promise<string[]> {
+export async function getAllStoredDocIds(expectedOwner?: string): Promise<string[]> {
   const scope = await getStorageScope();
+  if (expectedOwner && scope.userId !== expectedOwner) throw new Error('Account changed before accessing the recovery file');
   const db = await openDb(scope.dbName);
   try {
     await migrateOwnedLegacyBlobs(scope, db);
