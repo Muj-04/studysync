@@ -45,6 +45,7 @@ export async function clearLocalUserData(): Promise<void> {
         // upload or cleanup is not abandoned. No audio, tokens or signed playback
         // URLs are stored here; replay verifies the owner before every phase.
         if (key.startsWith('studysync_recording_recovery_')) continue;
+        if (['studysync_document_outbox_', 'studysync_document_recovery_', 'studysync_document_generation_'].some(prefix => key.startsWith(prefix))) continue;
         toRemove.push(key);
       }
     }

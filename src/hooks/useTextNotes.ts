@@ -1,5 +1,6 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import type { TextNote } from '@/types';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
 import { saveTextNotes } from '@/lib/supabase/db';
@@ -10,6 +11,7 @@ type NotesByPage = Record<string, TextNote[]>;
 export function useTextNotes(userId: string | null) {
   const [notes, setNotes] = useState<NotesByPage>({});
   const [ready, setReady] = useState(false);
+  const notesRef = useRef<NotesByPage>({});
   const previous = useRef<NotesByPage>({});
   const pending = useRef<NotesByPage>({});
   const pendingOwner = useRef<string | null>(null);
@@ -28,6 +30,7 @@ export function useTextNotes(userId: string | null) {
         if (pending.current[key] || editedPages.current.has(key) || changedBeforeEffect) continue;
         merged[key] = pageNotes;
       }
+      notesRef.current = merged;
       return merged;
     });
   }, []);
@@ -36,6 +39,7 @@ export function useTextNotes(userId: string | null) {
     // Browser storage is restored after hydration to keep server/client markup consistent.
     const stored = storageGet<NotesByPage>(KEYS.TEXT_NOTES) ?? {};
     previous.current = stored;
+    notesRef.current = stored;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNotes(stored);
     setReady(true);
@@ -43,6 +47,12 @@ export function useTextNotes(userId: string | null) {
 
   useEffect(() => {
     if (!ready) return;
+    if (pendingOwner.current && pendingOwner.current !== userId) {
+      previous.current = {}; notesRef.current = {}; pending.current = {}; inFlight.current = {};
+      editedPages.current.clear(); pendingOwner.current = userId;
+      setNotes({});
+      return;
+    }
     storageSet(KEYS.TEXT_NOTES, notes);
     const pendingKey = `${KEYS.TEXT_NOTES}_pending_${encodeURIComponent(userId ?? '')}`;
     if (userId && pendingOwner.current !== userId) {
@@ -61,6 +71,8 @@ export function useTextNotes(userId: string | null) {
     }
     for (const [key, pageNotes] of Object.entries(notes)) {
       if (previous.current[key] === pageNotes || seeded.current.has(pageNotes)) continue;
+      const split = key.indexOf(':');
+      if (split >= 0) retainDocumentSnapshot(userId, key.slice(0, split), `text_notes:${key.slice(split + 1)}`, pageNotes);
       editedPages.current.add(key);
       pending.current[key] = pageNotes;
     }
@@ -77,7 +89,7 @@ export function useTextNotes(userId: string | null) {
       const separator = key.indexOf(':');
       if (separator < 0) continue;
       inFlight.current[key] = pageNotes;
-      void saveTextNotes(key.slice(0, separator), key.slice(separator + 1), pageNotes)
+      void saveTextNotes(key.slice(0, separator), key.slice(separator + 1), pageNotes, userId)
         .then(() => {
           const stored = storageGet<NotesByPage>(pendingKey) ?? {};
           if (JSON.stringify(stored[key]) === JSON.stringify(pageNotes)) {
@@ -95,5 +107,16 @@ export function useTextNotes(userId: string | null) {
     }
   }, [notes, ready, userId]);
 
-  return [notes, setNotes, seedNotes] as const;
+  const editNotes = useCallback((update: SetStateAction<NotesByPage>) => {
+    const next = typeof update === 'function' ? update(notesRef.current) : update;
+    for (const [key, pageNotes] of Object.entries(next)) {
+      if (notesRef.current[key] === pageNotes) continue;
+      const separator = key.indexOf(':');
+      if (separator >= 0) retainDocumentSnapshot(userId, key.slice(0, separator), `text_notes:${key.slice(separator + 1)}`, pageNotes);
+    }
+    notesRef.current = next;
+    setNotes(next);
+  }, [userId]);
+
+  return [notes, editNotes, seedNotes] as const;
 }

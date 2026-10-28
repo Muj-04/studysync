@@ -9,6 +9,7 @@ export interface PDFDocument {
 }
 
 export interface VoiceNote {
+  syncStatus?: 'pending' | 'saved' | 'failed';
   id: string;
   documentId: string;
   pageNumber: number | string; // number for PDF pages, blankPage.id for blank pages

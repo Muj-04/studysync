@@ -1,4 +1,7 @@
 'use client';
+import { DocumentRecoveryPanel } from '@/components/DocumentRecoveryPanel';
+import { retainRecoveryAudio } from '@/lib/recoveryAudio';
+import { preserveDocumentBeforeRemoval, retainDocumentSnapshot } from '@/lib/documentRecovery';
 import { useResizablePanels } from './useResizablePanels';
 import { useDocumentOrder } from './useDocumentOrder';
 import HdrBtn from './HeaderButton';
@@ -247,7 +250,7 @@ export default function WorkspacePage() {
   const {
     documents, activeDocument, activeDocumentId,
     isLoading, addDocument, removeDocument, updateDocumentId, reorderDocuments, setActiveDocument, goToPage,
-  } = usePDF();
+  } = usePDF({ ownerId: userId });
   const {
     notes: voiceNotes,
     isRecording, recordingContext,
@@ -258,9 +261,9 @@ export default function WorkspacePage() {
     insertBlankPage, removeBlankPage,
     updateCanvasData, updateImages, updateBgTheme, getBlankPagesForDocument,
     seedBlankPages, removePagesForDocument,
-  } = useBlankPages();
-  const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
-  const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages } = usePDFPageImages();
+  } = useBlankPages(userId);
+  const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings(userId);
+  const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages } = usePDFPageImages(userId);
   useStudySession(activeDocumentId, userId);
   const [pageTextNotes, setPageTextNotes, seedTextNotes] = useTextNotes(userId);
 
@@ -522,7 +525,7 @@ export default function WorkspacePage() {
       const localOnly = local.filter((b) => !remoteIds.has(b.id));
       const merged = [...remote, ...localOnly];
       setBookmarks(merged);
-      if (localOnly.length > 0) void dbSaveBookmarks(activeDocumentId, merged).catch(console.error);
+      // Cached-only bookmarks remain local; a fetch never creates a write.
     }).catch(console.error);
     return () => { cancelled = true; };
   }, [activeDocumentId, userId]);
@@ -532,7 +535,10 @@ export default function WorkspacePage() {
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     stored[docId] = marks;
     storageSet(KEYS.BOOKMARKS, stored);
-    if (userIdRef.current) void dbSaveBookmarks(docId, marks).catch(console.error);
+    if (userIdRef.current) {
+      retainDocumentSnapshot(userIdRef.current, docId, KEYS.BOOKMARKS, marks);
+      void dbSaveBookmarks(docId, marks, userIdRef.current).catch(console.error);
+    }
   }, []);
 
   const isCurrentPageBookmarked = bookmarks.some((b) => b.virtualIndex === virtualIndex);
@@ -949,11 +955,11 @@ export default function WorkspacePage() {
       if (isRestored) anyRestored = true;
       if (userIdRef.current) {
         if (docId) {
-          upsertDocument({
+          await upsertDocument({
             id: docId,
             name: f.name.replace(/\.(pdf|pptx)$/i, ''),
             type: f.name.toLowerCase().endsWith('.pptx') ? 'pptx' : 'pdf',
-          });
+          }).catch(error => showToast(error instanceof Error ? error.message : 'Document registration failed; source retained locally.'));
         }
       }
     }
@@ -973,6 +979,17 @@ export default function WorkspacePage() {
 
   const executeRemoveDocument = useCallback(async (docId: string) => {
     setConfirmRemoveDocId(null);
+    const owner = userIdRef.current;
+    if (!owner) return;
+    try {
+      for (const note of voiceNotes.filter(note => note.documentId === docId)) await retainRecoveryAudio(owner, note);
+      preserveDocumentBeforeRemoval(owner, docId, documents.find(doc => doc.id === docId)?.name ?? 'Recovered document');
+      await deleteAllDataForDocument(docId);
+      if (userIdRef.current !== owner) return;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Deletion failed; your local work is retained.');
+      return;
+    }
 
     // ── localStorage cleanup ────────────────────────────────────────────────
     const drawings = storageGet<Record<string, string>>(KEYS.DRAWINGS) ?? {};
@@ -1013,18 +1030,11 @@ export default function WorkspacePage() {
     removePageImagesForDocument(docId);
 
     // Remove from document list — usePDF auto-switches active doc to the next one (or null)
-    removeDocument(docId);
-    showToast('Document deleted successfully.');
+    removeDocument(docId, true);
+    showToast('Document deleted. Local recovery and source file retained.');
 
-    // ── Supabase cleanup (background; errors are non-fatal since local state is clean) ──
-    if (userIdRef.current) {
-      try {
-        await deleteAllDataForDocument(docId);
-      } catch (err) {
-        console.error('[Delete] Supabase cleanup failed:', err);
-      }
-    }
-  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast, setPageTextNotes]);
+
+  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast, setPageTextNotes, documents, voiceNotes]);
 
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';
@@ -1309,6 +1319,8 @@ export default function WorkspacePage() {
           <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
         </div>
       </header>
+
+      <DocumentRecoveryPanel ownerId={userId} voiceNotes={voiceNotes} openCopy={addDocument} />
 
       {/* Shortcuts modal */}
       {shortcutsOpen && <HelpModal onClose={() => setShortcutsOpen(false)} />}
