@@ -1,5 +1,7 @@
 # StudySync overnight QA handoff — 28 October 2026
 
+> Historical audit/integration record. See [the focused reliability recovery handoff](reliability-recovery-handoff-2026-10-28.md) for work after final dev `7f187ef`.
+
 > This section records the overnight snapshot. The final independent review and authorized dev integration are recorded below. Production authorization remains excluded.
 
 ## State and boundaries
