@@ -70,7 +70,7 @@ export async function deleteAllVoiceNotesForUser(): Promise<void> {
 
 export async function deleteAllDrawingsForUser(): Promise<void> {
   const uid = await userId(); if (!uid) throw new Error('Sign in to delete drawings');
-  const { error } = await sb().from('drawings').delete().eq('user_id', uid);
+  const { error } = await sb().rpc('clear_account_drawings_v2');
   if (error) throw error;
 }
 

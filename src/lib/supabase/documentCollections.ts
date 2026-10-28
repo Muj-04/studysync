@@ -44,6 +44,9 @@ export async function executeDocumentWrite(entry: DocumentWrite): Promise<number
   });
   if (error) throw protocolError(error);
   await assertDocumentOwner(entry.ownerId);
+  if ((typeof data !== 'number' && (typeof data !== 'string' || !/^\d+$/.test(data))) || data === null) {
+    throw new Error('Missing document write acknowledgement; retry will use the same operation ID.');
+  }
   const revision = Number(data);
   if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Missing document write acknowledgement; retry will use the same operation ID.');
   return revision;
