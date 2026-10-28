@@ -63,6 +63,19 @@ async function handlePost(req: NextRequest) {
     return NextResponse.json({ error: 'Not a member of this room' }, { status: 403 });
   }
 
+  // Closing or expiring a room can leave membership rows behind. Membership
+  // alone must not allow a caller to mint a fresh voice token after it ends.
+  const { data: room, error: roomError } = await admin
+    .from('study_rooms')
+    .select('status, expires_at')
+    .eq('id', roomId)
+    .maybeSingle();
+  if (roomError) throw roomError;
+  if (!room || room.status !== 'active'
+    || (room.expires_at !== null && !(Date.parse(room.expires_at) > Date.now()))) {
+    return NextResponse.json({ error: 'Room is no longer active' }, { status: 403 });
+  }
+
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity,
     name: typeof name === 'string' ? name : identity,
