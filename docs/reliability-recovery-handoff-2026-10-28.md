@@ -103,3 +103,12 @@ remaining: **none**. Browser contexts closed; this run's local server on port312
 stopped. Worktrees, test scripts and logs are retained as evidence. Standard logout
 now intentionally retains owner-scoped pending referral/recording metadata for
 recovery; these are product behavior, not external test fixtures.
+
+## Follow-up independent review corrections
+
+A subsequent review reproduced two gaps despite the original 314 passing tests:
+
+- PR #36, corrected in `e412fa9`: an old room callback could capture a replacement room's active lifecycle and apply old notes/pages there. Lifetimes now carry room identity; mismatched reconciliation/reconnect callbacks stop before creating snapshot tokens or making reads. PDF initialization checks cancellation after each asynchronous step. A new regression reproduces the delayed A-callback/B-room sequence and verifies B is retained. It failed before the fix and passes afterward. Independent review of the correction found no remaining issue.
+- PR #38, corrected in `8b222ba` and dependency merge `1c7cb3f`: duplicate Storage uploads can return HTTP 400, not only 409. The service now accepts the specific duplicate messages for 400, preserves legacy 409 handling, and rejects unrelated 400 errors. The fixture models the actual provider response. Eight new regressions cover both recording scopes, both duplicate messages, legacy 409 and unrelated 400. Targeted tests failed before correction and pass afterward. PR #38 includes the corrected #36 dependency.
+
+Fresh combined local validation of all candidate PRs: **323 tests passed**, zero failures/skips; TypeScript and production build passed; ESLint **0 errors / 28 existing warnings**. The count is the earlier 314 plus nine review regressions. No hosted Auth, Realtime or Storage acceptance was performed. Logs: `/tmp/studysync-recovery-corrected-{tests,tsc,lint,build}.log`. No PR was merged and dev/main remain unchanged by these corrections.
