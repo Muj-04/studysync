@@ -87,6 +87,7 @@ function mount(t, scenario, request) {
   render();
   return {
     calls, render, widget, button,
+    remember(value) { find(node => node.type === 'input' && node.props.type === 'checkbox').props.onChange({ target: { checked: value } }); render(); },
     solve(token) { widget().onVerify(token); render(); },
     async submit() {
       const form = find(node => node.type === 'form');
@@ -138,5 +139,20 @@ for (const scenario of cases) {
     assert.equal(app.calls.length, 2);
     const options = scenario.method === 'resetPasswordForEmail' ? app.calls[1][1] : app.calls[1][0].options;
     assert.equal(options.captchaToken, 'retry-token');
+  });
+}
+
+for (const remember of [true, false]) {
+  test(`successful login reaches its destination when remembered-email ${remember ? 'write' : 'removal'} fails`, async t => {
+    const app = mount(t, cases[0], async () => ({ error: null }));
+    app.remember(remember);
+    global.window.location.search = '?redirect=%2Flibrary';
+    global.localStorage.setItem = () => { throw new Error('Storage unavailable'); };
+    global.localStorage.removeItem = () => { throw new Error('Storage unavailable'); };
+    app.solve('one-use-token');
+    await app.submit();
+    assert.equal(app.calls.length, 1);
+    assert.equal(global.window.location.href, '/library');
+    assert.equal(app.alerts(), '', 'optional preference storage must not report failed authentication');
   });
 }
