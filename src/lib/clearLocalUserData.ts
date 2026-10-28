@@ -41,6 +41,10 @@ export async function clearLocalUserData(): Promise<void> {
       // Keep failed intent across logout; replay checks the current identity.
       if (key.startsWith('studysync_referral_recovery_')) continue;
       if (key.startsWith('studysync_') || NON_PREFIX_KEYS.includes(key)) {
+        // Owner-scoped pending metadata must survive sign-out so a completed
+        // upload or cleanup is not abandoned. No audio, tokens or signed playback
+        // URLs are stored here; replay verifies the owner before every phase.
+        if (key.startsWith('studysync_recording_recovery_')) continue;
         toRemove.push(key);
       }
     }

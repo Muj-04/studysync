@@ -1,6 +1,7 @@
 import { sb, userId, markDocumentRegistered, forgetDocumentRegistration } from './dbShared';
 import { deleteLocalDocument } from '@/lib/documentLocalData';
 import { enqueueDocumentDeletion, enqueueDocumentRegistration } from '@/lib/persistence/documentQueue';
+import { deleteRecording, pendingRecordingIds } from './recordingRecovery';
 
 // ── Documents ────────────────────────────────────────────────────────────────
 
@@ -44,17 +45,15 @@ export async function deleteDocument(docId: string) {
   });
 }
 
-export async function deleteAllVoiceNotesForDocument(docId: string): Promise<void> {
+export async function deleteAllVoiceNotesForDocument(docId: string, expectedOwner?: string): Promise<void> {
   const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
-  const { data, error: readError } = await sb().from('voice_notes').select('id').match({ user_id: uid, document_id: docId });
+  if (expectedOwner && uid !== expectedOwner) throw new Error('The account changed before recording synchronization finished.');
+  const { data, count, error: readError } = await sb().from('voice_notes').select('id', { count: 'exact' }).match({ user_id: uid, document_id: docId });
   if (readError) throw readError;
-  if (data?.length) {
-    const exts = ['webm', 'ogg', 'mp4'];
-    const paths = data.flatMap((r) => exts.map((e) => `${uid}/${docId}/${r.id}.${e}`));
-    const { error: storageError } = await sb().storage.from('voice-notes').remove(paths);
-    if (storageError) throw storageError;
-    const { error } = await sb().from('voice_notes').delete().match({ user_id: uid, document_id: docId });
-    if (error) throw error;
+  if (count == null || count !== data?.length) throw new Error('The recording list is incomplete. No recordings were deleted; please try again.');
+  const ids = new Set([...(data ?? []).map(row => row.id as string), ...pendingRecordingIds(uid, 'document', docId)]);
+  for (const id of ids) {
+    await deleteRecording('document', docId, id, uid);
   }
 }
 

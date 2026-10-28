@@ -60,7 +60,9 @@ test('local audio restores before auth resolves and initial persistence never er
   hook = s.render();
   await tick();
   assert.equal(s.getStored()[0].title, 'Offline title');
-  hook.deleteNote('local');
+  s.resolveUser({ data: { user: { id: 'user' } } });
+  await tick();
+  await hook.deleteNote('local');
   s.render();
   assert.deepEqual(s.getStored(), [], 'explicit deletion can persist an empty list');
 });
@@ -81,4 +83,11 @@ test('remote restore merges with local audio without replacing it', async t => {
   assert.equal(hook.notes[1].audioBlob.size, 0);
   await tick();
   assert.deepEqual(s.getStored().map(note => note.id), ['local']);
+});
+
+test('late initial hydration cannot resurrect an acknowledged personal recording deletion', async t => {
+  const s=setup(t);s.render();s.render();s.resolveUser({data:{user:{id:'user'}}});await tick();
+  await s.render().deleteNote('local');s.render();
+  s.resolveRemote([{id:'local',documentId:'doc',pageNumber:1,audioUrl:'https://example.test/local',duration:4,timestamp:persisted[0].timestamp}]);
+  await tick();assert.deepEqual(s.render().notes,[]);assert.deepEqual(s.getStored(),[]);
 });
