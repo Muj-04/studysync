@@ -1,4 +1,4 @@
-import { cancelDocumentWrites } from '@/lib/documentOutbox';
+import { preserveDocumentBeforeRemoval } from '@/lib/documentRecovery';
 import { createClient } from './client';
 
 /** Identity is persisted independently of caches so retries never acquire a new lifetime. */
@@ -39,7 +39,9 @@ async function remoteDocument(ownerId: string, documentId: string) {
   if (tombstoneError) throw tombstoneError;
   await assertDocumentOwner(ownerId);
   if (tombstone) {
-    cancelDocumentWrites(ownerId, documentId, 'This document was deleted. Export or create a recovery copy.');
+    // Older clients may have pending edits only in their cache/legacy markers.
+    // Make those exportable before marking this identity recovery-only.
+    preserveDocumentBeforeRemoval(ownerId, documentId, documentId);
     throw new DocumentConflictError('This document was deleted. Your unsynced edits require an explicit recovery copy.');
   }
   return null;

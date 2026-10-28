@@ -13,7 +13,7 @@ function fixture() {
   }};
   const previous=global.localStorage; global.localStorage={get length(){return values.size;},key:i=>[...values.keys()][i]??null,getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
   const api=loadSource('src/lib/supabase/documentProtocol.ts', {'./client':{createClient:()=>client}});
-  return { api,rows,deleted,writes,owner:v=>owner=v,restore:()=>global.localStorage=previous };
+  return { api,rows,deleted,writes,values,owner:v=>owner=v,restore:()=>global.localStorage=previous };
 }
 test('deleted registration never inserts a missing original', async()=>{
  const f=fixture(); try { f.deleted.add('doc'); await assert.rejects(f.api.registerDocument('owner',{id:'doc',name:'x',type:'pdf'}), /deleted/i); assert.equal(f.writes.length,0); }finally{f.restore();}
@@ -29,4 +29,8 @@ test('existing generation is adopted once, never rebound to another lifetime',as
 });
 test('annotation preparation cannot implicitly create a missing parent',async()=>{
  const f=fixture(); try { await assert.rejects(f.api.requireDocumentGeneration('owner','never-uploaded'),/registered|missing/i); assert.equal(f.writes.length,0); }finally{f.restore();}
+});
+
+test('remote deletion exposes legacy cached edits for recovery even without a new outbox entry',async()=>{
+ const f=fixture();try{f.values.set('studysync_drawings',JSON.stringify({'doc:1':'legacy unsynced strokes'}));f.deleted.add('doc');await assert.rejects(f.api.registerDocument('owner',{id:'doc',name:'old.pdf',type:'pdf'}),/deleted/i);const retained=[...f.values.entries()].filter(([key])=>key.startsWith('studysync_document_recovery_'));assert.ok(retained.some(([,value])=>value.includes('legacy unsynced strokes')));assert.equal(f.writes.length,0);}finally{f.restore();}
 });
