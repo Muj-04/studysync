@@ -139,13 +139,14 @@ export async function reviewFlashcard(card: StudyFlashcard, rating: 'again' | 'h
   const next = new Date(now);
   if (rating === 'again') next.setMinutes(next.getMinutes() + 5);
   else next.setDate(next.getDate() + interval);
-  const { error } = await sb().from('flashcards').update({
+  const { data: saved, error } = await sb().from('flashcards').update({
     interval_days: interval,
     review_count: card.reviewCount + 1,
     last_reviewed_at: now.toISOString(),
     next_review_at: next.toISOString(),
-  }).eq('id', card.id).eq('user_id', uid);
+  }).eq('id', card.id).eq('user_id', uid).select('id').maybeSingle();
   if (error) throw new Error(error.message);
+  if (!saved) throw new Error('Could not save your review. The card may no longer be available.');
   // The review is already committed. A secondary deck timestamp failure must
   // not make the caller retry using the old card schedule.
   try {

@@ -12,11 +12,12 @@ async function mount(t) {
   t.after(() => { parent.unmount(); study.unmount(); if (oldWindow === undefined) delete global.window; else global.window = oldWindow; });
   const react = Object.fromEntries(Object.keys(parent.react).map(key => [key, (...args) => current.react[key](...args)]));
   react.useMemo = fn => fn();
-  const writes = []; let failure = false, deckFailure = false;
+  const writes = []; let failure = false, deckFailure = false, missing = false;
   const { reviewFlashcard } = loadSource('src/lib/supabase/flashcards.ts', {
     './dbShared': { userId: async () => 'owner', sb: () => ({ from: table => ({
       update(patch) { this.patch = patch; return this; }, eq() { return this; },
-      then(resolve) { if (table === 'flashcard_decks' && deckFailure) throw new Error('Synthetic deck timestamp failure'); if (table === 'flashcards') writes.push(this.patch); resolve({ error: failure ? { message: 'Synthetic save failure' } : null }); },
+      select() { return this; }, maybeSingle() { return this; },
+      then(resolve) { if (table === 'flashcard_decks' && deckFailure) throw new Error('Synthetic deck timestamp failure'); if (table === 'flashcards') writes.push(this.patch); resolve({ data: missing || failure ? null : { id: 'card' }, error: failure ? { message: 'Synthetic save failure' } : null }); },
     }) }) },
   });
   const card = { id:'card',deckId:'deck',docId:'doc',pageNum:1,question:'Question',answer:'Answer',createdAt:'2026-01-01',nextReviewAt:'2026-01-01',intervalDays:0,reviewCount:0,lastReviewedAt:null };
@@ -34,7 +35,7 @@ async function mount(t) {
   current=study;
   const render=()=>nodes(study.render(()=>element.type(element.props)));
   render(); await settle();
-  return {writes,render,failDeck:()=>{deckFailure=true;},fail:()=>{failure=true;},succeed:()=>{failure=false;}, async good() {
+  return {writes,render,missing:()=>{missing=true;},restore:()=>{missing=false;},failDeck:()=>{deckFailure=true;},fail:()=>{failure=true;},succeed:()=>{failure=false;}, async good() {
     render().find(n=>n.type==='button' && n.props.children==='Show answer').props.onClick();
     const button=render().find(n=>n.type==='button' && content(n).startsWith('Good'));
     await button.props.onClick(); await settle(); render();
@@ -61,4 +62,15 @@ test('acknowledged card reviews advance even if the secondary deck timestamp upd
   assert.equal(app.render().some(n=>n.props?.role==='alert'),false);
   await app.good();
   assert.deepEqual(app.writes.map(p=>[p.review_count,p.interval_days]),[[1,1],[2,2]]);
+});
+
+test('deleted or hidden flashcard cannot acknowledge a review and retry preserves its schedule', async t => {
+  const app = await mount(t); app.missing();
+  await app.good();
+  assert.ok(app.render().some(n => n.props?.role === 'alert'), 'zero affected rows must show a save failure');
+  const button = app.render().find(n => n.type === 'button' && content(n).startsWith('Good'));
+  assert.equal(button.props.disabled, false);
+  app.restore(); await button.props.onClick(); await settle(); app.render();
+  assert.deepEqual(app.writes.map(p => [p.review_count, p.interval_days]), [[1,1],[1,1]]);
+  assert.equal(app.render().some(n => n.props?.role === 'alert'), false);
 });
