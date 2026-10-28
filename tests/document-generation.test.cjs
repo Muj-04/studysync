@@ -55,6 +55,13 @@ test('generation migration preserves live data and guards every discovered docum
       await db.exec(`RESET ROLE; SET ROLE authenticated; SET test.uid='${owner}'`);
     });
     await t.test('missing, forged generation and foreign-owner child writes fail closed', async () => {
+      // Non-replay children still use direct mutations, so exercise the actual
+      // lifetime guard as well as replay-table privilege denial below.
+      await assert.rejects(db.query("INSERT INTO voice_notes(id,user_id,document_id,page_number) VALUES('legacy-voice',$1,'existing',1)",[owner]),error=>error.code==='PDD02');
+      await assert.rejects(db.query("INSERT INTO voice_notes(id,user_id,document_id,document_generation,page_number) VALUES('forged-voice',$1,'existing',$2,1)",[owner,randomUUID()]),error=>error.code==='PDD02');
+      await db.exec(`SET test.uid='${other}'`);
+      await assert.rejects(db.query("INSERT INTO voice_notes(id,user_id,document_id,document_generation,page_number) VALUES('foreign-voice',$1,'existing',$2,1)",[other,gen]),error=>error.code==='42501');
+      await db.exec(`SET test.uid='${owner}'`);
       await assert.rejects(db.query("INSERT INTO text_notes(id,user_id,document_id,page_key,content) VALUES('legacy',$1,'existing','1','stale')", [owner]), error => ['PDD02','42501'].includes(error.code));
       await assert.rejects(db.query("INSERT INTO text_notes(id,user_id,document_id,document_generation,page_key,content) VALUES('forged',$1,'existing',$2,'1','stale')", [owner,randomUUID()]), error => ['PDD02','42501'].includes(error.code));
       await db.exec(`SET test.uid='${other}'`);
