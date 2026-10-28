@@ -75,7 +75,7 @@ export async function deleteAllDrawingsForUser(): Promise<void> {
 }
 
 export async function exportAllUserData(): Promise<object> {
-  const uid = await userId(); if (!uid) return {};
+  const uid = await userId(); if (!uid) throw new Error('Sign in to export your data');
   const [docsRes, vnRes, tnRes, bmRes, ktRes] = await Promise.all([
     sb().from('documents').select('id, name, type, page_count').eq('user_id', uid),
     sb().from('voice_notes').select('id, document_id, page_number, duration, title, timestamp').eq('user_id', uid),
@@ -83,6 +83,9 @@ export async function exportAllUserData(): Promise<object> {
     sb().from('bookmarks').select('id, document_id, virtual_index, label, created_at').eq('user_id', uid),
     sb().from('key_terms').select('id, document_id, term, definition, created_at').eq('user_id', uid),
   ]);
+  if ([docsRes, vnRes, tnRes, bmRes, ktRes].some(result => result.error)) {
+    throw new Error('Could not export data. Please try again.');
+  }
   return {
     exportedAt: new Date().toISOString(),
     documents: docsRes.data ?? [],
