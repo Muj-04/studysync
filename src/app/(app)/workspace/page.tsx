@@ -1320,7 +1320,7 @@ export default function WorkspacePage() {
         </div>
       </header>
 
-      <DocumentRecoveryPanel ownerId={userId} voiceNotes={voiceNotes} openCopy={addDocument} />
+      <DocumentRecoveryPanel key={userId ?? 'signed-out'} ownerId={userId} voiceNotes={voiceNotes} openCopy={addDocument} />
 
       {/* Shortcuts modal */}
       {shortcutsOpen && <HelpModal onClose={() => setShortcutsOpen(false)} />}

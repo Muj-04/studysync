@@ -3,7 +3,7 @@ const { loadSource } = require('./load-source.cjs');
 exports.documentDomainFixture = function () {
   let owner='alice';let failure=null;let gate=null;const calls=[];const deleted=new Set();const storage=new Map();const revisions=new Map();const snapshots=new Map();const cache=new Map();
   const scope=(doc,collection,page='')=>JSON.stringify([owner,doc,collection,page]);
-  const client={auth:{getUser:async()=>({data:{user:{id:owner}}})},from:table=>({delete:()=>({match:async filters=>{calls.push({kind:'delete',table});if(table==='documents')deleted.add(filters.id);return{error:null};}})}),rpc:async(name,args)=>{
+  const client={auth:{getUser:async()=>({data:{user:{id:owner}}})},from:table=>({select:()=>({match:async()=>({data:[],count:0,error:null})}),delete:()=>({match:async filters=>{calls.push({kind:'delete',table});if(table==='documents')deleted.add(filters.id);return{error:null};}})}),rpc:async(name,args)=>{
     if(name==='read_document_collection_v2') {if(failure)return{error:{message:failure}};return{data:{rows:snapshots.get(scope(args.p_document_id,args.p_collection))??[],revisions:{}},error:null};}
     calls.push({kind:'write',name,args,owner});if(gate)await gate;if(failure)return{error:{message:failure}};if(deleted.has(args.p_document_id))return{error:{message:'DOCUMENT_DELETED',code:'PDD01'}};
     const k=scope(args.p_document_id,args.p_collection,args.p_page_key??'');const revision=(revisions.get(k)??0)+1;revisions.set(k,revision);return{data:revision,error:null};

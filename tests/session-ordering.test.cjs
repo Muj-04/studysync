@@ -9,7 +9,7 @@ function setup() {
   const cache = new Map();
   const client = {
     auth: { getUser: async () => ({ data: { user: owner ? { id: owner } : null } }) },
-    from: () => ({ upsert: async row => { await onWrite(row); writes.push(row); return { error: null }; } }),
+    rpc: async (_name, args) => { const row = { doc_id: args.p_document_id, virtual_index: args.p_virtual_index }; await onWrite(row); writes.push(row); return { error: null }; },
   };
   const mocks = { './client': { createClient: () => client }, './documentProtocol': { requireDocumentGeneration: async () => 'generation', assertDocumentOwner: async uid => { if (uid !== owner) throw Error('account changed'); } } };
   return {
@@ -58,9 +58,10 @@ for (const name of ['deleteAllDrawingsForUser', 'deleteAllVoiceNotesForUser']) {
   test(`${name} rejects server errors and missing identity`, async () => {
     let owner = 'alice';
     const api = loadSource('src/lib/supabase/accountData.ts', {
+      './documentProtocol': { assertDocumentOwner: async () => {} },
       './dbShared': {
         userId: async () => owner,
-        sb: () => ({ from: () => ({ delete: () => ({ eq: async () => ({ error: new Error('offline') }) }) }) }),
+        sb: () => ({ rpc: async () => ({ error: new Error('offline') }), from: () => ({ delete: () => ({ eq: async () => ({ error: new Error('offline') }) }) }) }),
       },
     });
     await assert.rejects(api[name](), /offline/);
@@ -68,3 +69,8 @@ for (const name of ['deleteAllDrawingsForUser', 'deleteAllVoiceNotesForUser']) {
     await assert.rejects(api[name](), /sign in/i);
   });
 }
+
+test('bulk drawing clear carries the captured owner into the transactional boundary', async()=>{
+ let requested;const api=loadSource('src/lib/supabase/accountData.ts', {'./dbShared':{userId:async()=> 'alice',sb:()=>({rpc:async(name,args)=>{requested={name,args};return{error:Error('account changed')};}})},'./documentProtocol':{assertDocumentOwner:async()=>{}}});
+ await assert.rejects(api.deleteAllDrawingsForUser(),/account changed/);assert.deepEqual(requested,{name:'clear_account_drawings_v2',args:{p_expected_owner:'alice'}});
+});
