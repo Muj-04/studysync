@@ -1,10 +1,11 @@
+import { retainDocumentSnapshot } from '@/lib/documentRecovery';
 import { useClientReady } from './useClientReady';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { saveDrawing as dbSaveDrawing, deleteAllDrawings as dbDeleteAllDrawings } from '@/lib/supabase/db';
 
-export function usePDFDrawings() {
+export function usePDFDrawings(expectedOwner?: string | null) {
   const [drawings, setDrawings] = useState<Record<string, string>>({});
   const userIdRef = useRef<string | null>(null);
   const mounted = useRef(true);
@@ -14,6 +15,7 @@ export function usePDFDrawings() {
   const pendingStorageKey = `${KEYS.DRAWINGS}_pending`;
 
   const markPending = useCallback((keys: string[]) => {
+    const ownerAtEdit = expectedOwner ?? userIdRef.current;
     const edits = keys.map((key) => {
       const version = (versions.current.get(key) ?? 0) + 1;
       versions.current.set(key, version);
@@ -24,13 +26,23 @@ export function usePDFDrawings() {
     storageSet(pendingStorageKey, [...pendingKeys.current]);
     return () => {
       // A previous workspace must not acknowledge edits from a later mount/account.
-      if (!mounted.current || storageGet(pendingStorageKey) === null) return;
+      if (!mounted.current || (expectedOwner !== undefined && userIdRef.current !== ownerAtEdit) || storageGet(pendingStorageKey) === null) return;
       for (const { key, version } of edits) {
         if (versions.current.get(key) === version) pendingKeys.current.delete(key);
       }
       storageSet(pendingStorageKey, [...pendingKeys.current]);
     };
-  }, [pendingStorageKey]);
+  }, [pendingStorageKey, expectedOwner]);
+
+  const previousOwner = useRef(expectedOwner);
+  useEffect(() => {
+    if (previousOwner.current && previousOwner.current !== expectedOwner) {
+      pendingKeys.current.clear(); editedKeys.current.clear(); versions.current.clear(); userIdRef.current = expectedOwner ?? null;
+      // An account transition clears the visible cache; owner recovery remains separate.
+      setDrawings({});
+    }
+    previousOwner.current = expectedOwner;
+  }, [expectedOwner]);
 
   const clientReady = useClientReady();
   const [restored, setRestored] = useState(false);
@@ -56,6 +68,7 @@ export function usePDFDrawings() {
   );
 
   const saveDrawing = useCallback((documentId: string, page: number, data: string) => {
+    retainDocumentSnapshot(expectedOwner ?? userIdRef.current, documentId, `drawing:${page}`, data);
     const acknowledge = markPending([`${documentId}:${page}`]);
     setDrawings((prev) => {
       const next = { ...prev, [`${documentId}:${page}`]: data };
@@ -63,11 +76,11 @@ export function usePDFDrawings() {
       return next;
     });
     if (userIdRef.current) {
-      void dbSaveDrawing(documentId, String(page), data).then(acknowledge).catch((error: unknown) => {
+      void dbSaveDrawing(documentId, String(page), data, expectedOwner ?? userIdRef.current ?? undefined).then(acknowledge).catch((error: unknown) => {
         console.warn('[Drawings] remote save failed; local drawing retained:', error);
       });
     }
-  }, [markPending]);
+  }, [markPending, expectedOwner]);
 
   // Called once per document open to seed Supabase drawings into local state.
   // Keep unsynced work across reloads and edits made while this fetch was pending.

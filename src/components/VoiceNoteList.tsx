@@ -184,6 +184,12 @@ function NoteItem({
           >
             <Pencil size={10} />
           </button>
+          {note.audioBlob?.size > 0 && <button type="button" title="Export local audio" aria-label="Export local audio" onClick={() => {
+            const url = URL.createObjectURL(note.audioBlob);
+            const link = document.createElement('a'); link.href = url;
+            link.download = `${note.title ?? 'recording'}.${note.audioBlob.type.includes('ogg') ? 'ogg' : note.audioBlob.type.includes('mp4') ? 'mp4' : 'webm'}`;
+            link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }}>Export</button>}
           <button
             onClick={() => onDelete(note.id)}
             title="Delete"
@@ -204,6 +210,7 @@ function NoteItem({
         </div>
       </div>
 
+      <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{note.syncStatus === 'saved' || !note.audioBlob?.size ? 'Uploaded' : 'Local audio — upload not confirmed. Export before closing if backup fails.'}</span>
       {/* Seek bar */}
       {isActive && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 7px' }}>

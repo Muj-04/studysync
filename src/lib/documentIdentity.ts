@@ -7,14 +7,15 @@ export async function fingerprintPdf(blob: Blob): Promise<string> {
 }
 
 /** File bytes determine identity; a filename alone must never replace a document. */
-export async function identifyPdf(file: File, explicitId?: string) {
+export async function identifyPdf(file: File, explicitId?: string, expectedOwner?: string) {
   const fingerprint = await fingerprintPdf(file);
   const { data: { user }, error } = await createClient().auth.getUser();
   if (error || !user) throw new Error('Sign in to open a document');
+  if (expectedOwner && user.id !== expectedOwner) throw new Error('Account changed before opening this document');
   const identity = await fingerprintPdf(new Blob([`${user.id}:${fingerprint}`]));
   const contentId = `${identity.slice(0, 8)}-${identity.slice(8, 12)}-8${identity.slice(13, 16)}-a${identity.slice(17, 20)}-${identity.slice(20, 32)}`;
   if (explicitId) {
-    const existing = await getStoredPdf(explicitId);
+    const existing = await getStoredPdf(explicitId, expectedOwner);
     if (existing) {
       // Compare actual bytes before replacing any blob, even if cached metadata exists.
       if (await fingerprintPdf(existing.blob) !== fingerprint) {

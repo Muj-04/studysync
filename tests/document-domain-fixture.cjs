@@ -12,7 +12,7 @@ exports.documentDomainFixture = function () {
     knownDocumentGeneration:()=> 'gen',requireDocumentGeneration:async(uid,doc)=>{if(uid!==owner)throw Error('account changed');if(deleted.has(doc))throw Error('Document deleted');return'gen';},
     assertDocumentOwner:async uid=>{if(uid!==owner)throw Error('account changed');},registerDocument:async(uid,doc)=>{if(deleted.has(doc.id))throw Error('Document deleted');return'gen';},
     DocumentConflictError:class extends Error{code='DOCUMENT_CONFLICT';}},
-    '@/lib/storage':{storageGet:k=>storage.has(k)?JSON.parse(storage.get(k)):null,storageSet:(k,v)=>{storage.set(k,JSON.stringify(v));return true;}},
+    '@/lib/storage':{storageKeys:prefix=>[...storage.keys()].filter(key=>key.startsWith(prefix)),storageRemove:key=>storage.delete(key),storageGet:k=>storage.has(k)?JSON.parse(storage.get(k)):null,storageSet:(k,v)=>{storage.set(k,JSON.stringify(v));return true;}},
     '@/lib/documentLocalData':{deleteLocalDocument:async()=>{}},
   };
   const api=loadSource('src/lib/supabase/db.ts',mocks,cache);const collections=loadSource('src/lib/supabase/documentCollections.ts',mocks,cache);

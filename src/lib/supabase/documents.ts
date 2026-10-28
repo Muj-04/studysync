@@ -1,3 +1,4 @@
+import { preserveDocumentBeforeRemoval } from '@/lib/documentRecovery';
 import { registerDocument, assertDocumentOwner } from './documentProtocol';
 import { sb, userId, markDocumentRegistered, forgetDocumentRegistration } from './dbShared';
 import { deleteLocalDocument } from '@/lib/documentLocalData';
@@ -105,7 +106,11 @@ export async function fetchLibraryDocuments(): Promise<LibraryDocument[]> {
 }
 
 export async function deleteLibraryDocument(docId: string): Promise<void> {
+  const owner = await userId();
+  if (!owner) throw new Error('Sign in to delete this document');
+  preserveDocumentBeforeRemoval(owner, docId, 'Recovered document');
   await deleteAllDataForDocument(docId);
-  await deleteLocalDocument(docId);
+  if (await userId() !== owner) throw new Error('Account changed before local cleanup');
+  await deleteLocalDocument(docId, true);
 }
 

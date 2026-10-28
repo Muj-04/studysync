@@ -24,7 +24,7 @@ function setup() {
   const original = { id: 'removed', documentId: 'doc', virtualIndex: 0, label: 'Page 1' };
   let stored = { doc: [original] }, visible = [original], resolve;
   const saves = [];
-  const deps = {
+  const deps = { retainDocumentSnapshot: () => {},
     activeDocumentId: 'doc', activeDocument: { id: 'doc' }, userId: 'owner', userIdRef: { current: 'owner' },
     bookmarkEditVersions: { current: new Map() }, KEYS: { BOOKMARKS: 'bookmarks' },
     storageGet: () => stored, storageSet: (_, value) => { stored = value; },
