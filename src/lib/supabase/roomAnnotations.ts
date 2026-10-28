@@ -124,8 +124,13 @@ export async function deleteRoomVoiceNote(noteId: string, roomId: string): Promi
 }
 
 export async function updateRoomVoiceNoteTitle(noteId: string, title: string | undefined): Promise<void> {
-  const uid = await userId(); if (!uid) return;
-  await sb().from('room_voice_notes').update({ title: title ?? null }).eq('id', noteId).eq('user_id', uid);
+  const uid = await userId();
+  if (!uid) throw new Error('Sign in to rename room voice notes.');
+  const { data, error } = await sb().from('room_voice_notes')
+    .update({ title: title ?? null }).eq('id', noteId).eq('user_id', uid)
+    .select('id').maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('This recording could not be renamed.');
 }
 
 export async function saveRoomDrawing(roomId: string, pageNumber: number, data: string): Promise<void> {
