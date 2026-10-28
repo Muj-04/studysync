@@ -29,9 +29,9 @@ export function listLocalDocumentRecovery(ownerId: string): LocalDocumentRecover
   return [...entries.values()];
 }
 /** Each tab owns its keys; another tab cannot erase retained sibling snapshots. */
-export function retainDocumentSnapshot(ownerId: string | null, documentId: string, kind: string, value: unknown, name?: string): void {
+export function retainDocumentSnapshot(ownerId: string | null, documentId: string, kind: string, value: unknown, name?: string, captureId = tab): void {
   if (!ownerId) return;
-  const key = `${recoveryKey(ownerId)}${encodeURIComponent(documentId)}:${encodeURIComponent(kind)}:${tab}`;
+  const key = `${recoveryKey(ownerId)}${encodeURIComponent(documentId)}:${encodeURIComponent(kind)}:${captureId}`;
   const snapshot = { ownerId, documentId, kind, value: JSON.parse(JSON.stringify(value)), name, updatedAt: Date.now() };
   memory.set(key, snapshot);
   const saved = storageSet(key, snapshot);
@@ -42,16 +42,25 @@ export function retainDocumentSnapshot(ownerId: string | null, documentId: strin
   }
 }
 export function preserveDocumentBeforeRemoval(ownerId: string, documentId: string, name: string): void {
+  const retained = listLocalDocumentRecovery(ownerId).find(entry => entry.documentId === documentId)?.alternatives ?? [];
+  const capture = (kind: string, value: unknown) => {
+    // Missing caches after logout are not acknowledged user edits. Repeated
+    // detection must not replace a previous archive with an empty snapshot.
+    if (value == null || (typeof value === 'object' && Object.keys(value).length === 0)) return;
+    const serialized = JSON.stringify(value);
+    if (retained.some(entry => entry.kind === kind && JSON.stringify(entry.value) === serialized)) return;
+    retainDocumentSnapshot(ownerId, documentId, kind, value, name, crypto.randomUUID());
+  };
   const byPage = [KEYS.DRAWINGS, KEYS.TEXT_NOTES];
   for (const key of byPage) {
     const stored = storageGet<Record<string, unknown>>(key) ?? {};
-    retainDocumentSnapshot(ownerId, documentId, key, Object.fromEntries(Object.entries(stored).filter(([page]) => page.startsWith(`${documentId}:`))), name);
+    capture(key, Object.fromEntries(Object.entries(stored).filter(([page]) => page.startsWith(`${documentId}:`))));
   }
   for (const key of [KEYS.BLANK_PAGES, KEYS.VOICE_NOTES]) {
-    retainDocumentSnapshot(ownerId, documentId, key, (storageGet<Array<{ documentId: string; audioDataUrl?: unknown; audioUrl?: unknown; audioBlob?: unknown }>>(key) ?? []).filter(item => item.documentId === documentId).map(item => { if (key !== KEYS.VOICE_NOTES) return item; const { audioUrl, audioBlob, ...metadata } = item; void audioUrl; void audioBlob; return metadata; }), name);
+    capture(key, (storageGet<Array<{ documentId: string; audioDataUrl?: unknown; audioUrl?: unknown; audioBlob?: unknown }>>(key) ?? []).filter(item => item.documentId === documentId).map(item => { if (key !== KEYS.VOICE_NOTES) return item; const { audioUrl, audioBlob, ...metadata } = item; void audioUrl; void audioBlob; return metadata; }));
   }
   for (const key of [KEYS.PAGE_IMAGES, KEYS.KEY_TERMS, KEYS.BOOKMARKS]) {
-    retainDocumentSnapshot(ownerId, documentId, key, storageGet<Record<string, unknown>>(key)?.[documentId] ?? null, name);
+    capture(key, storageGet<Record<string, unknown>>(key)?.[documentId] ?? null);
   }
   cancelDocumentWrites(ownerId, documentId, 'Original document removed. Export or create a new recovery copy.');
 }

@@ -34,3 +34,11 @@ test('annotation preparation cannot implicitly create a missing parent',async()=
 test('remote deletion exposes legacy cached edits for recovery even without a new outbox entry',async()=>{
  const f=fixture();try{f.values.set('studysync_drawings',JSON.stringify({'doc:1':'legacy unsynced strokes'}));f.deleted.add('doc');await assert.rejects(f.api.registerDocument('owner',{id:'doc',name:'old.pdf',type:'pdf'}),/deleted/i);const retained=[...f.values.entries()].filter(([key])=>key.startsWith('studysync_document_recovery_'));assert.ok(retained.some(([,value])=>value.includes('legacy unsynced strokes')));assert.equal(f.writes.length,0);}finally{f.restore();}
 });
+
+test('repeated tombstone discovery after cache cleanup cannot erase its recovery archive',async()=>{
+ const f=fixture();try{f.values.set('studysync_drawings',JSON.stringify({'doc:1':'retained legacy strokes'}));f.deleted.add('doc');await assert.rejects(f.api.registerDocument('owner',{id:'doc',name:'old.pdf',type:'pdf'}));f.values.delete('studysync_drawings');await assert.rejects(f.api.registerDocument('owner',{id:'doc',name:'old.pdf',type:'pdf'}));assert.ok([...f.values.entries()].filter(([key])=>key.startsWith('studysync_document_recovery_')).some(([,value])=>value.includes('retained legacy strokes')));assert.equal(f.writes.length,0);}finally{f.restore();}
+});
+
+test('distinct partial cache archives survive discovery and identical captures are deduplicated',async()=>{
+ const f=fixture();try{f.deleted.add('doc');const discover=()=>assert.rejects(f.api.registerDocument('owner',{id:'doc',name:'old.pdf',type:'pdf'}));f.values.set('studysync_drawings',JSON.stringify({'doc:1':'page one'}));await discover();f.values.set('studysync_drawings',JSON.stringify({'doc:2':'page two'}));await discover();const archives=()=>[...f.values.entries()].filter(([key])=>key.startsWith('studysync_document_recovery_'));assert.ok(archives().some(([,value])=>value.includes('page one')));assert.ok(archives().some(([,value])=>value.includes('page two')));const count=archives().length;await discover();assert.equal(archives().length,count);}finally{f.restore();}
+});
