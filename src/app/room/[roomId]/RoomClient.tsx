@@ -471,10 +471,10 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const beginVoiceSnapshotRef = useRef<ReturnType<typeof useRoomVoiceNotes>['beginReconcileNotes'] | null>(null);
   const blankSnapshots = useRef(createRoomSnapshotGate<RoomBlankPagePayload>());
   const pendingBlankSaves = useRef(new Set<string>());
-  const snapshotLifetime = useRef({ active: false });
+  const snapshotLifetime = useRef({ active: false, roomId });
   const snapshotUser = useRef<string | null>(null);
   useEffect(() => {
-    const scope = { active: true };
+    const scope = { active: true, roomId };
     const gate = blankSnapshots.current;
     snapshotLifetime.current = scope;
     pendingBlankSaves.current.clear();
@@ -553,7 +553,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   // Initial load and reconnect share one authoritative, race-aware path.
   const reconcileRoomSnapshots = useCallback(async () => {
     const scope = snapshotLifetime.current;
-    if (!scope.active) return;
+    if (!scope.active || scope.roomId !== roomId) return;
     const applyVoice = beginVoiceSnapshotRef.current?.(() => scope.active);
     const mergeBlanks = blankSnapshots.current.begin(pendingBlankSaves.current);
     // Metadata reads begun before this snapshot cannot resurrect removed rows.
@@ -584,6 +584,7 @@ export default function RoomClient({ roomId }: { roomId: string }) {
   const handleReconnect = useCallback(async () => {
     if (!roomId) return;
     const scope = snapshotLifetime.current;
+    if (!scope.active || scope.roomId !== roomId) return;
     await reconcileRoomSnapshots();
     if (!scope.active) return;
     // Replay the complete log: an observed maximum is not a contiguous cursor.
@@ -827,17 +828,21 @@ export default function RoomClient({ roomId }: { roomId: string }) {
 
       const { data: signed, error: signErr } = await supabase.storage
         .from('pdfs').createSignedUrl(room.pdfPath, 3600);
+      if (cancelled) return;
       if (signErr || !signed?.signedUrl) {
         setErrorMsg(t('room_pdf_deleted'));
         setStatus('error'); return;
       }
 
       const resp = await fetch(signed.signedUrl);
+      if (cancelled) return;
       if (!resp.ok) { setErrorMsg(t('room_pdf_failed')); setStatus('error'); return; }
 
       const blob = await resp.blob();
+      if (cancelled) return;
       const file = new File([blob], room.documentName + '.pdf', { type: 'application/pdf' });
       const { id: newDocId } = await addDocument(file);
+      if (cancelled) return;
       docIdRef.current = newDocId;
       if (!cancelled) setDocId(newDocId);
 

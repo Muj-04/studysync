@@ -17,7 +17,7 @@ test('reconnect loads missed voice and blank snapshots as well as strokes', asyn
   const code=ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
   let reconciled=0;
   const run=new Function('useCallback','roomId','fetchAllRoomStrokes','appendStrokeLocal','maxLocalSeqRef','reconcileRoomSnapshots','snapshotLifetime',code+'; return handleReconnect;')(
-    fn=>fn,'room',async()=>[],()=>{}, {current:0},async()=>{reconciled++},{current:{active:true}});
+    fn=>fn,'room',async()=>[],()=>{}, {current:0},async()=>{reconciled++},{current:{active:true,roomId:"room"}});
   await run(); assert.equal(reconciled,1);
 });
 test('authoritative voice snapshot removes missing rows and updates titles without replacing local audio',t=>{
@@ -63,7 +63,7 @@ function roomSnapshots(t) {
   const {createRoomSnapshotGate}=loadSource('src/lib/roomSnapshot.ts');
   const blankSnapshots={current:createRoomSnapshotGate()};
   const pendingBlankSaves={current:new Set()};
-  const snapshotLifetime={current:{active:true}};
+  const snapshotLifetime={current:{active:true,roomId:"room"}};
   let pages=[{id:'old-page'},{id:'changed-page',bgTheme:'white'}];
   const requests={voice:[],blank:[]};
   const source=fs.readFileSync('src/app/room/[roomId]/RoomClient.tsx','utf8');
@@ -123,4 +123,32 @@ test('remote confirmation releases a failed blank-create marker for future autho
   const first=s.run();s.requests.voice[0].resolve([]);s.requests.blank[0].resolve([{id:'local'}]);await first;
   assert.equal(s.pages.length,1);assert.equal(s.pendingBlankSaves.current.size,0);
   const next=s.run();s.requests.voice[1].resolve([]);s.requests.blank[1].resolve([]);await next;assert.equal(s.pages.length,0);
+});
+
+test('a delayed old-room callback cannot borrow the replacement room lifetime', async t => {
+  const voice = setup(t);
+  const { createRoomSnapshotGate } = loadSource('src/lib/roomSnapshot.ts');
+  const snapshotLifetime = { current: { active: true, roomId: 'A' } };
+  const beginVoice = { current: null };
+  const blanks = { current: createRoomSnapshotGate() };
+  let pages = [];
+  const reads = [];
+  const source = fs.readFileSync('src/app/room/[roomId]/RoomClient.tsx', 'utf8');
+  const start = source.indexOf('  const reconcileRoomSnapshots =');
+  const end = source.indexOf('  const handleReconnect =', start);
+  const code = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+  const callback = room => new Function('useCallback', 'roomId', 'snapshotLifetime', 'beginVoiceSnapshotRef', 'blankSnapshots', 'pendingBlankSaves', 'voiceNoteRequestsRef', 'fetchRoomVoiceNotes', 'fetchRoomBlankPages', 'setRoomBlankPages', code + ';return reconcileRoomSnapshots;')(
+    fn => fn, room, snapshotLifetime, beginVoice, blanks, { current: new Set() }, { current: new Map() },
+    async id => { reads.push(id); return [note(id + '-note')]; },
+    async id => [{ id: id + '-page' }], update => { pages = update(pages); });
+  voice.render('A'); beginVoice.current = voice.render('A').beginReconcileNotes;
+  const oldCallback = callback('A');
+  snapshotLifetime.current.active = false;
+  snapshotLifetime.current = { active: true, roomId: 'B' };
+  voice.render('B'); beginVoice.current = voice.render('B').beginReconcileNotes;
+  await callback('B')();
+  await oldCallback();
+  assert.deepEqual(reads, ['B'], 'obsolete callback must not begin a snapshot or supersede current reads');
+  assert.deepEqual(voice.render('B').notes.map(n => n.id), ['B-note']);
+  assert.deepEqual(pages, [{ id: 'B-page' }]);
 });
