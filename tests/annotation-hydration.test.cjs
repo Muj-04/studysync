@@ -51,6 +51,32 @@ test('failed text edits survive stale cloud hydration after remount', async () =
   await new Promise(setImmediate);
 });
 
+test('replayed text edits stay protected when their save finishes before an older cloud read', async () => {
+  const recovered = [{ id: 'a', content: 'recovered edit' }];
+  const values = {
+    notes: { 'doc:1': recovered },
+    notes_pending_owner: { 'doc:1': recovered },
+  };
+  let releaseSave;
+  const save = new Promise(resolve => { releaseSave = resolve; });
+  const mounted = mountNotes(values, () => save);
+  // The initial fetch captured the old snapshot before the replay committed.
+  const oldSnapshot = { 'doc:1': [{ id: 'a', content: 'old cloud text' }] };
+  releaseSave();
+  await new Promise(setImmediate);
+  assert.deepEqual(values.notes_pending_owner, {});
+  mounted.render()[2](oldSnapshot);
+  assert.deepEqual(mounted.render()[0]['doc:1'], recovered);
+  assert.deepEqual(values.notes['doc:1'], recovered);
+  mounted.harness.unmount();
+
+  // Protection lasts for this mount, so a later visit can receive new edits.
+  const reopened = mountNotes(values);
+  reopened.render()[2]({ 'doc:1': [{ id: 'a', content: 'newer cloud text' }] });
+  assert.equal(reopened.render()[0]['doc:1'][0].content, 'newer cloud text');
+  reopened.harness.unmount();
+});
+
 test('failed blank-page deletion is not resurrected by cloud hydration after remount', async () => {
   const page = { id: 'blank', documentId: 'doc', canvasData: 'drawing' };
   const values = { pages: [page] };
