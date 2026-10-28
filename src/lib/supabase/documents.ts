@@ -48,9 +48,19 @@ export async function deleteAllVoiceNotesForDocument(docId: string, expectedOwne
 }
 
 export async function deleteAllDataForDocument(docId: string): Promise<void> {
-  // The parent delete transaction installs the tombstone and cascades child rows.
-  // Recording operation triggers retain cleanup independently of this browser.
-  await deleteDocument(docId);
+  const requestedOwner = userId();
+  return enqueueDocumentDeletion(docId, async () => {
+    const uid = await requestedOwner; if (!uid) throw new Error('Sign in to delete a document');
+    await assertDocumentOwner(uid);
+    // Retain legacy audio cleanup until the recording operation migration is
+    // activated. With that protocol this durably requests cleanup; its triggers
+    // also cover recordings racing this final parent transaction.
+    await deleteAllVoiceNotesForDocument(docId, uid);
+    await assertDocumentOwner(uid);
+    const { error } = await sb().from('documents').delete().match({ id: docId, user_id: uid });
+    if (error) throw error;
+    forgetDocumentRegistration(docId);
+  });
 }
 
 // ── Library ───────────────────────────────────────────────────────────────────
