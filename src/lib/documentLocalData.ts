@@ -28,6 +28,9 @@ export async function deleteLocalDocument(docId: string) {
     delete values[docId];
     storageSet(key, values);
   }
+  const pendingImagesKey = `${KEYS.PAGE_IMAGES}_pending`;
+  const pendingImages = storageGet<string[]>(pendingImagesKey);
+  if (pendingImages) storageSet(pendingImagesKey, pendingImages.filter((key) => !key.startsWith(`${docId}:`)));
   const map = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
   storageSet(KEYS.DOC_MAP, Object.fromEntries(Object.entries(map).filter(([, id]) => id !== docId)));
   if (storageGet<{ docId: string }>(KEYS.SESSION)?.docId === docId) storageSet(KEYS.SESSION, null);
