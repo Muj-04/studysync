@@ -72,3 +72,14 @@ for (const action of ['unmount', 'switch']) for (const outcome of ['success', 'f
     assert.equal(s.added, 0); assert.equal(s.alerts.length, 0);
   });
 }
+test('reconnect preserves failed local audio until remote recovery confirms it', async t => {
+  const s = setup(t, async () => { throw Error('offline'); });
+  const n = await s.record();
+  s.render().beginReconcileNotes()([]);
+  assert.equal(s.render().notes.length, 1);
+  s.render().beginReconcileNotes()([{ id: n.id, pageNumber: 1, duration: 1, audioUrl: 'https://audio.invalid/recovered', timestamp: n.timestamp.toISOString() }]);
+  assert.equal(s.render().notes.length, 1);
+  // Once confirmed remotely, a subsequent authoritative removal is honored.
+  s.render().beginReconcileNotes()([]);
+  assert.equal(s.render().notes.length, 0);
+});

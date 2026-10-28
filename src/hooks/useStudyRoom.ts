@@ -63,7 +63,6 @@ export function useStudyRoom(
   const retryRef             = useRef(0);
   const timerRef             = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deadRef              = useRef(false);
-  const connectedOnceRef     = useRef(false);
   const generationRef        = useRef(0);
 
   useEffect(() => { onDrawingRef.current = onIncomingDrawing; });
@@ -117,7 +116,6 @@ export function useStudyRoom(
 
   useEffect(() => {
     deadRef.current = false;
-    connectedOnceRef.current = false;
     retryRef.current = 0;
     generationRef.current += 1;
     let disposed = false;
@@ -290,11 +288,9 @@ export function useStudyRoom(
             if (deadRef.current || generation !== generationRef.current) return;
             await loadAuthorizedMembers();
             if (deadRef.current || generation !== generationRef.current) return;
-            if (connectedOnceRef.current) {
-              console.log('[StudyRoom] reconnected — calling onReconnect');
-              onReconnectRef.current?.();
-            }
-            connectedOnceRef.current = true;
+            // Also reconcile the first subscription: initial reads may finish
+            // before Realtime starts delivering events.
+            onReconnectRef.current?.();
           } else if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
             const delay = BACKOFF_MS[Math.min(retryRef.current, BACKOFF_MS.length - 1)];
             console.warn(`[StudyRoom] disconnected (${status}) — reconnecting in ${delay}ms`);
