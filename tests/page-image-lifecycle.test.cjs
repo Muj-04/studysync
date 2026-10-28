@@ -6,17 +6,17 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function setup(t, save) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const harness = createHookHarness();
-  const saves = []; let stored = {}; let resolveAuth;
+  const saves = []; const values = { images: {} }; let resolveAuth;
   const auth = new Promise(resolve => { resolveAuth = resolve; });
   const { usePDFPageImages } = loadSource('src/hooks/usePDFPageImages.ts', {
     react: harness.react,
-    '@/lib/storage': { KEYS: { PAGE_IMAGES: 'images' }, storageGet: () => stored, storageSet: (_, value) => { stored = value; } },
+    '@/lib/storage': { KEYS: { PAGE_IMAGES: 'images' }, storageGet: key => values[key] ?? null, storageSet: (key, value) => { values[key] = value; return true; } },
     '@/lib/supabase/client': { createClient: () => ({ auth: { getUser: () => auth } }) },
     '@/lib/supabase/db': { savePageImages: async (...args) => { saves.push(args); if (save) await save(...args); } },
   });
   t.after(() => harness.unmount());
   const render = () => harness.render(usePDFPageImages);
-  return { render, harness, saves, resolveAuth: () => resolveAuth({ data: { user: { id: 'user' } } }), stored: () => stored };
+  return { render, harness, saves, resolveAuth: () => resolveAuth({ data: { user: { id: 'user' } } }), stored: () => values.images };
 }
 for (const action of ['remove', 'unmount']) {
   test(`${action} cancels image saves already waiting for auth`, async t => {
