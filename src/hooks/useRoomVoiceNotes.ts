@@ -71,9 +71,19 @@ export function useRoomVoiceNotes(
     );
   }, [roomId]);
 
+  const titleWrites = useRef(new Map<string, Promise<void>>());
+  const titleLifetime = useRef({ active: false });
+  useEffect(() => {
+    const lifetime = { active: true };
+    titleLifetime.current = lifetime;
+    return () => { lifetime.active = false; };
+  }, [roomId]);
+
   const addIncomingNote = useCallback((payload: RoomVoiceNotePayload) => {
     setNotes((prev) => {
-      if (prev.some((n) => n.id === payload.id)) return prev;
+      if (prev.some((n) => n.id === payload.id)) {
+        return prev.map((note) => note.id === payload.id ? { ...note, title: payload.title } : note);
+      }
       return [...prev, {
         id: payload.id,
         documentId: roomId,
@@ -176,8 +186,22 @@ export function useRoomVoiceNotes(
   }, [roomId]);
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
-    setNotes((prev) => prev.map((n) => n.id === id ? { ...n, title: title || undefined } : n));
-    updateRoomVoiceNoteTitle(id, title || undefined);
+    const lifetime = titleLifetime.current;
+    const previous = titleWrites.current.get(id) ?? Promise.resolve();
+    // Preserve edit order at the database as well as in the local view.
+    const write = previous.then(async () => {
+      if (!lifetime.active) return;
+      await updateRoomVoiceNoteTitle(id, title || undefined);
+      if (!lifetime.active) return;
+      setNotes((prev) => prev.map((note) => note.id === id ? { ...note, title: title || undefined } : note));
+    }).catch((error: unknown) => {
+      console.warn('[VoiceNote] room title update failed:', error);
+      if (lifetime.active) alert('Could not rename this recording. Please try again.');
+    }).finally(() => {
+      if (titleWrites.current.get(id) === write) titleWrites.current.delete(id);
+    });
+    titleWrites.current.set(id, write);
+    return write;
   }, []);
 
   const getNotesForPage = useCallback(
