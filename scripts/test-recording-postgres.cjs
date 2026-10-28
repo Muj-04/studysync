@@ -19,6 +19,8 @@ const service=`SET request.jwt.claim.role='service_role';SET ROLE service_role;`
 const note='55555555-5555-4555-8555-555555555555';
 const op=JSON.parse(sql(auth+`SELECT begin_recording_operation('${note}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'Lecture',now(),'${owner}');`));
 sql(auth+`INSERT INTO storage.objects(bucket_id,name,metadata) VALUES('voice-notes','${op.object_path}','{"size":5,"mimetype":"audio/webm"}');`);
+// A worker outage cannot expire bytes that already reached Storage.
+sql(`UPDATE recording_private.operations SET upload_deadline=now()-interval '1 day' WHERE id='${op.id}';`);
 function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe']});let out='',err='';let ready;const locked=new Promise(resolve=>ready=resolve);child.stdout.on('data',d=>{out+=d;if(out.includes('LOCK_READY'))ready();});child.stderr.on('data',d=>err+=d);const done=new Promise((resolve,reject)=>child.on('close',code=>code?reject(Error(err)):resolve(out)));child.stdin.end(input);return{locked,done};}
 (async()=>{
  const deletedNote='66666666-6666-4666-8666-666666666666';
