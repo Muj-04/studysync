@@ -128,7 +128,7 @@ export async function loadDeckFlashcards(deckId: string): Promise<StudyFlashcard
   }));
 }
 
-export async function reviewFlashcard(card: StudyFlashcard, rating: 'again' | 'hard' | 'good' | 'easy'): Promise<void> {
+export async function reviewFlashcard(card: StudyFlashcard, rating: 'again' | 'hard' | 'good' | 'easy'): Promise<StudyFlashcard> {
   const uid = await userId(); if (!uid) throw new Error('You must be signed in.');
   const now = new Date();
   let interval = card.intervalDays;
@@ -146,7 +146,16 @@ export async function reviewFlashcard(card: StudyFlashcard, rating: 'again' | 'h
     next_review_at: next.toISOString(),
   }).eq('id', card.id).eq('user_id', uid);
   if (error) throw new Error(error.message);
-  await sb().from('flashcard_decks').update({ updated_at: now.toISOString() }).eq('id', card.deckId).eq('user_id', uid);
+  // The review is already committed. A secondary deck timestamp failure must
+  // not make the caller retry using the old card schedule.
+  try {
+    const { error: deckError } = await sb().from('flashcard_decks').update({ updated_at: now.toISOString() }).eq('id', card.deckId).eq('user_id', uid);
+    if (deckError) console.warn('[Flashcards] deck timestamp update failed:', deckError.message);
+  } catch (error) {
+    console.warn('[Flashcards] deck timestamp update failed:', error);
+  }
+  return { ...card, intervalDays: interval, reviewCount: card.reviewCount + 1,
+    lastReviewedAt: now.toISOString(), nextReviewAt: next.toISOString() };
 }
 
 export async function deleteFlashcardDeck(deckId: string): Promise<void> {
