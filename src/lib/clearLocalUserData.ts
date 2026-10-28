@@ -37,6 +37,9 @@ export async function clearLocalUserData(): Promise<void> {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (!key) continue;
+      // Referral retries contain only a code and outcome, scoped by account.
+      // Keep failed intent across logout; replay checks the current identity.
+      if (key.startsWith('studysync_referral_recovery_')) continue;
       if (key.startsWith('studysync_') || NON_PREFIX_KEYS.includes(key)) {
         toRemove.push(key);
       }

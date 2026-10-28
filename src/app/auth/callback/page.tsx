@@ -2,7 +2,7 @@
 import { safeReturnPath } from '@/lib/accessPolicy';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { ensureProfile, ensureReferralCode, processReferral } from '@/lib/supabase/db';
+import { ensureProfile, ensureReferralCode, recoverPendingReferral } from '@/lib/supabase/db';
 
 // Handles the OAuth redirect. Supabase sends users here with a `code` param
 // (PKCE flow). The client exchanges it for a session, we ensure a profile row
@@ -13,6 +13,7 @@ export default function AuthCallbackPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const referralAbort = new AbortController();
     const run = async () => {
       const supabase = createClient();
 
@@ -40,14 +41,10 @@ export default function AuthCallbackPage() {
       // Referral setup is optional. Storage restrictions or referral failures
       // must not strand an authenticated user on the callback page.
       try {
-        await ensureReferralCode();
+        const options = { userId: user.id, signal: referralAbort.signal };
+        await ensureReferralCode(options);
         if (cancelled) return;
-        const pendingRef = localStorage.getItem('studysync_pending_ref');
-        if (pendingRef) {
-          await processReferral(pendingRef);
-          if (cancelled) return;
-          localStorage.removeItem('studysync_pending_ref');
-        }
+        if (await recoverPendingReferral(options) === 'cancelled') return;
       } catch { /* Referral processing must not block sign-in. */ }
       if (cancelled) return;
 
@@ -57,7 +54,7 @@ export default function AuthCallbackPage() {
     void run().catch(() => {
       if (!cancelled) setError(true);
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; referralAbort.abort(); };
   }, [attempt]);
 
   return (

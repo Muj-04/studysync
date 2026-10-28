@@ -11,7 +11,7 @@ import AuthCaptcha from '@/components/AuthCaptcha';
 import { useAuthCaptcha } from '@/hooks/useAuthCaptcha';
 import {
   checkActiveSession, registerSession, getOrCreateSessionId,
-  ensureReferralCode, processReferral,
+  ensureReferralCode, recoverPendingReferral,
 } from '@/lib/supabase/db';
 import { clearLocalUserData } from '@/lib/clearLocalUserData';
 
@@ -62,6 +62,8 @@ function LoginWorkspacePreview() {
 
 export default function LoginPage() {
   const captcha = useAuthCaptcha();
+  const referralAbort = useRef<AbortController | null>(null);
+  const signedInUser = useRef<string | null>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState('');
@@ -87,32 +89,29 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data: { user } }) => {
-      if (user) window.location.replace(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')));
+    const controller = new AbortController();
+    referralAbort.current = controller;
+    createClient().auth.getUser().then(async ({ data: { user } }) => {
+      if (!user || controller.signal.aborted) return;
+      const outcome = await recoverPendingReferral({ userId: user.id, signal: controller.signal });
+      if (!controller.signal.aborted && outcome !== 'cancelled') window.location.replace(safeReturnPath(new URLSearchParams(window.location.search).get('redirect')));
     }).catch(() => {});
+    return () => { controller.abort(); };
   }, []);
+
+  const finishSignIn = async (userId: string) => {
+    const signal = referralAbort.current?.signal;
+    try {
+      await ensureReferralCode({ userId, signal });
+      if (signal?.aborted) return;
+      if (await recoverPendingReferral({ userId, signal }) === 'cancelled') return;
+    } catch { /* Optional referral setup must not block login. */ }
+    if (!signal?.aborted) window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
+  };
 
   const proceedToApp = async (sessionId: string) => {
     await registerSession(sessionId, navigator.userAgent.slice(0, 200));
-    window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
-  };
-
-  const processPendingReferral = async () => {
-    try {
-      await ensureReferralCode();
-      const pendingRef = localStorage.getItem('studysync_pending_ref');
-      if (!pendingRef) return;
-      let ip: string | undefined;
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 3000);
-        const response = await fetch('https://api.ipify.org?format=json', { signal: ctrl.signal });
-        clearTimeout(timer);
-        ip = ((await response.json()) as { ip?: string }).ip;
-      } catch { /* referral still works without IP */ }
-      await processReferral(pendingRef, ip);
-      localStorage.removeItem('studysync_pending_ref');
-    } catch { /* referral processing must not block login */ }
+    if (signedInUser.current) await finishSignIn(signedInUser.current);
   };
 
   const validate = (rawEmail: string, rawPassword: string) => {
@@ -134,13 +133,15 @@ export default function LoginPage() {
     setError(''); setLoading(true);
     const cleanEmail = rawEmail.trim().replace(/[^\x20-\x7e]/g, '');
     try {
-      const { error: authError } = await captcha.run(captchaToken => createClient().auth.signInWithPassword({
+      const { data: authData, error: authError } = await captcha.run(captchaToken => createClient().auth.signInWithPassword({
         email: cleanEmail, password: rawPassword, options: { captchaToken },
       }));
       if (authError) {
         setError(/invalid login credentials/i.test(authError.message) ? 'Incorrect email or password. Please try again.' : authError.message);
         return;
       }
+      if (referralAbort.current?.signal.aborted) return;
+      signedInUser.current = authData.user?.id ?? null;
       // Remembering an email is optional; restricted/full browser storage must
       // not turn an already successful sign-in into a failed login.
       try {
@@ -154,8 +155,7 @@ export default function LoginPage() {
         await registerSession(sessionId, navigator.userAgent.slice(0, 200));
       } catch { /* proceed if session status cannot be checked */ }
 
-      await processPendingReferral();
-      window.location.href = safeReturnPath(new URLSearchParams(window.location.search).get('redirect'));
+      if (signedInUser.current) await finishSignIn(signedInUser.current);
     } catch (err) { setError(err instanceof Error ? err.message : 'Login failed. Check your connection and try again.'); }
     finally { setLoading(false); }
   };

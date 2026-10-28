@@ -77,7 +77,12 @@ export default function RegisterPage() {
   useEffect(() => {
     // Persist referral code from URL so it survives email confirmation + OAuth redirects
     const ref = new URLSearchParams(window.location.search).get('ref');
-    if (ref) localStorage.setItem('studysync_pending_ref', ref.trim().toUpperCase());
+    if (ref) {
+      try {
+        localStorage.setItem('studysync_pending_ref', ref.trim().toUpperCase());
+        localStorage.removeItem('studysync_pending_ref_owner');
+      } catch { /* Optional referral storage must not block registration. */ }
+    }
 
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
