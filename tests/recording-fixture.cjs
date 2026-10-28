@@ -1,13 +1,14 @@
 const { loadSource } = require('./load-source.cjs');
 function fixture(kind = 'room') {
   const values = {}, objects = new Set(), rows = new Map(), calls = [];
-  const state = { uid: 'alice', fail: '', failReads: false, denyStorage: false, gate: null, registrationGate: null, readLimit: Infinity };
+  const state = { uid: 'alice', fail: '', failReads: false, denyStorage: false, gate: null, registrationGate: null, readLimit: Infinity,
+    duplicateError: { message: 'The resource already exists', statusCode: '400' } };
   const storage = {
     upload: async (path, blob, options) => {
       calls.push(['upload', path, options.upsert]);
       if (state.gate) await state.gate;
       if (state.fail === 'upload') return { error: { message: 'upload failed' } };
-      if (objects.has(path) && !options.upsert) return { error: { message: 'already exists', statusCode: '409' } };
+      if (objects.has(path) && !options.upsert) return { error: state.duplicateError };
       objects.add(path); if (state.fail === 'lost-upload') throw Error('response lost'); return { error: null };
     },
     createSignedUrl: async path => {

@@ -4,6 +4,34 @@ const { loadSource } = require('./load-source.cjs');
 const tick = () => new Promise(setImmediate);
 const { fixture } = require('./recording-fixture.cjs');
 for (const kind of ['room', 'document']) {
+  for (const duplicateError of [
+    { statusCode: '400', message: 'The resource already exists' },
+    { statusCode: '400', message: 'Asset Already Exists' },
+    { statusCode: '409', message: 'already exists' },
+  ]) test(`${kind} reconnect retry publishes after a duplicate upload (${duplicateError.statusCode}: ${duplicateError.message})`, async () => {
+    const f = fixture(kind);
+    f.state.duplicateError = duplicateError;
+    f.state.fail = 'sign';
+    await assert.rejects(f.save(), /sign failed/);
+    f.state.fail = '';
+    const url = await f.save();
+    assert.equal(f.rows.size, 1);
+    assert.equal(f.rows.get('note').audio_url, url);
+    assert.equal(f.objects.size, 1);
+    assert.equal(f.calls.filter(call => call[0] === 'remove').length, 0);
+  });
+  test(`${kind} an unrelated HTTP 400 must not publish an existing upload`, async () => {
+    const f = fixture(kind);
+    f.state.fail = 'sign';
+    await assert.rejects(f.save(), /sign failed/);
+    f.state.fail = '';
+    f.state.duplicateError = { statusCode: '400', message: 'Invalid upload request' };
+    await assert.rejects(f.save(), /Invalid upload request/);
+    assert.equal(f.rows.size, 0);
+    assert.equal(f.objects.size, 1);
+  });
+}
+for (const kind of ['room', 'document']) {
   for (const stage of ['upload','sign','database']) test(`${kind} ${stage} failure is tracked and retry publishes exactly one playable recording`, async () => {
     const f=fixture(kind); f.state.fail=stage;
     await assert.rejects(f.save());
