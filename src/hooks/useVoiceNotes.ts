@@ -360,10 +360,16 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
 
   const updateNoteTitle = useCallback((id: string, title: string) => {
     setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title: title || undefined } : n)));
-    if (userIdRef.current) {
-      updateVoiceNoteTitle(id, title || undefined);
+    const owner = userIdRef.current;
+    if (owner) {
+      const note = store.getSnapshot().notes.find(item => item.id === id);
+      if (note?.audioBlob.size) void retainRecoveryAudio(owner, { ...note, title: title || undefined }).catch(() => undefined);
+      void updateVoiceNoteTitle(id, title || undefined, owner).catch((error: unknown) => {
+        console.warn('[VoiceNotes] title remains local:', error);
+        if (mounted.current && userIdRef.current === owner) alert('Could not save this recording title. Your local title is retained; please retry.');
+      });
     }
-  }, [setNotes]);
+  }, [setNotes, store]);
 
   const getNotesForPage = useCallback(
     (documentId: string, pageNumber: number | string): VoiceNote[] =>

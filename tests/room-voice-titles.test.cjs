@@ -114,3 +114,11 @@ test('failed background metadata fetch is contained and the next update can retr
   const retry = s.add('note'); s.requests[1].resolve({ id: 'note', title: 'recovered', audioUrl: 'url' }); await retry;
   assert.equal(s.current.get('note').title, 'recovered');
 });
+test('server title path binds queued writes to the initiating account', async t => {
+  const previous=process.env.NEXT_PUBLIC_SERVER_RECORDING_RECOVERY;process.env.NEXT_PUBLIC_SERVER_RECORDING_RECOVERY='true';
+  t.after(()=>{if(previous===undefined)delete process.env.NEXT_PUBLIC_SERVER_RECORDING_RECOVERY;else process.env.NEXT_PUBLIC_SERVER_RECORDING_RECOVERY=previous;});
+  const writes=[];const s=setup(t,async(id,title,owner)=>writes.push({id,title,owner}));
+  await s.render().updateNoteTitle('note','durable title');
+  assert.deepEqual(writes,[{id:'note',title:'durable title',owner:'me'}]);
+  assert.equal(s.render().notes[0].title,'durable title');
+});
