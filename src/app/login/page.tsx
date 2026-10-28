@@ -141,8 +141,12 @@ export default function LoginPage() {
         setError(/invalid login credentials/i.test(authError.message) ? 'Incorrect email or password. Please try again.' : authError.message);
         return;
       }
-      if (remember) localStorage.setItem('studysync_login_email', cleanEmail);
-      else localStorage.removeItem('studysync_login_email');
+      // Remembering an email is optional; restricted/full browser storage must
+      // not turn an already successful sign-in into a failed login.
+      try {
+        if (remember) localStorage.setItem('studysync_login_email', cleanEmail);
+        else localStorage.removeItem('studysync_login_email');
+      } catch { /* Continue with the authenticated session. */ }
 
       try {
         const sessionId = getOrCreateSessionId();
