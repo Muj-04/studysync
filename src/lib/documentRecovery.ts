@@ -1,5 +1,5 @@
 import { KEYS, storageGet, storageSet, storageKeys } from '@/lib/storage';
-import { listDocumentWrites, cancelDocumentWrites } from '@/lib/documentOutbox';
+import { listDocumentWrites, cancelDocumentWrites, markDocumentCollectionEdited } from '@/lib/documentOutbox';
 
 export interface LocalDocumentRecovery { ownerId: string; documentId: string; name: string; updatedAt: number; snapshots: Record<string, unknown>; alternatives: Snapshot[] }
 interface Snapshot { ownerId: string; documentId: string; kind: string; value: unknown; name?: string; updatedAt: number }
@@ -31,6 +31,14 @@ export function listLocalDocumentRecovery(ownerId: string): LocalDocumentRecover
 /** Each tab owns its keys; another tab cannot erase retained sibling snapshots. */
 export function retainDocumentSnapshot(ownerId: string | null, documentId: string, kind: string, value: unknown, name?: string, captureId = tab): void {
   if (!ownerId) return;
+  // Capture precedes debounced persistence. A racing hydration read must not
+  // give these local rows a revision belonging to content the view will reject.
+  if (kind.startsWith('drawing:')) markDocumentCollectionEdited(ownerId, documentId, 'drawings', kind.slice(8));
+  if (kind.startsWith('text_notes:')) markDocumentCollectionEdited(ownerId, documentId, 'text_notes', kind.slice(11));
+  if (kind.startsWith('page_images:')) markDocumentCollectionEdited(ownerId, documentId, 'page_image_annotations', kind.slice(12));
+  if (kind === 'blank_pages') markDocumentCollectionEdited(ownerId, documentId, 'blank_pages');
+  if (kind === KEYS.BOOKMARKS) markDocumentCollectionEdited(ownerId, documentId, 'bookmarks');
+  if (kind === KEYS.KEY_TERMS) markDocumentCollectionEdited(ownerId, documentId, 'key_terms');
   const key = `${recoveryKey(ownerId)}${encodeURIComponent(documentId)}:${encodeURIComponent(kind)}:${captureId}`;
   const snapshot = { ownerId, documentId, kind, value: JSON.parse(JSON.stringify(value)), name, updatedAt: Date.now() };
   memory.set(key, snapshot);

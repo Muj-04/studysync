@@ -23,3 +23,11 @@ Server generation/tombstone/CAS support is a coordinated rollout requirement.
 Browser data cleared by the user or unavailable/quota-exhausted storage cannot
 provide durable recovery; failed journal persistence prevents cloud execution and
 surfaces export guidance. No hosted migration is applied by this work.
+
+An editor freezes fetch-based baseline changes as soon as a collection is edited,
+including raw edits before debounce and restored pending markers. Hydration hooks
+may retain those local rows instead of adopting a later successful cloud read;
+only that editor's acknowledged writes can advance their revision. The freeze
+lasts for the module lifetime. Reloaded or legacy pending work without a proven
+baseline may require export or an explicit recovery copy rather than automatic
+rebasing. Reopening a clean view after earlier edits can conservatively conflict.

@@ -1,5 +1,6 @@
 'use client';
 import { retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { markDocumentCollectionEdited } from '@/lib/documentOutbox';
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
 import type { TextNote } from '@/types';
 import { KEYS, storageGet, storageSet } from '@/lib/storage';
@@ -65,7 +66,11 @@ export function useTextNotes(userId: string | null) {
       };
       // Replayed edits also belong to this mount: their save may finish before
       // a hydration read carrying the older cloud snapshot returns.
-      for (const key of Object.keys(pending.current)) editedPages.current.add(key);
+      for (const key of Object.keys(pending.current)) {
+        editedPages.current.add(key);
+        const split = key.indexOf(':');
+        if (split >= 0) markDocumentCollectionEdited(userId, key.slice(0, split), 'text_notes', key.slice(split + 1));
+      }
       pendingOwner.current = userId;
       inFlight.current = {};
     }

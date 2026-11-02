@@ -1,4 +1,5 @@
 import { retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { markDocumentCollectionEdited } from '@/lib/documentOutbox';
 import { useClientReady } from './useClientReady';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
@@ -43,6 +44,14 @@ export function usePDFDrawings(expectedOwner?: string | null) {
     }
     previousOwner.current = expectedOwner;
   }, [expectedOwner]);
+
+  useEffect(() => {
+    if (!expectedOwner) return;
+    for (const key of storageGet<string[]>(pendingStorageKey) ?? []) {
+      const split = key.indexOf(':');
+      if (split >= 0) markDocumentCollectionEdited(expectedOwner, key.slice(0, split), 'drawings', key.slice(split + 1));
+    }
+  }, [expectedOwner, pendingStorageKey]);
 
   const clientReady = useClientReady();
   const [restored, setRestored] = useState(false);
