@@ -8,6 +8,10 @@ const run = promisify(execFile);
 const binary = process.env.STUDYSYNC_PSQL;
 assert.ok(binary, 'STUDYSYNC_PSQL must name the local psql binary');
 assert.ok(process.env.PGHOST?.startsWith('/tmp/'), 'Only an explicitly configured local Unix socket is permitted');
+// libpq may prefer these over PGHOST; never allow an inherited remote target.
+for (const key of ['PGHOSTADDR', 'PGSERVICE', 'PGSERVICEFILE']) {
+  assert.ok(!process.env[key], `${key} must be unset for the local-only PostgreSQL test`);
+}
 const database = `integrity_documents_${process.pid}`;
 const owner = '11111111-1111-4111-8111-111111111111';
 const free = '33333333-3333-4333-8333-333333333333';

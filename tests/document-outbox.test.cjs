@@ -61,3 +61,15 @@ test('a raw edit before debounce freezes the baseline before a hydration read co
   f.observeDocumentCollection(scope, 4);
   assert.equal(f.stageDocumentWrite(scope, [{ content: 'raw edit' }]).expectedRevision, 3);
 });
+test('first raw edit on an empty adopted page captures its pre-edit zero baseline', () => {
+  const f=fixture();
+  f.observeDocumentCollectionSnapshot(scope, {});
+  f.markDocumentCollectionEdited('A','doc','drawings','1');
+  assert.equal(f.stageDocumentWrite(scope,[{canvas_data:'first stroke'}]).expectedRevision,0);
+});
+test('an empty snapshot adopted after a raw edit cannot manufacture its baseline', () => {
+  const f=fixture();
+  f.markDocumentCollectionEdited('A','doc','drawings','1');
+  f.observeDocumentCollectionSnapshot(scope, {});
+  assert.equal(f.stageDocumentWrite(scope,[{canvas_data:'early stroke'}]).expectedRevision,null);
+});

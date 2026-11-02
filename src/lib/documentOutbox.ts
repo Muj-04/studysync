@@ -13,9 +13,27 @@ const active = new Map<string, Promise<void>>();
 const writerId = crypto.randomUUID();
 const observedRevisions = new Map<string, number>();
 const editedScopes = new Set<string>();
+const collectionSnapshots = new Map<string, { generation: string; revisions: Record<string, number> }>();
+export function observeDocumentCollectionSnapshot(scope: DocumentScope, revisions: Record<string, number>): void {
+  collectionSnapshots.set(JSON.stringify([scope.ownerId, scope.documentId, scope.collection]), { generation: scope.generation, revisions: { ...revisions } });
+}
+const withheldScopes = new Set<string>();
+export function withholdDocumentCollection(owner: string, doc: string, collection: string, page: string): void {
+  withheldScopes.add(editKey(owner, doc, collection, page));
+}
+export function admitDocumentCollection(owner: string, doc: string, collection: string, page: string): void {
+  withheldScopes.delete(editKey(owner, doc, collection, page));
+}
 const editKey = (owner: string, doc: string, collection: string, page: string) => JSON.stringify([owner, doc, collection, page]);
 export function markDocumentCollectionEdited(owner: string, doc: string, collection: string, page = ''): void {
-  editedScopes.add(editKey(owner, doc, collection, page));
+  const edited = editKey(owner, doc, collection, page);
+  if (editedScopes.has(edited)) return;
+  const snapshot = collectionSnapshots.get(JSON.stringify([owner, doc, collection]));
+  if (snapshot && !withheldScopes.has(edited)) {
+    const scope = { ownerId: owner, documentId: doc, collection, pageKey: page, generation: snapshot.generation };
+    if (!observedRevisions.has(scopeKey(scope))) observedRevisions.set(scopeKey(scope), snapshot.revisions[page] ?? 0);
+  }
+  editedScopes.add(edited);
 }
 const listeners = new Set<() => void>();
 export const subscribeDocumentOutbox = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
@@ -31,6 +49,7 @@ function persist(key: string, value: unknown) {
 }
 export function observeDocumentCollection(scope: DocumentScope, revision: number): void {
   if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Invalid document revision');
+  if (withheldScopes.has(editKey(scope.ownerId, scope.documentId, scope.collection, scope.pageKey))) return;
   // Hydration hooks retain edited views even when a later cloud read succeeds.
   if (editedScopes.has(editKey(scope.ownerId, scope.documentId, scope.collection, scope.pageKey))
     || editedScopes.has(editKey(scope.ownerId, scope.documentId, scope.collection, '*'))) return;
@@ -55,7 +74,7 @@ export function stageDocumentWrite(scope: DocumentScope, rows: unknown[]): Docum
   markDocumentCollectionEdited(scope.ownerId, scope.documentId, scope.collection, scope.pageKey);
   const writes = listDocumentWrites(scope.ownerId);
   const predecessor = [...writes].reverse().find(entry => scopeKey(entry) === scopeKey(scope) && entry.writerId === writerId);
-  const revision = predecessor ? predecessor.expectedRevision : observedRevisions.get(scopeKey(scope)) ?? null;
+  const revision = predecessor ? predecessor.expectedRevision : withheldScopes.has(editKey(scope.ownerId, scope.documentId, scope.collection, scope.pageKey)) ? null : observedRevisions.get(scopeKey(scope)) ?? null;
   const entry: DocumentWrite = {
     ...scope, writeId: crypto.randomUUID(), writerId, expectedRevision: revision,
     rows: JSON.parse(JSON.stringify(rows)), createdAt: Math.max(Date.now(), (writes.at(-1)?.createdAt ?? 0) + 1),

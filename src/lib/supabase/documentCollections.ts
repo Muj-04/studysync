@@ -1,9 +1,10 @@
 import { createClient } from './client';
 import { assertDocumentOwner, knownDocumentGeneration, requireDocumentGeneration, DocumentConflictError } from './documentProtocol';
-import { isDocumentRecoveryOnly, acknowledgeDocumentWrite, failDocumentWrite, nextDocumentWrite, observeDocumentCollection, stageDocumentWrite, retryDocumentWrites, type DocumentScope, type DocumentWrite } from '@/lib/documentOutbox';
+import { isDocumentRecoveryOnly, acknowledgeDocumentWrite, failDocumentWrite, nextDocumentWrite, observeDocumentCollection, observeDocumentCollectionSnapshot, stageDocumentWrite, retryDocumentWrites, type DocumentScope, type DocumentWrite } from '@/lib/documentOutbox';
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 
 export type DocumentCollection = 'text_notes' | 'bookmarks' | 'key_terms' | 'blank_pages' | 'flashcards' | 'drawings' | 'page_image_annotations' | 'session_state';
+export interface DocumentReadBatch { accept(collection: DocumentCollection, rows: Record<string, unknown>[], observe: () => void): void }
 const initializedScopes = new Set<string>();
 const snapshots = new Map<string, Record<string, number>>();
 const snapshotKey = (owner: string, doc: string, generation: string, collection: string) => JSON.stringify([owner, doc, generation, collection]);
@@ -14,18 +15,22 @@ export async function documentOwner(expectedOwner?: string): Promise<string> {
   return user.id;
 }
 /** Rows and revisions come from one server snapshot, never separate race-prone reads. */
-export async function readDocumentCollection(collection: DocumentCollection, documentId: string): Promise<Record<string, unknown>[]> {
+export async function readDocumentCollection(collection: DocumentCollection, documentId: string, batch?: DocumentReadBatch): Promise<Record<string, unknown>[]> {
   const ownerId = await documentOwner();
   const generation = await requireDocumentGeneration(ownerId, documentId);
   const { data, error } = await createClient().rpc('read_document_collection_v2', { p_collection: collection, p_document_id: documentId, p_generation: generation });
   if (error) throw protocolError(error);
   await assertDocumentOwner(ownerId);
   if (!data || !Array.isArray(data.rows) || !data.revisions) throw new Error('The document snapshot is incomplete. Local edits were retained.');
-  snapshots.set(snapshotKey(ownerId, documentId, generation, collection), data.revisions);
-  for (const [pageKey, revision] of Object.entries(data.revisions)) {
-    observeDocumentCollection({ ownerId, documentId, generation, collection, pageKey }, Number(revision));
-    initializedScopes.add(JSON.stringify([ownerId, documentId, generation, collection, pageKey]));
-  }
+  const observe = () => {
+    observeDocumentCollectionSnapshot({ ownerId, documentId, generation, collection, pageKey: '' }, data.revisions);
+    snapshots.set(snapshotKey(ownerId, documentId, generation, collection), data.revisions);
+    for (const [pageKey, revision] of Object.entries(data.revisions)) {
+      observeDocumentCollection({ ownerId, documentId, generation, collection, pageKey }, Number(revision));
+      initializedScopes.add(JSON.stringify([ownerId, documentId, generation, collection, pageKey]));
+    }
+  };
+  if (batch) batch.accept(collection, data.rows, observe); else observe();
   return data.rows;
 }
 function protocolError(error: { message?: string; code?: string }) {

@@ -31,3 +31,17 @@ only that editor's acknowledged writes can advance their revision. The freeze
 lasts for the module lifetime. Reloaded or legacy pending work without a proven
 baseline may require export or an explicit recovery copy rather than automatic
 rebasing. Reopening a clean view after earlier edits can conservatively conflict.
+
+Workspace hydration defers both page baselines and the collection snapshot until
+all required reads succeed and React commits the render applying the seeds. Existing cached scopes are
+withheld while loading. Cancellation or any failed sibling read cannot certify
+those caches. Commit-phase completion admits only remote scopes actually passed through the
+adapter to the editor; missing cached pages and bookmarks merged with local-only
+marks stay withheld. Empty drawing rows filtered by the adapter do not count as
+adopted content. Explicit recovery may therefore be required for edits made while
+loading or to cache content absent from the cloud; staged revisions never change
+merely because loading later succeeds.
+
+For a newly edited page absent from a successfully adopted collection, the raw
+edit captures revision zero from that earlier collection snapshot. A snapshot
+adopted after the raw edit cannot manufacture its missing baseline.
