@@ -254,7 +254,7 @@ export default function WorkspacePage() {
   const {
     notes: voiceNotes,
     isRecording, recordingContext,
-    startRecording, stopRecording, deleteNote, deleteNotesForDocument, getNotesForPage,
+    startRecording, stopRecording, deleteNote, forgetNotesForDeletedDocument, getNotesForPage,
     seedVoiceNotes,
   } = useVoiceNotes({ onStorageLimitReached: () => setLimitModal('voice') });
   const {
@@ -1024,7 +1024,7 @@ export default function WorkspacePage() {
     // ── In-memory state cleanup ─────────────────────────────────────────────
     setPageTextNotes((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${docId}:`))));
     setBookmarks((prev) => prev.filter((b) => b.documentId !== docId));
-    deleteNotesForDocument(docId);
+    forgetNotesForDeletedDocument(docId);
     removePagesForDocument(docId);
     clearAllDrawings(docId);
     removePageImagesForDocument(docId);
@@ -1034,7 +1034,7 @@ export default function WorkspacePage() {
     showToast('Document deleted. Local recovery and source file retained.');
 
 
-  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast, setPageTextNotes, documents, voiceNotes]);
+  }, [forgetNotesForDeletedDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast, setPageTextNotes, documents, voiceNotes]);
 
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';

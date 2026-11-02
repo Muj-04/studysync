@@ -31,3 +31,12 @@ test('failed bulk personal deletion retains local playback for retry',async t=>{
   await s.render().deleteNotesForDocument('doc');assert.equal(s.render().notes.length,1);
   fail=false;await s.render().deleteNotesForDocument('doc');assert.equal(s.render().notes.length,0);
 });
+
+test('acknowledged parent deletion clears local notes without another remote mutation',async t=>{
+  let remoteCalls=0;
+  const s=mount(t,async()=>{remoteCalls++;throw Error('parent is tombstoned');});await tick();
+  s.render().forgetNotesForDeletedDocument('doc');
+  assert.equal(s.render().notes.length,0);
+  assert.equal(remoteCalls,0);
+  assert.equal(s.alerts.length,0);
+});
