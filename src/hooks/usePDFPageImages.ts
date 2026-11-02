@@ -1,4 +1,5 @@
 import { retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { markDocumentCollectionEdited } from '@/lib/documentOutbox';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
@@ -39,6 +40,14 @@ export function usePDFPageImages(expectedOwner?: string | null) {
     }
     previousOwner.current = expectedOwner;
   }, [expectedOwner, saves]);
+
+  useEffect(() => {
+    if (!expectedOwner) return;
+    for (const key of storageGet<string[]>(pendingKey) ?? []) {
+      const split = key.indexOf(':');
+      if (split >= 0) markDocumentCollectionEdited(expectedOwner, key.slice(0, split), 'page_image_annotations', key.slice(split + 1));
+    }
+  }, [expectedOwner, pendingKey]);
 
   const getPageImages = useCallback((docId: string, pageNumber: number): PDFPageImage[] => {
     return allPageImages[docId]?.[pageNumber] ?? [];

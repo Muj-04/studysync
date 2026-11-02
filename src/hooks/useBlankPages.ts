@@ -1,5 +1,6 @@
 'use client';
 import { retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { markDocumentCollectionEdited } from '@/lib/documentOutbox';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { BlankPage, CanvasImage } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
@@ -37,6 +38,11 @@ export function useBlankPages(expectedOwner?: string | null) {
     }
     previousOwner.current = expectedOwner;
   }, [expectedOwner]);
+
+  useEffect(() => {
+    if (!expectedOwner) return;
+    for (const docId of storageGet<string[]>(pendingKey) ?? []) markDocumentCollectionEdited(expectedOwner, docId, 'blank_pages');
+  }, [expectedOwner, pendingKey]);
 
   const commit = useCallback((pages: BlankPage[], docId?: string) => {
     blankPagesRef.current = pages;

@@ -48,3 +48,16 @@ test('legacy writes remain retryable but their unproven successors are not rebas
   await f.retryDocumentWrites('A', async entry => { assert.equal(entry.writeId, first.writeId); return 4; }, async () => 'A');
   assert.equal(f.listDocumentWrites('A').find(write => write.writeId === second.writeId).expectedRevision, 3);
 });
+test('a refresh rejected by a locally edited view cannot advance its write baseline', () => {
+  const f = fixture(); f.observeDocumentCollection(scope, 3);
+  const saved = f.stageDocumentWrite(scope, [{ content: 'local' }]);
+  f.acknowledgeDocumentWrite(saved, 4);
+  f.observeDocumentCollection(scope, 5); // Hook retains its edited view rather than adopting rows.
+  assert.equal(f.stageDocumentWrite(scope, [{ content: 'more local' }]).expectedRevision, 4);
+});
+test('a raw edit before debounce freezes the baseline before a hydration read completes', () => {
+  const f = fixture(); f.observeDocumentCollection(scope, 3);
+  f.markDocumentCollectionEdited('A', 'doc', 'drawings', '1');
+  f.observeDocumentCollection(scope, 4);
+  assert.equal(f.stageDocumentWrite(scope, [{ content: 'raw edit' }]).expectedRevision, 3);
+});

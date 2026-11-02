@@ -12,6 +12,11 @@ const active = new Map<string, Promise<void>>();
 // Revisions belong to the editor that observed them, not the shared browser.
 const writerId = crypto.randomUUID();
 const observedRevisions = new Map<string, number>();
+const editedScopes = new Set<string>();
+const editKey = (owner: string, doc: string, collection: string, page: string) => JSON.stringify([owner, doc, collection, page]);
+export function markDocumentCollectionEdited(owner: string, doc: string, collection: string, page = ''): void {
+  editedScopes.add(editKey(owner, doc, collection, page));
+}
 const listeners = new Set<() => void>();
 export const subscribeDocumentOutbox = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const notify = () => { for (const listener of listeners) listener(); };
@@ -26,6 +31,9 @@ function persist(key: string, value: unknown) {
 }
 export function observeDocumentCollection(scope: DocumentScope, revision: number): void {
   if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Invalid document revision');
+  // Hydration hooks retain edited views even when a later cloud read succeeds.
+  if (editedScopes.has(editKey(scope.ownerId, scope.documentId, scope.collection, scope.pageKey))
+    || editedScopes.has(editKey(scope.ownerId, scope.documentId, scope.collection, '*'))) return;
   persist(baselineKey(scope), revision);
   observedRevisions.set(scopeKey(scope), revision);
 }
@@ -44,6 +52,7 @@ export function nextDocumentWrite(scope: DocumentScope): DocumentWrite | undefin
 }
 export function stageDocumentWrite(scope: DocumentScope, rows: unknown[]): DocumentWrite {
   if (!scope.ownerId || !scope.documentId || !scope.generation) throw new Error('Document ownership and generation are required');
+  markDocumentCollectionEdited(scope.ownerId, scope.documentId, scope.collection, scope.pageKey);
   const writes = listDocumentWrites(scope.ownerId);
   const predecessor = [...writes].reverse().find(entry => scopeKey(entry) === scopeKey(scope) && entry.writerId === writerId);
   const revision = predecessor ? predecessor.expectedRevision : observedRevisions.get(scopeKey(scope)) ?? null;
