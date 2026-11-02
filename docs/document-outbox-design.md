@@ -4,7 +4,11 @@ Deletion wins for the original document ID. Each local write retains its owner,
 document generation, collection/page, observed revision, immutable write ID and
 payload before remote execution. Missing baselines and CAS/tombstone conflicts
 remain recoverable locally; fetching a newer revision never rebases pending work.
-Only a confirmed predecessor acknowledgment advances queued local successors.
+Only a confirmed predecessor acknowledgment advances queued successors from the
+same editor instance. Baselines are observed per editor, never adopted from a
+peer tab or persisted storage after a reload. Durable writes retain an editor ID
+so a different tab can safely replay an existing chain. Older entries without an
+editor ID remain retryable, but their successors are not automatically rebased.
 Delayed acknowledgments remove only the matching write. Retry verifies identity
 before each operation and stops on conflict for that collection.
 
