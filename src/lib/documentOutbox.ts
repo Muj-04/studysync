@@ -4,11 +4,14 @@ export interface DocumentScope {
   ownerId: string; documentId: string; generation: string; collection: string; pageKey: string;
 }
 export interface DocumentWrite extends DocumentScope {
-  writeId: string; expectedRevision: number | null; rows: unknown[];
+  writeId: string; writerId?: string; expectedRevision: number | null; rows: unknown[];
   status: 'pending' | 'conflict' | 'blocked'; error?: string; createdAt: number;
 }
 const prefix = 'studysync_document_outbox_';
 const active = new Map<string, Promise<void>>();
+// Revisions belong to the editor that observed them, not the shared browser.
+const writerId = crypto.randomUUID();
+const observedRevisions = new Map<string, number>();
 const listeners = new Set<() => void>();
 export const subscribeDocumentOutbox = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const notify = () => { for (const listener of listeners) listener(); };
@@ -24,6 +27,7 @@ function persist(key: string, value: unknown) {
 export function observeDocumentCollection(scope: DocumentScope, revision: number): void {
   if (!Number.isSafeInteger(revision) || revision < 0) throw new Error('Invalid document revision');
   persist(baselineKey(scope), revision);
+  observedRevisions.set(scopeKey(scope), revision);
 }
 export function listDocumentWrites(ownerId: string): DocumentWrite[] {
   return storageKeys(`${key(ownerId)}write:`).filter(key => !key.endsWith(':attempt')).map(key => {
@@ -41,10 +45,10 @@ export function nextDocumentWrite(scope: DocumentScope): DocumentWrite | undefin
 export function stageDocumentWrite(scope: DocumentScope, rows: unknown[]): DocumentWrite {
   if (!scope.ownerId || !scope.documentId || !scope.generation) throw new Error('Document ownership and generation are required');
   const writes = listDocumentWrites(scope.ownerId);
-  const predecessor = [...writes].reverse().find(entry => scopeKey(entry) === scopeKey(scope));
-  const revision = predecessor ? predecessor.expectedRevision : storageGet<number>(baselineKey(scope)) ?? null;
+  const predecessor = [...writes].reverse().find(entry => scopeKey(entry) === scopeKey(scope) && entry.writerId === writerId);
+  const revision = predecessor ? predecessor.expectedRevision : observedRevisions.get(scopeKey(scope)) ?? null;
   const entry: DocumentWrite = {
-    ...scope, writeId: crypto.randomUUID(), expectedRevision: revision,
+    ...scope, writeId: crypto.randomUUID(), writerId, expectedRevision: revision,
     rows: JSON.parse(JSON.stringify(rows)), createdAt: Math.max(Date.now(), (writes.at(-1)?.createdAt ?? 0) + 1),
     status: storageGet(cancelledKey(scope.ownerId, scope.documentId)) ? 'conflict' : predecessor?.status ?? (revision === null ? 'blocked' : 'pending'),
     ...(revision === null ? { error: 'No observed cloud revision. Export or create a recovery copy.' } : {}),
@@ -60,11 +64,12 @@ export function acknowledgeDocumentWrite(entry: DocumentWrite, revision: number)
   // Individual keys prevent two tabs staging unrelated writes from losing one
   // another's payload. Concurrent revision changes still fail server CAS safely.
   for (const successor of writes.slice(index + 1)) {
-    if (scopeKey(successor) === scopeKey(entry) && successor.status === 'pending') {
+    if (scopeKey(successor) === scopeKey(entry) && entry.writerId && successor.writerId === entry.writerId && successor.status === 'pending') {
       persist(entryKey(successor), { ...successor, expectedRevision: revision });
     }
   }
   persist(baselineKey(entry), revision);
+  if (entry.writerId === writerId) observedRevisions.set(scopeKey(entry), revision);
   if (!storageRemove(entryKey(entry))) throw new Error('Recovery storage acknowledgement failed');
   notify();
 }
