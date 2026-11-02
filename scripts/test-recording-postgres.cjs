@@ -17,12 +17,29 @@ const owner='11111111-1111-4111-8111-111111111111';
 const auth=`SET request.storage.operation='object.upload';SET request.jwt.claim.sub='${owner}';SET request.jwt.claim.role='authenticated';SET ROLE authenticated;`;
 const service=`SET request.jwt.claim.role='service_role';SET ROLE service_role;`;
 const note='55555555-5555-4555-8555-555555555555';
-const op=JSON.parse(sql(auth+`SELECT begin_recording_operation('${note}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'Lecture',now(),'${owner}');`));
+function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe']});let out='',err='';let ready;const locked=new Promise(resolve=>ready=resolve);child.stdout.on('data',d=>{out+=d;if(out.includes('LOCK_READY'))ready();});child.stderr.on('data',d=>err+=d);const done=new Promise((resolve,reject)=>child.on('close',code=>code?reject(Error(err)):resolve(out)));child.stdin.end(input);return{locked,done};}
+(async()=>{
+ // Hold begin's transaction open: scope cancellation must wait for its owner
+ // lock, then include the newly committed operation rather than miss its row.
+ const bulkNote='88888888-8888-4888-8888-888888888888';
+ const beginBulk=`SELECT begin_recording_operation('${bulkNote}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'Concurrent bulk',now(),'${owner}');`;
+ const starting=held(auth+`BEGIN;${beginBulk}\n\\echo LOCK_READY\nSELECT pg_sleep(0.4);COMMIT;`);
+ await starting.locked;
+ assert.equal(sql(auth+`SELECT delete_document_recordings('doc','33333333-3333-4333-8333-333333333333','${owner}');`),'1');
+ await starting.done;
+ assert.equal(sql(`SELECT state FROM recording_private.operations WHERE note_id='${bulkNote}';`),'deleting');
+ const retryNote='99999999-9999-4999-8999-999999999999';
+ const beginRetry=`SELECT begin_recording_operation('${retryNote}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'Bulk then retry',now(),'${owner}');`;
+ sql(auth+beginRetry);
+ const cancelling=held(auth+`BEGIN;SELECT delete_document_recordings('doc','33333333-3333-4333-8333-333333333333','${owner}');\n\\echo LOCK_READY\nSELECT pg_sleep(0.4);COMMIT;`);
+ await cancelling.locked;
+ assert.throws(()=>sql(auth+beginRetry),/deleted/);
+ await cancelling.done;
+ sql(`UPDATE recording_private.operations SET next_attempt_at=now()+interval '1 day' WHERE note_id IN ('${bulkNote}','${retryNote}');`);
+ const op=JSON.parse(sql(auth+`SELECT begin_recording_operation('${note}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'Lecture',now(),'${owner}');`));
 sql(auth+`INSERT INTO storage.objects(bucket_id,name,metadata) VALUES('voice-notes','${op.object_path}','{"size":5,"mimetype":"audio/webm"}');`);
 // A worker outage cannot expire bytes that already reached Storage.
 sql(`UPDATE recording_private.operations SET upload_deadline=now()-interval '1 day' WHERE id='${op.id}';`);
-function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe']});let out='',err='';let ready;const locked=new Promise(resolve=>ready=resolve);child.stdout.on('data',d=>{out+=d;if(out.includes('LOCK_READY'))ready();});child.stderr.on('data',d=>err+=d);const done=new Promise((resolve,reject)=>child.on('close',code=>code?reject(Error(err)):resolve(out)));child.stdin.end(input);return{locked,done};}
-(async()=>{
  const deletedNote='66666666-6666-4666-8666-666666666666';
  const deletingEarly=held(auth+`BEGIN;SELECT delete_recording_identity('${deletedNote}','document','doc','33333333-3333-4333-8333-333333333333','${owner}');\n\\echo LOCK_READY\nSELECT pg_sleep(0.4);COMMIT;`);
  await deletingEarly.locked;
@@ -52,6 +69,8 @@ function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe']});
  const deletion=held(auth+"BEGIN;DELETE FROM documents WHERE id='doc';COMMIT;\n\\echo LOCK_READY\n");
  await Promise.all([publishing.done,deletion.done]);
  assert.equal(sql('SELECT count(*) FROM voice_notes;'),'0');
+ assert.equal(sql(auth+`SELECT delete_document_recordings('doc','33333333-3333-4333-8333-333333333333','${owner}');`),'0');
+ assert.throws(()=>sql(auth+`SELECT delete_document_recordings('doc','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','${owner}');`),/generation authorization/);
  assert.equal(sql(`SELECT state FROM recording_private.operations WHERE id='${op.id}';`),'deleting');
  const cleanup=JSON.parse(sql(service+'SELECT claim_recording_operations(1);'));
  assert.equal(sql(service+`SELECT prepare_recording_cleanup('${op.id}','${cleanup.lease_token}');`),op.object_path);
@@ -60,5 +79,5 @@ function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe']});
  sql(service+`SELECT complete_recording_cleanup('${op.id}','${cleanup.lease_token}');`);
  assert.equal(sql(`SELECT state FROM recording_private.operations WHERE id='${op.id}';`),'deleted');
  assert.equal(sql(auth+`SELECT confirm_recording_upload('${op.id}')->>'state';`),'deleted');
- console.log('PostgreSQL: exclusive claims, crash retry, publication/deletion serialization, cascade cleanup and permanent tombstone passed.');
+ console.log('PostgreSQL: bulk cancellation/begin serialization, exclusive claims, crash retry, publication/deletion serialization, cascade cleanup and permanent tombstone passed.');
 })().catch(error=>{console.error(error.message);process.exitCode=1;});

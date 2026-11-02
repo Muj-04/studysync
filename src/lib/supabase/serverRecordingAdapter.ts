@@ -75,3 +75,32 @@ export async function renameServerRecording(owner: string, noteId: string, title
   if (!data || data.owner_id !== owner || data.note_id !== noteId || !['awaiting_upload', 'published'].includes(data.state)) throw new Error('Recording title was not acknowledged.');
   await assertOwner(owner);
 }
+
+/** Includes accepted operations from other tabs even before metadata publication. */
+export async function deleteServerDocumentRecordings(owner: string, documentId: string): Promise<void> {
+  await assertOwner(owner);
+  let generation = knownDocumentGeneration(owner, documentId);
+  // Library deletion need not open/register the document first. A deleted
+  // parent's retained lifetime also permits confirmation after a lost response.
+  if (!generation) {
+    for (const table of ['documents', 'document_tombstones']) {
+      await assertOwner(owner);
+      const { data, error } = await sb().from(table).select('user_id,generation')
+        .eq(table === 'documents' ? 'id' : 'document_id', documentId).eq('user_id', owner).maybeSingle();
+      if (error) throw new Error(error.message);
+      await assertOwner(owner);
+      if (data) {
+        if (data.user_id !== owner || typeof data.generation !== 'string' || !data.generation) throw new Error('The document lifetime could not be confirmed.');
+        generation = data.generation;
+        break;
+      }
+    }
+  }
+  if (!generation) throw new Error('Document generation is unknown. Keep local recordings until deletion can be confirmed.');
+  const { data, error } = await sb().rpc('delete_document_recordings', {
+    p_document_id: documentId, p_generation: generation, p_expected_owner: owner,
+  });
+  if (error) throw new Error(error.message);
+  await assertOwner(owner);
+  if (!Number.isInteger(data) || data < 0) throw new Error('Recording scope deletion was not acknowledged.');
+}

@@ -223,6 +223,30 @@ END$$;
 REVOKE ALL ON FUNCTION public.delete_recording_identity(uuid,text,text,uuid,uuid) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.delete_recording_identity(uuid,text,text,uuid,uuid) TO authenticated;
 
+-- Serialize the accepted-operation snapshot with begin's owner lock. Published
+-- metadata alone cannot enumerate uploaded work awaiting confirmation in another tab.
+CREATE FUNCTION public.delete_document_recordings(p_document_id text,p_generation uuid,p_expected_owner uuid) RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE uid uuid:=auth.uid(); op_id uuid; cancelled integer:=0;
+BEGIN
+ IF uid IS NULL OR uid IS DISTINCT FROM p_expected_owner OR p_document_id IS NULL THEN RAISE EXCEPTION 'Recording authorization required' USING ERRCODE='42501'; END IF;
+ IF NOT recording_private.scope_allowed(uid,'document',p_document_id,p_generation) THEN
+  -- A committed parent deletion may have lost its response. Only its exact
+  -- retained owner/generation can acknowledge retry and cancel remaining work.
+  PERFORM 1 FROM public.document_tombstones t JOIN auth.users u ON u.id=t.user_id
+   WHERE t.document_id=p_document_id AND t.user_id=uid AND t.generation=p_generation FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Recording document generation authorization required' USING ERRCODE='42501'; END IF;
+ END IF;
+ -- Match begin: parent locks precede the owner advisory lock and operation locks.
+ PERFORM pg_advisory_xact_lock(hashtextextended(uid::text,7801));
+ FOR op_id IN SELECT id FROM recording_private.operations WHERE owner_id=uid AND scope='document' AND scope_id=p_document_id AND document_generation=p_generation AND state NOT IN ('deleting','deleted') ORDER BY id LOOP
+  PERFORM public.request_recording_deletion(op_id);
+  cancelled:=cancelled+1;
+ END LOOP;
+ RETURN cancelled;
+END$$;
+REVOKE ALL ON FUNCTION public.delete_document_recordings(text,uuid,uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.delete_document_recordings(text,uuid,uuid) TO authenticated;
+
 CREATE FUNCTION public.claim_recording_operations(p_limit integer DEFAULT 20) RETURNS SETOF jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE o recording_private.operations;
 BEGIN

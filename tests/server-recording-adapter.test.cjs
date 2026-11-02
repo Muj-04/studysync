@@ -7,3 +7,9 @@ test('server rejection never uploads and preserves original blob',async()=>{cons
 test('delete sends identity tombstone RPC even without an accepted begin',async()=>{const f=fixture();await f.api.deleteServerRecording('alice','document','doc','note');assert.deepEqual(f.calls.map(c=>c[0]),['delete_recording_identity']);assert.equal(f.calls[0][1].p_generation,'gen');assert.equal(f.calls[0][1].p_expected_owner,'alice');});
 
 test('account change during upload prevents confirmation under the replacement account',async()=>{const f=fixture();f.onUpload=()=>{f.owner='bob'};const intent=f.api.captureServerRecording('alice','document','doc',f.note);await assert.rejects(f.api.saveServerRecording(intent),/account/i);assert.deepEqual(f.calls.map(c=>c[0]),['begin_recording_operation','upload']);});
+
+for (const tombstone of [false,true]) test(`bulk deletion resolves uncached generation from ${tombstone?'confirmed tombstone':'owned library document'}`,async()=>{
+ const calls=[];const client={from:table=>{const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table===(tombstone?'document_tombstones':'documents')?{user_id:'alice',generation:'gen'}:null,error:null})};return q;},rpc:async(name,args)=>{calls.push([name,args]);return{data:0,error:null};}};
+ const {deleteServerDocumentRecordings}=loadSource('src/lib/supabase/serverRecordingAdapter.ts',{'./dbShared':{sb:()=>client,userId:async()=>'alice'},'./documentProtocol':{knownDocumentGeneration:()=>null}});
+ await deleteServerDocumentRecordings('alice','doc');assert.deepEqual(calls,[['delete_document_recordings',{p_document_id:'doc',p_generation:'gen',p_expected_owner:'alice'}]]);
+});

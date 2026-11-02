@@ -291,7 +291,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
             console.log('[VoiceNotes] saveVoiceNote returned audioUrl:', url ? url.slice(0, 80) + '…' : null);
           })().catch((error: unknown) => {
             console.warn('[VoiceNotes] remote save failed; local recording retained:', error);
-            if (mounted.current) {
+            if (mounted.current && !deletedNotes.current.has(note.id)) {
               setNotes(prev => prev.map(current => current.id === note.id ? { ...current, syncStatus: 'failed' } : current));
               retrySaves.current.set(note.id, sync);
               alert('Could not save this recording. The audio is still available in this tab. Reconnect to retry.');
@@ -385,6 +385,9 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     if (!mounted.current) return;
     try {
       if (!owner) throw new Error('Sign in to delete recordings.');
+      // Local identities may not have reached begin/publication yet. Fence them
+      // before the server scope cancellation and before dropping playable audio.
+      for (const note of local) await deleteVoiceNote(note.id, docId, owner);
       await deleteAllVoiceNotesForDocument(docId, owner);
       if (!mounted.current) return;
       local.forEach(note => { deletedNotes.current.add(note.id); URL.revokeObjectURL(note.audioUrl); });
@@ -393,6 +396,17 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
       console.warn('[VoiceNotes] deletion failed; recordings retained:', error);
       if (mounted.current) alert('Could not delete these recordings. Please try again.');
     }
+  }, [setNotes, store]);
+
+  /** Caller has archived recovery audio and acknowledged permanent parent deletion. */
+  const forgetNotesForDeletedDocument = useCallback((docId: string) => {
+    const local = store.getSnapshot().notes.filter(note => note.documentId === docId);
+    for (const note of local) {
+      deletedNotes.current.add(note.id);
+      retrySaves.current.delete(note.id);
+      URL.revokeObjectURL(note.audioUrl);
+    }
+    setNotes(prev => prev.filter(note => note.documentId !== docId));
   }, [setNotes, store]);
 
   // Called from syncDoc after canonical docId is resolved. Adds any remote notes
@@ -429,6 +443,7 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
     stopRecording,
     deleteNote,
     deleteNotesForDocument,
+    forgetNotesForDeletedDocument,
     updateNoteTitle,
     getNotesForPage,
     seedVoiceNotes,

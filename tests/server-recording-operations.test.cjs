@@ -40,3 +40,30 @@ test('worker never removes objects after bucket configuration changes to version
 for(const [label,alter] of [['text recording IDs','ALTER TABLE voice_notes ALTER COLUMN id TYPE text USING id::text'],['integer page keys','ALTER TABLE room_voice_notes ALTER COLUMN page_number TYPE integer USING page_number::integer']])test(`schema preflight rejects ${label} without changing legacy rows`,async t=>{const db=new PGlite();t.after(()=>db.close());await db.exec(fs.readFileSync('tests/server-recording-fixture.sql','utf8'));await db.exec(`INSERT INTO voice_notes(id,user_id,document_id,page_number,duration,audio_url,timestamp) VALUES('${note}','${owner}','doc','1',1,'legacy-audio',now());${alter}`);await assert.rejects(db.exec(migration()),/recording schema contract/i);await db.exec('ROLLBACK');assert.equal((await db.query('SELECT audio_url FROM voice_notes')).rows[0].audio_url,'legacy-audio');assert.equal((await db.query("SELECT to_regclass('recording_private.operations') relation")).rows[0].relation,null);});
 test('valid uploaded bytes publish after the upload deadline when the worker resumes',async t=>{const db=await fixture(t);await as(db);const op=await begin(db);await upload(db,op);await db.exec("RESET ROLE;UPDATE recording_private.operations SET upload_deadline=now()-interval '1 day'");await as(db,owner,'service_role');const job=(await db.query('SELECT claim_recording_operations(1) op')).rows[0].op;assert.equal((await db.query('SELECT publish_claimed_recording($1,$2) op',[op.id,job.lease_token])).rows[0].op.state,'published');await db.exec('RESET ROLE');assert.equal((await db.query('SELECT count(*)::int n FROM storage.objects')).rows[0].n,1);assert.equal((await db.query('SELECT count(*)::int n FROM voice_notes')).rows[0].n,1);});
 test('metadata failure preserves uploaded bytes for publication retry after the deadline',async t=>{const db=await fixture(t);await as(db);const op=await begin(db);await upload(db,op);await db.exec("RESET ROLE;CREATE FUNCTION fail_test_publication() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RAISE EXCEPTION 'transient metadata outage'; END$$;CREATE TRIGGER zz_test_publication BEFORE INSERT ON voice_notes FOR EACH ROW EXECUTE FUNCTION fail_test_publication()");await as(db);await assert.rejects(confirm(db,op),/transient metadata outage/);await db.exec("RESET ROLE;DROP TRIGGER zz_test_publication ON voice_notes;UPDATE recording_private.operations SET upload_deadline=now()-interval '1 day'");await as(db,owner,'service_role');const job=(await db.query('SELECT claim_recording_operations(1) op')).rows[0].op;assert.equal((await db.query('SELECT publish_claimed_recording($1,$2) op',[op.id,job.lease_token])).rows[0].op.state,'published');await db.exec('RESET ROLE');assert.equal((await db.query('SELECT count(*)::int n FROM storage.objects')).rows[0].n,1);});
+
+test('document bulk cancellation includes another tabs uploaded and published operations and preserves other scopes',async t=>{
+ const db=await fixture(t);await as(db);const pending=await begin(db);await upload(db,pending);
+ const published=await begin(db,'document','66666666-6666-4666-8666-666666666666');await upload(db,published);await confirm(db,published);
+ const shared=await begin(db,'room','77777777-7777-4777-8777-777777777777');await upload(db,shared);
+ const args=['doc',generation,owner];
+ assert.equal((await db.query('SELECT delete_document_recordings($1,$2,$3) n',args)).rows[0].n,2);
+ assert.equal((await confirm(db,pending)).state,'deleting');assert.equal((await confirm(db,published)).state,'deleting');
+ assert.equal((await confirm(db,shared)).state,'published');
+ assert.equal((await db.query('SELECT count(*)::int n FROM voice_notes')).rows[0].n,0);
+ assert.equal((await db.query('SELECT delete_document_recordings($1,$2,$3) n',args)).rows[0].n,0);
+ await assert.rejects(begin(db),/delet/i);
+});
+test('document bulk cancellation rejects changed owner or generation without cancelling audio',async t=>{
+ const db=await fixture(t);await as(db);const op=await begin(db);await upload(db,op);
+ await assert.rejects(db.query('SELECT delete_document_recordings($1,$2,$3)',['doc',generation,other]),/authorization/i);
+ await assert.rejects(db.query('SELECT delete_document_recordings($1,$2,$3)',['doc','66666666-6666-4666-8666-666666666666',owner]),/authorization|generation/i);
+ assert.equal((await confirm(db,op)).state,'published');
+});
+test('lost parent deletion response can cancel pending cleanup only with matching owner and tombstone generation',async t=>{
+ const db=await fixture(t);await as(db);const op=await begin(db);await upload(db,op);
+ await db.exec("RESET ROLE;INSERT INTO document_lifetimes SELECT id,user_id,generation,now() FROM documents;DELETE FROM documents");await as(db);
+ await assert.rejects(db.query('SELECT delete_document_recordings($1,$2,$3)',['doc','66666666-6666-4666-8666-666666666666',owner]),/authorization|generation/i);
+ assert.equal((await db.query('SELECT delete_document_recordings($1,$2,$3) n',['doc',generation,owner])).rows[0].n,1);
+ assert.equal((await confirm(db,op)).state,'deleting');
+ assert.equal((await db.query('SELECT delete_document_recordings($1,$2,$3) n',['doc',generation,owner])).rows[0].n,0);
+});

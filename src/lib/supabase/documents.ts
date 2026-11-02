@@ -1,3 +1,4 @@
+import { serverRecordingRecoveryEnabled, deleteServerDocumentRecordings } from './serverRecordingAdapter';
 import { preserveDocumentBeforeRemoval } from '@/lib/documentRecovery';
 import { registerDocument, assertDocumentOwner } from './documentProtocol';
 import { sb, userId, markDocumentRegistered, forgetDocumentRegistration } from './dbShared';
@@ -38,6 +39,7 @@ export async function deleteDocument(docId: string) {
 export async function deleteAllVoiceNotesForDocument(docId: string, expectedOwner?: string): Promise<void> {
   const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
   if (expectedOwner && uid !== expectedOwner) throw new Error('The account changed before recording synchronization finished.');
+  if (serverRecordingRecoveryEnabled()) return deleteServerDocumentRecordings(uid, docId);
   const { data, count, error: readError } = await sb().from('voice_notes').select('id', { count: 'exact' }).match({ user_id: uid, document_id: docId });
   if (readError) throw readError;
   if (count == null || count !== data?.length) throw new Error('The recording list is incomplete. No recordings were deleted; please try again.');
