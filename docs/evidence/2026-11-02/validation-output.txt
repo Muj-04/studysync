@@ -1,0 +1,49 @@
+Final combined code: 4303b7e77e68e03e5507c33c52c4f69949f45272
+Validated 2026-11-04
+
+npm test
+1..439
+# tests 453
+# suites 0
+# pass 453
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 294037.450377
+
+lint
+
+✖ 28 problems (0 errors, 28 warnings)
+
+
+document PostgreSQL
+PASS separate connections: child write completes before deletion; cascade and tombstone win
+PASS separate connections: committed deletion rejects the waiting legacy upsert
+PASS separate connections: committed deletion rejects waiting generation-bound replay
+PASS separate connections: same-base competing replacements cannot both acknowledge
+PASS separate connections: concurrent lost-response retry returns the same receipt
+PASS separate connections: stale repeatable-read transactions cannot resurrect a deleted ID
+PASS separate connections: concurrent document creation obeys the free quota
+PASS separate connections: concurrent CAS writes never split snapshot rows from revision
+
+recording PostgreSQL
+PostgreSQL: isolation guard, bulk cancellation/begin serialization, exclusive claims, crash retry, publication/deletion serialization, cascade cleanup and permanent tombstone passed.
+
+migration and backup/restore
+PASS pre-cutover logical backup/restore preserves existing documents, annotations, recording metadata and object metadata
+PASS failed document migration rolls back schema and preserves orphan data
+PASS recording preflight failure rolls back; valid ordered migration adopts existing recording without losing annotations
+PASS post-cutover logical restore preserves exact content, tombstones, write receipts, operation identities and crash leases
+PASS restored authorization/CAS/tombstones deny stale writes; expired crash lease recovers publication without duplicate or old-lease acceptance
+PASS published/legacy Storage re-upload is rejected after restore: provider object restore needs a separate compatible procedure
+PASS separate local dummy-object backup checksum; NOT a Supabase Storage API/provider restore
+Evidence directory: /tmp/studysync-restore-evidence-pYydQZ
+CLEANUP all rehearsal databases dropped
+
+mocked-provider Chromium
+PASS 1440px: keyboard recovery panel, ZIP retains offline content, missing source blocks copy before registration, no original writes, no page exceptions/overflow (mocked provider)
+PASS 390px: keyboard recovery panel, ZIP retains offline content, missing source blocks copy before registration, no original writes, no page exceptions/overflow (mocked provider)
+
+Production build: exit 0, recording flag true.
+TypeScript: exit 0, no diagnostics.
