@@ -3,8 +3,11 @@
 const fs=require('node:fs');const {spawn,spawnSync}=require('node:child_process');const assert=require('node:assert/strict');
 const socket=process.env.RECORDING_TEST_PG_SOCKET,bin=process.env.RECORDING_TEST_PSQL||'psql',database=process.env.RECORDING_TEST_PG_DATABASE;
 if(!socket?.startsWith('/')||database!=='integrity_recordings'){throw Error('Set a local Unix socket and disposable database integrity_recordings.');}
+// libpq hostaddr/service settings can override an explicit Unix socket host.
+const childEnv={...process.env};
+for(const key of ['PGHOSTADDR','PGSERVICE','PGSERVICEFILE'])delete childEnv[key];
 const args=['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-h',socket,'-p',process.env.RECORDING_TEST_PG_PORT||'5432','-U',process.env.RECORDING_TEST_PG_USER||process.env.USER,'-d',database];
-function sql(input){const r=spawnSync(bin,args,{input,encoding:'utf8'});if(r.status!==0)throw Error(r.stderr);return r.stdout.trim();}
+function sql(input){const r=spawnSync(bin,args,{input,encoding:'utf8',env:childEnv});if(r.status!==0)throw Error(r.stderr);return r.stdout.trim();}
 const schemaPath=process.env.RECORDING_TEST_GENERATION_MIGRATION||'supabase/migrations/20261028202847_document_generation_guards.sql';
 let base=fs.readFileSync('tests/server-recording-fixture.sql','utf8');
 base=base.replace(/CREATE ROLE (\w+);/g,(_,role)=>`DO $$BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object THEN NULL; END$$;`);
@@ -17,8 +20,26 @@ const owner='11111111-1111-4111-8111-111111111111';
 const auth=`SET request.storage.operation='object.upload';SET request.jwt.claim.sub='${owner}';SET request.jwt.claim.role='authenticated';SET ROLE authenticated;`;
 const service=`SET request.jwt.claim.role='service_role';SET ROLE service_role;`;
 const note='55555555-5555-4555-8555-555555555555';
-function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe']});let out='',err='';let ready;const locked=new Promise(resolve=>ready=resolve);child.stdout.on('data',d=>{out+=d;if(out.includes('LOCK_READY'))ready();});child.stderr.on('data',d=>err+=d);const done=new Promise((resolve,reject)=>child.on('close',code=>code?reject(Error(err)):resolve(out)));child.stdin.end(input);return{locked,done};}
+function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe'],env:childEnv});let out='',err='';let ready;const locked=new Promise(resolve=>ready=resolve);child.stdout.on('data',d=>{out+=d;if(out.includes('LOCK_READY'))ready();});child.stderr.on('data',d=>err+=d);const done=new Promise((resolve,reject)=>child.on('close',code=>code?reject(Error(err)):resolve(out)));child.stdin.end(input);return{locked,done};}
 (async()=>{
+ // Repeatable-read can retain a snapshot from before an independently accepted
+ // operation. Bulk cancellation must reject that transaction, never acknowledge 0.
+ const rr=spawn(bin,args,{stdio:['pipe','pipe','pipe'],env:childEnv});let rrOut='',rrErr='',rrReady;
+ const rrLocked=new Promise(resolve=>rrReady=resolve);
+ rr.stdout.on('data',data=>{rrOut+=data;if(rrOut.includes('RR_READY'))rrReady();});
+ rr.stderr.on('data',data=>rrErr+=data);
+ const rrDone=new Promise(resolve=>rr.on('close',code=>resolve({code,error:rrErr,output:rrOut})));
+ rr.stdin.write(auth+"BEGIN ISOLATION LEVEL REPEATABLE READ;SELECT count(*) FROM documents;\n\\echo RR_READY\n");
+ await rrLocked;
+ const rrNote='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+ const rrOperation=JSON.parse(sql(auth+`SELECT begin_recording_operation('${rrNote}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'RR snapshot',now(),'${owner}');`));
+ rr.stdin.end(`SELECT delete_document_recordings('doc','33333333-3333-4333-8333-333333333333','${owner}');COMMIT;`);
+ const rrResult=await rrDone;
+ assert.notEqual(rrResult.code,0,'a stale transaction must not acknowledge bulk cancellation');
+ assert.match(rrResult.error,/requires READ COMMITTED/);
+ assert.equal(sql(`SELECT state FROM recording_private.operations WHERE id='${rrOperation.id}';`),'awaiting_upload');
+ assert.equal(sql(auth+`SELECT delete_document_recordings('doc','33333333-3333-4333-8333-333333333333','${owner}');`),'1');
+ sql(`UPDATE recording_private.operations SET next_attempt_at=now()+interval '1 day' WHERE id='${rrOperation.id}';`);
  // Hold begin's transaction open: scope cancellation must wait for its owner
  // lock, then include the newly committed operation rather than miss its row.
  const bulkNote='88888888-8888-4888-8888-888888888888';
@@ -79,5 +100,5 @@ sql(`UPDATE recording_private.operations SET upload_deadline=now()-interval '1 d
  sql(service+`SELECT complete_recording_cleanup('${op.id}','${cleanup.lease_token}');`);
  assert.equal(sql(`SELECT state FROM recording_private.operations WHERE id='${op.id}';`),'deleted');
  assert.equal(sql(auth+`SELECT confirm_recording_upload('${op.id}')->>'state';`),'deleted');
- console.log('PostgreSQL: bulk cancellation/begin serialization, exclusive claims, crash retry, publication/deletion serialization, cascade cleanup and permanent tombstone passed.');
+ console.log('PostgreSQL: isolation guard, bulk cancellation/begin serialization, exclusive claims, crash retry, publication/deletion serialization, cascade cleanup and permanent tombstone passed.');
 })().catch(error=>{console.error(error.message);process.exitCode=1;});

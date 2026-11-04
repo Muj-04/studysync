@@ -67,3 +67,12 @@ test('lost parent deletion response can cancel pending cleanup only with matchin
  assert.equal((await confirm(db,op)).state,'deleting');
  assert.equal((await db.query('SELECT delete_document_recordings($1,$2,$3) n',['doc',generation,owner])).rows[0].n,0);
 });
+for (const isolation of ['REPEATABLE READ','SERIALIZABLE']) test(`bulk deletion rejects ${isolation} before mutating accepted recordings`,async t=>{
+ const db=await fixture(t);await as(db);const op=await begin(db);await upload(db,op);
+ await db.exec(`BEGIN ISOLATION LEVEL ${isolation};SELECT count(*) FROM voice_notes`);
+ await assert.rejects(db.query('SELECT delete_document_recordings($1,$2,$3)',['doc',generation,owner]),error=>error.code==='25000'&&/READ COMMITTED/.test(error.message));
+ await db.exec('ROLLBACK');
+ assert.equal((await db.query('SELECT get_recording_operation($1) op',[note])).rows[0].op.state,'awaiting_upload');
+ assert.equal((await db.query('SELECT delete_document_recordings($1,$2,$3) n',['doc',generation,owner])).rows[0].n,1);
+ assert.equal((await confirm(db,op)).state,'deleting');
+});
