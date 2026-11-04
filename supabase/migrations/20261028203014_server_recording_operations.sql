@@ -228,6 +228,10 @@ GRANT EXECUTE ON FUNCTION public.delete_recording_identity(uuid,text,text,uuid,u
 CREATE FUNCTION public.delete_document_recordings(p_document_id text,p_generation uuid,p_expected_owner uuid) RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE uid uuid:=auth.uid(); op_id uuid; cancelled integer:=0;
 BEGIN
+ -- Advisory locks serialize acceptance but cannot refresh an older RR snapshot.
+ IF current_setting('transaction_isolation')<>'read committed' THEN
+  RAISE EXCEPTION 'Recording scope deletion requires READ COMMITTED isolation' USING ERRCODE='25000';
+ END IF;
  IF uid IS NULL OR uid IS DISTINCT FROM p_expected_owner OR p_document_id IS NULL THEN RAISE EXCEPTION 'Recording authorization required' USING ERRCODE='42501'; END IF;
  IF NOT recording_private.scope_allowed(uid,'document',p_document_id,p_generation) THEN
   -- A committed parent deletion may have lost its response. Only its exact
