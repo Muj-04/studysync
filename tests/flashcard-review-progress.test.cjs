@@ -14,11 +14,17 @@ async function mount(t) {
   react.useMemo = fn => fn();
   const writes = []; let failure = false, deckFailure = false, missing = false;
   const { reviewFlashcard } = loadSource('src/lib/supabase/flashcards.ts', {
-    './dbShared': { userId: async () => 'owner', sb: () => ({ from: table => ({
-      update(patch) { this.patch = patch; return this; }, eq() { return this; },
-      select() { return this; }, maybeSingle() { return this; },
-      then(resolve) { if (table === 'flashcard_decks' && deckFailure) throw new Error('Synthetic deck timestamp failure'); if (table === 'flashcards') writes.push(this.patch); resolve({ data: missing || failure ? null : { id: 'card' }, error: failure ? { message: 'Synthetic save failure' } : null }); },
-    }) }) },
+    './documentProtocol': { assertDocumentOwner: async () => {} },
+    './dbShared': { userId: async () => 'owner', sb: () => ({
+      rpc: async (name, args) => {
+        assert.equal(name, 'review_flashcard_v2');
+        const review_count = args.p_expected_review_count + 1;
+        const interval_days = review_count === 1 ? 1 : 2;
+        writes.push({ review_count, interval_days });
+        return { data: missing || failure ? null : { id: 'card', review_count, interval_days, last_reviewed_at: new Date().toISOString(), next_review_at: new Date(Date.now()+86400000).toISOString() }, error: failure ? { message: 'Synthetic save failure' } : null };
+      },
+      from: () => ({ update() { return this; }, eq() { return this; }, then(resolve) { if(deckFailure)throw Error('Synthetic deck timestamp failure'); resolve({error:null}); } }),
+    }) },
   });
   const card = { id:'card',deckId:'deck',docId:'doc',pageNum:1,question:'Question',answer:'Answer',createdAt:'2026-01-01',nextReviewAt:'2026-01-01',intervalDays:0,reviewCount:0,lastReviewedAt:null };
   const jsx = (type, props) => ({type,props});

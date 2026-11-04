@@ -44,7 +44,7 @@ test('subscribing the first time closes the initial fetch-to-subscription gap',a
   const h=createHookHarness();t.after(()=>h.unmount());let subscribed;let reads=0;
   const channel={on(){return this},subscribe(fn){subscribed=fn;return this},track:async()=>{}};
   const client={auth:{getSession:async()=>({data:{session:{access_token:'token'}}})},realtime:{setAuth:async()=>{}},channel:()=>channel,from:()=>({select(){return this},eq:async()=>({data:[],error:null})})};
-  const {useStudyRoom}=loadSource('src/hooks/useStudyRoom.ts',{react:h.react,'@/lib/supabase/client':{createClient:()=>client},'@/lib/realtimeLifecycle':{releaseRealtimeChannel:async()=>{},waitForChannelRelease:async()=>{}}});
+  const {useStudyRoom}=loadSource('src/hooks/useStudyRoom.ts',{react:h.react,'@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client':{createClient:()=>client},'@/lib/realtimeLifecycle':{releaseRealtimeChannel:async()=>{},waitForChannelRelease:async()=>{}}});
   h.render(()=>useStudyRoom('room',()=>{},()=>{reads++}));await new Promise(setImmediate);await subscribed('SUBSCRIBED');assert.equal(reads,1);
 });
 test('snapshots cannot overwrite an in-flight or newly acknowledged local rename',async t=>{
