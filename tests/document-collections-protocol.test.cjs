@@ -33,3 +33,19 @@ test('account switch stops durable replay and leaves owner work intact',async()=
 test('a null acknowledgement retains the operation for idempotent recovery', async()=>{
  const f=setup();await f.api.readDocumentCollection('text_notes','doc');f.missing();await assert.rejects(f.api.writeDocumentCollection('text_notes','doc',[{content:'keep'}],'1','a'),/acknowledgement/);assert.match([...f.values.values()].join(''),/keep/);await f.api.retryPendingDocumentWrites('a');assert.equal(f.requests[0].p_write_id,f.requests[1].p_write_id);
 });
+
+test('a deferred hydration read does not certify a baseline until explicitly adopted', async()=>{
+ const f=setup(); const observed=[];
+ await f.api.readDocumentCollection('text_notes','doc',{accept:(_collection,_rows,observe)=>observed.push(observe)});
+ await assert.rejects(f.api.writeDocumentCollection('text_notes','doc',[{content:'cached edit during load'}],'1','a'),/revision/i);
+ assert.equal(f.requests.length,0);
+ observed[0]();
+ assert.match([...f.values.values()].join(''),/cached edit during load/);
+});
+test('adopting a successful deferred read enables a clean editor write', async()=>{
+ const f=setup(); const observed=[];
+ await f.api.readDocumentCollection('text_notes','doc',{accept:(_collection,_rows,observe)=>observed.push(observe)});
+ observed[0]();
+ await f.api.writeDocumentCollection('text_notes','doc',[{content:'new edit'}],'1','a');
+ assert.equal(f.requests[0].p_expected_revision,3);
+});

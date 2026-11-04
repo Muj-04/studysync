@@ -1,15 +1,15 @@
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 import { sb, userId } from './dbShared';
-import { readDocumentCollection, writeDocumentCollection } from './documentCollections';
+import { readDocumentCollection, writeDocumentCollection, type DocumentReadBatch } from './documentCollections';
 import type { TextNote, Bookmark, KeyTerm, BlankPage, PDFPageImage } from '@/types';
 
 // ── Text Notes ───────────────────────────────────────────────────────────────
 
-export async function fetchTextNotes(docId: string): Promise<Record<string, TextNote[]>> {
+export async function fetchTextNotes(docId: string, batch?: DocumentReadBatch): Promise<Record<string, TextNote[]>> {
   const uid = await userId();
   console.log('[DB] fetchTextNotes uid:', uid, 'docId:', docId);
   if (!uid) throw new Error('Sign in to load text notes');
-  const data = await readDocumentCollection('text_notes', docId);
+  const data = await readDocumentCollection('text_notes', docId, batch);
   console.log('[DB] fetchTextNotes rows:', data?.length ?? 0);
   const map: Record<string, TextNote[]> = {};
   for (const r of data ?? []) {
@@ -28,10 +28,10 @@ export async function fetchTextNotes(docId: string): Promise<Record<string, Text
 
 // ── Bookmarks ────────────────────────────────────────────────────────────────
 
-export async function fetchBookmarks(docId?: string): Promise<Bookmark[]> {
+export async function fetchBookmarks(docId?: string, batch?: DocumentReadBatch): Promise<Bookmark[]> {
   const uid = await userId(); if (!uid) throw new Error('Sign in to load bookmarks');
   if (docId) {
-    const rows = await readDocumentCollection('bookmarks', docId);
+    const rows = await readDocumentCollection('bookmarks', docId, batch);
     return rows.map(r => ({ id: String(r.id), documentId: String(r.document_id), virtualIndex: Number(r.virtual_index), label: String(r.label), createdAt: new Date(String(r.created_at)).getTime() }));
   }
   let q = sb().from('bookmarks').select('*').eq('user_id', uid);
@@ -66,11 +66,11 @@ async function deleteAllDrawingsNow(docId: string): Promise<void> {
   for (const row of drawings) await writeDocumentCollection('drawings', docId, [], String(row.page_key));
 }
 
-export async function fetchDrawings(docId: string): Promise<Record<string, string>> {
+export async function fetchDrawings(docId: string, batch?: DocumentReadBatch): Promise<Record<string, string>> {
   const uid = await userId();
   console.log('[DB] fetchDrawings uid:', uid, 'docId:', docId);
   if (!uid) return {};
-  const data = await readDocumentCollection('drawings', docId);
+  const data = await readDocumentCollection('drawings', docId, batch);
   const map: Record<string, string> = {};
   for (const r of data ?? []) if (r.canvas_data) map[String(r.page_key)] = String(r.canvas_data);
   return map;
@@ -78,9 +78,9 @@ export async function fetchDrawings(docId: string): Promise<Record<string, strin
 
 // ── Blank Pages ───────────────────────────────────────────────────────────────
 
-export async function fetchBlankPages(docId: string): Promise<BlankPage[]> {
+export async function fetchBlankPages(docId: string, batch?: DocumentReadBatch): Promise<BlankPage[]> {
   const uid = await userId(); if (!uid) throw new Error('Sign in to load blank pages');
-  const data = await readDocumentCollection('blank_pages', docId);
+  const data = await readDocumentCollection('blank_pages', docId, batch);
   return (data ?? []).map((r) => ({
     id: String(r.id), documentId: String(r.document_id), insertAfterPage: Number(r.insert_after_page),
     images: (r.images ?? []) as BlankPage['images'], canvasData: r.canvas_data as string | undefined, bgTheme: r.bg_theme as 'white' | 'dark', createdAt: Number(r.created_at),
@@ -93,8 +93,8 @@ async function savePageImagesNow(docId: string, pageNumber: number, images: PDFP
   return writeDocumentCollection('page_image_annotations', docId, [{ images }], String(pageNumber), expectedOwner);
 }
 
-export async function fetchAllPageImages(docId: string): Promise<Record<number, PDFPageImage[]>> {
-  const data = await readDocumentCollection('page_image_annotations', docId);
+export async function fetchAllPageImages(docId: string, batch?: DocumentReadBatch): Promise<Record<number, PDFPageImage[]>> {
+  const data = await readDocumentCollection('page_image_annotations', docId, batch);
   const map: Record<number, PDFPageImage[]> = {};
   for (const row of data) map[Number(row.page_number)] = row.images as PDFPageImage[];
   return map;
