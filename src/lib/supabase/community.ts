@@ -1,3 +1,4 @@
+import { requireDocumentGeneration, assertDocumentOwner } from './documentProtocol';
 import { sb, userId } from './dbShared';
 
 // ── Community ─────────────────────────────────────────────────────────────────
@@ -129,9 +130,11 @@ export async function createCommunityPost(post: {
   const title       = sanitizeText(post.title).slice(0, 200);
   const description = sanitizeText(post.description).slice(0, 2000);
   const tags        = (post.tags ?? []).map((t) => sanitizeText(t).slice(0, 50)).filter(Boolean);
+  const document_generation = post.documentId ? await requireDocumentGeneration(uid, post.documentId) : null;
+  await assertDocumentOwner(uid);
   const { data, error } = await sb()
     .from('community_posts')
-    .insert({ user_id: uid, document_id: post.documentId, title, description, pages: post.pages, tags })
+    .insert({ user_id: uid, document_id: post.documentId, document_generation, title, description, pages: post.pages, tags })
     .select('id').single();
   if (error) { console.error('[DB] createCommunityPost error:', error.message); return null; }
   return data.id;

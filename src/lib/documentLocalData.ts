@@ -12,8 +12,8 @@ export function deletePendingDocumentNotes(docId: string) {
 }
 
 /** Remove only this document's local data; other documents remain untouched. */
-export async function deleteLocalDocument(docId: string) {
-  await deletePdfBlob(docId);
+export async function deleteLocalDocument(docId: string, retainSource = false) {
+  if (!retainSource) await deletePdfBlob(docId);
   deletePendingDocumentNotes(docId);
   const drawingPendingKey = `${KEYS.DRAWINGS}_pending`;
   const drawingPending = storageGet<string[]>(drawingPendingKey);

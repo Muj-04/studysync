@@ -39,3 +39,15 @@ export function storageSet<T>(key: string, value: T): boolean {
     return false;
   }
 }
+
+export function storageKeys(prefix: string): string[] {
+  const keys: string[] = [];
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(prefix)) keys.push(key);
+  }
+  return keys;
+}
+export function storageRemove(key: string): boolean {
+  try { localStorage.removeItem(key); return true; } catch { return false; }
+}
