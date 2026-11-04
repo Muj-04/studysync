@@ -60,24 +60,28 @@ The release operator must reconcile and record:
 - Actual document entitlement rules agree with the new quota guard (free: three;
   `pro`/`premium`/VIP: exempt). Entitlement alignment remains a separate gate.
 
-Useful read-only catalog probes (run only in the verified staging connection):
+Use the checked-in [catalog export pack](staging-export/README.md), starting with
+[01-catalog.sql](staging-export/01-catalog.sql). It includes migration history,
+columns/constraints/indexes, direct and column grants, default privileges, complete
+role membership edges, RLS, function/view hashes, private definitions and aggregate
+Storage/reference preflight checks. No raw export belongs in a public PR or chat.
+The pack documents which optional blocks to skip when a relation is missing.
 
-```sql
-select version();
-select version, name from supabase_migrations.schema_migrations order by version;
-select table_name, column_name, data_type, is_nullable
-from information_schema.columns
-where table_schema='public' and table_name in
- ('documents','voice_notes','room_voice_notes') order by table_name,ordinal_position;
-select to_regprocedure('storage.allow_only_operation(text)');
-select id, public, to_jsonb(b)->>'versioning_status' as versioning_status
-from storage.buckets b where id='voice-notes';
-select tablename, policyname, roles, cmd, qual, with_check
-from pg_policies where schemaname in ('public','storage');
-```
+### Current discrepancies versus approval requirements
 
-A missing history table or column is a reconciliation finding, not a reason to
-invent history. Treat exports as confidential; no real-user content in PRs.
+| Evidence | Status and required correction |
+| --- | --- |
+| Supabase discovery and SQL probes | Both return `Unknown tool`; no live catalog inspected. Supply the authorized read-only export before claiming schema/grant/RLS parity. |
+| Historic billing migration identity | Repository documents hosted `20261027141735` versus local `20261027140326`. Verify current ledger and SQL equivalence; do not replay the local timestamp blindly. |
+| Deployment sequencing | Dev has a post-merge Vercel deployment status; CI has no migration gate, and prebuild checks do not establish schema readiness. Confirm Vercel dev settings and approve an explicit staging deployment hold/cutover before merging. |
+| Worker activation | Source exists; there is no installed scheduler or proven hosted execution. Approve an executor and server-only staging credential binding, then activate only after migrations and application checks. |
+| Storage restore | The reviewed guard rejects published/legacy re-upload. Obtain a compatible provider restore procedure; logical local database restore alone cannot close this gate. |
+
+The first, third and fourth rows are confirmed access/configuration-evidence gaps;
+this is **not** a claim that unseen staging tables are incorrect. The historical
+version alias and every conditional schema correction in the export checklist
+still require current evidence. See the pack for the exact deployment evidence and
+non-secret Vercel settings to inspect.
 
 ## 2. Backups and restore gate — before a cutover is authorized
 
@@ -116,7 +120,12 @@ playback, pending publication, cleanup, and denial of stale/deleted writes.
 
 ## 3. Build and migration cutover — only after separate authorization
 
-1. Pin exact reviewed commits and ensure required CI passes. Rebase/retest if dev
+1. Before any merge, confirm dev is a Preview/staging target and establish an
+   approved hold on automatic **staging application activation** during cutover.
+   Do not disable deployment protection or other security checks. No hold was
+   installed by this work. If the platform cannot prevent an intermediate #40
+   deployment from becoming active, stop and obtain a controlled deployment plan.
+   Pin exact reviewed commits and ensure required CI passes. Rebase/retest if dev
    changes. Apply #40 before #41; #41 contains and requires #40's RPCs/generations.
 2. Prepare the application build with staging public URL/key and
    `NEXT_PUBLIC_SERVER_RECORDING_RECOVERY=true` **at build time**. Configure
@@ -145,12 +154,30 @@ playback, pending publication, cleanup, and denial of stale/deleted writes.
    rejects inconsistent rows; recording migration adopts recognized legacy paths
    and quarantines ambiguous ones.
 6. Verify new RPCs/grants and the final Storage guard. Deploy the prepared app
-   version to **staging only** under a separate authorization. A new client against
+   version to a protected **staging-only candidate** under a separate authorization,
+   keeping the activation hold until the next step. A new client against
    the old schema fails; old collection writers after migration fail closed. The
    recording flag's default false is incompatible after the recording migration.
-7. Run the bounded two-account acceptance below before reopening writes. Reload
-   old tabs only after their pending content is retained/exported. Do not delete
-   browser outboxes as a troubleshooting shortcut.
+7. Merge #40 then #41 only under the approved activation hold, or use the approved
+   exact combined candidate deployment procedure. Never activate the intermediate
+   document-only application against the final recording schema. Verify the final
+   staged artifact contains both PRs before moving the staging alias or reopening
+   access. This is not authorization to merge now or promote anything to Production.
+8. After the final app is active in staging and basic authorized access works,
+   inspect the eligible queue before invoking a worker. `--limit=1` is a count
+   bound, **not a fixture filter**: the worker claims the oldest eligible operation
+   globally. A test pass is allowed only when the eligible queue is verified to
+   contain exclusively identified disposable fixtures, or in an independently
+   authorized isolated fixture environment. If other operations are eligible,
+   stop and obtain specific operational authorization; do not modify their state
+   to force a fixture claim. Run one approved bounded pass, verify its actual
+   claimed identity and durable result, then enable the
+   approved recurring schedule from section 4 with monitoring. Do not run a worker
+   against the old/partially migrated schema or a Production URL.
+9. Complete bounded two-account and failure/retry acceptance with the worker
+   operating, then reopen staging writes and end the activation hold. Reload old
+   tabs only after pending content is retained/exported. Do not delete browser
+   outboxes as a troubleshooting shortcut.
 
 ## 4. Worker operation and authentication
 
