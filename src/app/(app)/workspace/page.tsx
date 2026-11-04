@@ -1,4 +1,6 @@
 'use client';
+import { useDocumentHydrationCommit } from '@/hooks/useDocumentHydrationCommit';
+import { beginDocumentHydration } from '@/lib/documentHydration';
 import { DocumentRecoveryPanel } from '@/components/DocumentRecoveryPanel';
 import { retainRecoveryAudio } from '@/lib/recoveryAudio';
 import { preserveDocumentBeforeRemoval, retainDocumentSnapshot } from '@/lib/documentRecovery';
@@ -367,12 +369,15 @@ export default function WorkspacePage() {
   }, [activeDocumentId, virtualIndex]);
 
   // Load per-document data from Supabase when the active document changes.
+  const commitHydration = useDocumentHydrationCommit();
+
   // upsertDocument returns the canonical ID (cross-device stable). If it differs
   // from the locally-generated UUID, we remap state/localStorage and let the
   // effect re-run with the canonical ID before fetching any data.
   useEffect(() => {
     if (!activeDocumentId || !activeDocument || !userId) return;
     let cancelled = false;
+    const hydration = beginDocumentHydration(userId, activeDocumentId, ['drawings', 'blank_pages', 'text_notes', 'page_image_annotations']);
 
     const syncDoc = async () => {
       const canonicalId = await upsertDocument({
@@ -393,11 +398,11 @@ export default function WorkspacePage() {
       }
 
       const [remoteDrawings, remoteBlankPages, remoteTextNotes, remoteVoiceNotes, remotePageImages] = await Promise.all([
-        fetchDrawings(canonicalId),
-        fetchBlankPages(canonicalId),
-        fetchTextNotes(canonicalId),
+        fetchDrawings(canonicalId, hydration),
+        fetchBlankPages(canonicalId, hydration),
+        fetchTextNotes(canonicalId, hydration),
         fetchVoiceNotes(canonicalId),
-        fetchAllPageImages(canonicalId),
+        fetchAllPageImages(canonicalId, hydration),
       ]);
 
       if (cancelled) return;
@@ -438,10 +443,11 @@ export default function WorkspacePage() {
       } else {
         loadLocalPageImages(canonicalId);
       }
+      commitHydration(hydration);
     };
 
-    syncDoc().catch(console.error);
-    return () => { cancelled = true; };
+    syncDoc().catch(error => { hydration.cancel(); console.error(error); });
+    return () => { cancelled = true; hydration.cancel(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDocumentId, userId]);
 
@@ -517,7 +523,8 @@ export default function WorkspacePage() {
     if (!activeDocumentId || !userId) return;
     let cancelled = false;
     const version = bookmarkEditVersions.current.get(activeDocumentId) ?? 0;
-    fetchBookmarks(activeDocumentId).then((remote) => {
+    const hydration = beginDocumentHydration(userId, activeDocumentId, ['bookmarks']);
+    fetchBookmarks(activeDocumentId, hydration).then((remote) => {
       if (cancelled || (bookmarkEditVersions.current.get(activeDocumentId) ?? 0) !== version) return;
       // A response started before a local edit must not restore removed marks.
       const local = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS)?.[activeDocumentId] ?? [];
@@ -526,9 +533,10 @@ export default function WorkspacePage() {
       const merged = [...remote, ...localOnly];
       setBookmarks(merged);
       // Cached-only bookmarks remain local; a fetch never creates a write.
-    }).catch(console.error);
-    return () => { cancelled = true; };
-  }, [activeDocumentId, userId]);
+      commitHydration(hydration);
+    }).catch(error => { hydration.cancel(); console.error(error); });
+    return () => { cancelled = true; hydration.cancel(); };
+  }, [activeDocumentId, userId, commitHydration]);
 
   const persistBookmarks = useCallback((docId: string, marks: Bookmark[]) => {
     bookmarkEditVersions.current.set(docId, (bookmarkEditVersions.current.get(docId) ?? 0) + 1);

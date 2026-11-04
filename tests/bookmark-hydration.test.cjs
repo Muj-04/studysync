@@ -9,7 +9,7 @@ function callback(name, deps) {
   let selected;
   function visit(node) {
     if (name === 'hydrate' && ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
-        && node.arguments[0]?.getText(source).includes('fetchBookmarks(activeDocumentId)')) selected = node.arguments[0];
+        && node.arguments[0]?.getText(source).includes('fetchBookmarks(activeDocumentId,')) selected = node.arguments[0];
     if (ts.isVariableDeclaration(node) && node.name.getText(source) === name
         && node.initializer && ts.isCallExpression(node.initializer)) selected = node.initializer.arguments[0];
     ts.forEachChild(node, visit);
@@ -24,7 +24,9 @@ function setup() {
   const original = { id: 'removed', documentId: 'doc', virtualIndex: 0, label: 'Page 1' };
   let stored = { doc: [original] }, visible = [original], resolve;
   const saves = [];
-  const deps = { retainDocumentSnapshot: () => {},
+  const deps = {
+    beginDocumentHydration: () => ({ accept() {}, cancel() {}, complete() {} }),
+    commitHydration: () => {}, retainDocumentSnapshot: () => {},
     activeDocumentId: 'doc', activeDocument: { id: 'doc' }, userId: 'owner', userIdRef: { current: 'owner' },
     bookmarkEditVersions: { current: new Map() }, KEYS: { BOOKMARKS: 'bookmarks' },
     storageGet: () => stored, storageSet: (_, value) => { stored = value; },

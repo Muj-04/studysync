@@ -5,3 +5,36 @@ test('storage failure keeps the in-tab export payload and refuses destructive de
 test('actual logout preserves owner journals and clears global caches',async()=>{const f=fixture();const api=f.tab();api.retainDocumentSnapshot('A','doc','drawing:1','keep');const old=global.localStorage;global.localStorage={get length(){return f.data.size},key:i=>[...f.data.keys()][i],removeItem:k=>f.data.delete(k)};try{f.data.set('studysync_drawings','cache');const cleanup=loadSource('src/lib/clearLocalUserData.ts',{'./pendingReopenFile':{clearPendingReopenFile:async()=>{}}});await cleanup.clearLocalUserData();assert.equal(f.data.has('studysync_drawings'),false);assert.equal(api.listLocalDocumentRecovery('A')[0].snapshots['drawing:1'],'keep');assert.deepEqual(api.listLocalDocumentRecovery('B'),[]);}finally{global.localStorage=old;}});
 test('text owner transition never stages prior account notes for the replacement account',async()=>{const {createHookHarness}=require('./hook-harness.cjs');const h=createHookHarness();const saves=[];const f=fixture();const {useTextNotes}=loadSource('src/hooks/useTextNotes.ts',{react:h.react,'@/lib/storage':f.storage,'@/lib/supabase/db':{saveTextNotes:async(...args)=>saves.push(args)}});const render=owner=>h.render(()=>useTextNotes(owner));render('A');render('A')[1]({'doc:1':[{id:'note',content:'private A'}]});render('A');await new Promise(setImmediate);render('B');assert.deepEqual(render('B')[0],{});assert.ok(saves.every(args=>args[3]==='A'));h.unmount();});
 test('text mutation is retained synchronously before component unmount and clones input',()=>{const {createHookHarness}=require('./hook-harness.cjs');const h=createHookHarness();const f=fixture();const cache=new Map();const mocks={react:h.react,'@/lib/storage':f.storage,'@/lib/supabase/db':{saveTextNotes:async()=>{}}};const {useTextNotes}=loadSource('src/hooks/useTextNotes.ts',mocks,cache);const render=()=>h.render(()=>useTextNotes('A'));render();const input=[{id:'note',content:'keep at click'}];render()[1]({'doc:1':input});h.unmount();input[0].content='mutated later';const recovery=loadSource('src/lib/documentRecovery.ts',mocks,cache);assert.equal(recovery.listLocalDocumentRecovery('A')[0].snapshots['text_notes:1'][0].content,'keep at click');});
+test('a text view rejecting refreshed rows keeps its own acknowledged revision', () => {
+  const {createHookHarness}=require('./hook-harness.cjs'); const h=createHookHarness();
+  const f=fixture(); const cache=new Map();
+  const mocks={react:h.react,'@/lib/storage':f.storage,'@/lib/supabase/db':{saveTextNotes:async()=>{}}};
+  const outbox=loadSource('src/lib/documentOutbox.ts',mocks,cache);
+  const {useTextNotes}=loadSource('src/hooks/useTextNotes.ts',mocks,cache);
+  const scope={ownerId:'A',documentId:'doc',generation:'gen',collection:'text_notes',pageKey:'1'};
+  const render=()=>h.render(()=>useTextNotes('A')); render(); render();
+  outbox.observeDocumentCollection(scope,3);
+  render()[1]({'doc:1':[{id:'note',content:'local'}]}); render();
+  const saved=outbox.stageDocumentWrite(scope,[{content:'local'}]); outbox.acknowledgeDocumentWrite(saved,4);
+  outbox.observeDocumentCollection(scope,5);
+  render()[2]({'doc:1':[{id:'note',content:'peer'}]});
+  assert.equal(render()[0]['doc:1'][0].content,'local');
+  assert.equal(outbox.stageDocumentWrite(scope,[{content:'local continued'}]).expectedRevision,4);
+  h.unmount();
+});
+test('restored text pending markers cannot acquire a baseline from rejected hydration', () => {
+  const {createHookHarness}=require('./hook-harness.cjs'); const h=createHookHarness();
+  const f=fixture(); const cache=new Map();
+  const notes={'doc:1':[{id:'note',content:'offline'}]};
+  f.data.set('text',notes); f.data.set('text_pending_A',notes);
+  const mocks={react:h.react,'@/lib/storage':f.storage,'@/lib/supabase/db':{saveTextNotes:async()=>{throw Error('offline');}}};
+  const outbox=loadSource('src/lib/documentOutbox.ts',mocks,cache);
+  const {useTextNotes}=loadSource('src/hooks/useTextNotes.ts',mocks,cache);
+  const render=()=>h.render(()=>useTextNotes('A')); render(); render();
+  const scope={ownerId:'A',documentId:'doc',generation:'gen',collection:'text_notes',pageKey:'1'};
+  outbox.observeDocumentCollection(scope,5);
+  render()[2]({'doc:1':[{id:'note',content:'peer'}]});
+  assert.equal(render()[0]['doc:1'][0].content,'offline');
+  assert.equal(outbox.stageDocumentWrite(scope,[{content:'offline continued'}]).expectedRevision,null);
+  h.unmount();
+});
