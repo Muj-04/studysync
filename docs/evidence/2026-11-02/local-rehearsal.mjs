@@ -1,8 +1,11 @@
 // Local-only rehearsal against the candidate checkout passed as argv[2].
 // Uses synthetic fixtures, real PostgreSQL tools, and no network/provider APIs.
-const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
-const {execFileSync}=require('node:child_process');
-const assert=require('node:assert/strict'),{createHash}=require('node:crypto');
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 const root=path.resolve(process.argv[2]||'.'),bin=process.env.REHEARSAL_PG_BIN;
 assert.ok(bin&&process.env.PGHOST?.startsWith('/tmp/'),'Explicit local PG binaries and /tmp Unix socket required');
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'studysync-restore-evidence-'));

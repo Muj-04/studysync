@@ -38,7 +38,7 @@ PASS post-cutover logical restore preserves exact content, tombstones, write rec
 PASS restored authorization/CAS/tombstones deny stale writes; expired crash lease recovers publication without duplicate or old-lease acceptance
 PASS published/legacy Storage re-upload is rejected after restore: provider object restore needs a separate compatible procedure
 PASS separate local dummy-object backup checksum; NOT a Supabase Storage API/provider restore
-Evidence directory: /tmp/studysync-restore-evidence-pYydQZ
+Evidence directory: /tmp/studysync-restore-evidence-KfUlmW
 CLEANUP all rehearsal databases dropped
 
 mocked-provider Chromium

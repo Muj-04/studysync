@@ -53,7 +53,7 @@ logs were saved locally; final combined results are recorded below.
 
 ## Reproducible database rehearsal
 
-Run the checked-in [local rehearsal](local-rehearsal.cjs) against the final combined
+Run the checked-in [local rehearsal](local-rehearsal.mjs) against the final combined
 candidate checkout. Use PostgreSQL 16 tools, an explicitly created local Unix
 socket cluster and a task-owned port/user. Example environment, with paths replaced
 by the operator's local paths:
@@ -61,7 +61,7 @@ by the operator's local paths:
 ```sh
 REHEARSAL_PG_BIN=/path/to/postgresql/bin \
 PGHOST=/tmp/studysync-local/socket PGPORT=55440 PGUSER=local_user \
-node docs/evidence/2026-11-02/local-rehearsal.cjs /path/to/combined-candidate
+node docs/evidence/2026-11-02/local-rehearsal.mjs /path/to/combined-candidate
 ```
 
 The script creates and drops its own `integrity_rehearsal_<pid>*` databases and
@@ -160,6 +160,10 @@ local Anthropic/Stripe/service-role configuration do not imply provider tests ra
 Plain-text [validation output](validation-output.txt) records the completed local
 commands. Full local logs are under `/tmp/studysync-rehearsal-nov2/`; the rehearsal
 output names its synthetic dump directory.
+
+The initial documentation PR lint run rejected CommonJS imports in the rehearsal
+artifact. It was converted to ES modules, passed targeted lint, and reran all seven
+PostgreSQL rehearsal checkpoints successfully before the corrected revision.
 
 ## Cleanup and recommendation
 
