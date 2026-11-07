@@ -346,6 +346,45 @@ CREATE FUNCTION public.recording_room_member(p_room uuid) RETURNS boolean LANGUA
 $$;
 REVOKE ALL ON FUNCTION public.recording_room_member(uuid) FROM PUBLIC,anon;
 GRANT EXECUTE ON FUNCTION public.recording_room_member(uuid) TO authenticated;
+-- Legacy room grants authorize every authenticated caller by the "rooms" prefix.
+-- Restrict ALL inherited reads to an adopted, still-published exact metadata path.
+-- Personal playback stays owner-only; room playback belongs to current members,
+-- including members other than the uploader. Never guess ownership of orphans.
+CREATE FUNCTION public.recording_legacy_playback_allowed(p_path text) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
+ SELECT auth.uid() IS NOT NULL AND EXISTS(
+  SELECT 1 FROM recording_private.operations o
+  WHERE o.object_path=p_path AND o.legacy AND o.state='published'
+  AND EXISTS(SELECT 1 FROM auth.users WHERE id=auth.uid())
+  AND (
+   (o.scope='document' AND o.owner_id=auth.uid() AND EXISTS(
+    SELECT 1 FROM public.voice_notes v JOIN public.documents d ON d.id=v.document_id
+    WHERE v.recording_operation_id=o.id AND v.id=o.note_id AND v.user_id=o.owner_id
+    AND v.document_id=o.scope_id AND d.user_id=o.owner_id AND d.generation=o.document_generation
+   )) OR
+   (o.scope='room' AND EXISTS(
+    SELECT 1 FROM public.room_voice_notes v
+    WHERE v.recording_operation_id=o.id AND v.id=o.note_id AND v.user_id=o.owner_id
+    AND v.room_id::text=o.scope_id AND public.recording_room_member(v.room_id)
+   ))
+  )
+ )
+$$;
+REVOKE ALL ON FUNCTION public.recording_legacy_playback_allowed(text) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.recording_legacy_playback_allowed(text) TO authenticated;
+ALTER POLICY recording_playback_server_only ON storage.objects
+ USING(bucket_id<>'voice-notes' OR public.recording_legacy_playback_allowed(name));
+
+-- The obsolete SECURITY DEFINER clear RPC deletes only published metadata and
+-- acknowledges success while pending operations can later publish. No current
+-- client uses it. Fail closed for old clients instead of bypassing durable,
+-- authorized deletion/cancellation RPCs. Preserve the function for DB operators.
+DO $$BEGIN
+ IF to_regprocedure('public.clear_own_recording_metadata()') IS NOT NULL THEN
+  REVOKE ALL ON FUNCTION public.clear_own_recording_metadata() FROM PUBLIC,anon,authenticated,service_role;
+ END IF;
+END$$;
+
 CREATE POLICY recording_room_read ON public.room_voice_notes FOR SELECT TO authenticated USING(public.recording_room_member(room_id));
 CREATE POLICY recording_room_read_bound ON public.room_voice_notes AS RESTRICTIVE FOR SELECT TO authenticated USING(public.recording_room_member(room_id));
 CREATE POLICY recording_room_update ON public.room_voice_notes FOR UPDATE TO authenticated USING(user_id=auth.uid() AND public.recording_room_member(room_id)) WITH CHECK(user_id=auth.uid() AND public.recording_room_member(room_id));
@@ -384,7 +423,7 @@ GRANT SELECT ON recording_private.untracked_audio_inventory TO service_role;
 CREATE POLICY recording_anon_storage_insert_bound ON storage.objects AS RESTRICTIVE FOR INSERT TO anon WITH CHECK(bucket_id<>'voice-notes');
 CREATE POLICY recording_anon_storage_update_bound ON storage.objects AS RESTRICTIVE FOR UPDATE TO anon USING(bucket_id<>'voice-notes') WITH CHECK(bucket_id<>'voice-notes');
 CREATE POLICY recording_anon_storage_delete_bound ON storage.objects AS RESTRICTIVE FOR DELETE TO anon USING(bucket_id<>'voice-notes');
-CREATE POLICY recording_anon_storage_read_bound ON storage.objects AS RESTRICTIVE FOR SELECT TO anon USING(bucket_id<>'voice-notes' OR name NOT LIKE 'operations/%');
+CREATE POLICY recording_anon_storage_read_bound ON storage.objects AS RESTRICTIVE FOR SELECT TO anon USING(bucket_id<>'voice-notes');
 CREATE POLICY recording_anon_document_bound ON public.voice_notes AS RESTRICTIVE FOR ALL TO anon USING(false) WITH CHECK(false);
 CREATE POLICY recording_anon_room_bound ON public.room_voice_notes AS RESTRICTIVE FOR ALL TO anon USING(false) WITH CHECK(false);
 
