@@ -1,3 +1,5 @@
+import { preserveDocumentBeforeRemoval } from '@/lib/documentRecovery';
+import { registerDocument, assertDocumentOwner } from './documentProtocol';
 import { sb, userId, markDocumentRegistered, forgetDocumentRegistration } from './dbShared';
 import { deleteLocalDocument } from '@/lib/documentLocalData';
 import { enqueueDocumentDeletion, enqueueDocumentRegistration } from '@/lib/persistence/documentQueue';
@@ -7,26 +9,11 @@ import { deleteRecording, pendingRecordingIds } from './recordingRecovery';
 
 // Persist metadata by stable document ID, never by a potentially duplicated filename.
 export async function upsertDocument(doc: { id: string; name: string; type: string; pageCount?: number }): Promise<string> {
+  const owner = userId();
   return enqueueDocumentRegistration(doc.id, async () => {
-    const uid = await userId(); if (!uid) throw new Error('Sign in to open a document');
-
-    const canonicalId = doc.id;
-
-    const { error } = await sb().from('documents').upsert({
-      id: canonicalId, user_id: uid, name: doc.name, type: doc.type,
-      page_count: doc.pageCount ?? null, updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
-
-    if (error) throw new Error(`Could not register document: ${error.message}`);
-    else {
-      console.log('[DB] upsertDocument OK — canonicalId:', canonicalId, 'localId:', doc.id, 'name:', doc.name);
-      markDocumentRegistered(uid, canonicalId);
-    }
-    return canonicalId;
-  }).catch((error: unknown) => {
-    // Preserve the metadata API's best-effort contract; failed registration
-    // must leave the deletion barrier in place.
-    console.error('[DB] upsertDocument error:', error);
+    const uid = await owner; if (!uid) throw new Error('Sign in to open a document');
+    await registerDocument(uid, doc);
+    markDocumentRegistered(uid, doc.id);
     return doc.id;
   });
 }
@@ -38,8 +25,11 @@ export async function fetchDocuments(): Promise<Array<{ id: string; name: string
 }
 
 export async function deleteDocument(docId: string) {
+  const owner = userId();
   return enqueueDocumentDeletion(docId, async () => {
-    const { error } = await sb().from('documents').delete().eq('id', docId);
+    const uid = await owner; if (!uid) throw new Error('Sign in to delete a document');
+    await assertDocumentOwner(uid);
+    const { error } = await sb().from('documents').delete().match({ id: docId, user_id: uid });
     if (error) throw error;
     forgetDocumentRegistration(docId);
   });
@@ -58,25 +48,17 @@ export async function deleteAllVoiceNotesForDocument(docId: string, expectedOwne
 }
 
 export async function deleteAllDataForDocument(docId: string): Promise<void> {
+  const requestedOwner = userId();
   return enqueueDocumentDeletion(docId, async () => {
-    const uid = await userId(); if (!uid) throw new Error('Sign in to delete a document');
-    await deleteAllVoiceNotesForDocument(docId);
-    const results = await Promise.all([
-      sb().from('drawings').delete().match({ user_id: uid, document_id: docId }),
-      sb().from('text_notes').delete().match({ user_id: uid, document_id: docId }),
-      sb().from('bookmarks').delete().match({ user_id: uid, document_id: docId }),
-      sb().from('key_terms').delete().match({ user_id: uid, document_id: docId }),
-      sb().from('blank_pages').delete().match({ user_id: uid, document_id: docId }),
-      sb().from('page_image_annotations').delete().match({ user_id: uid, document_id: docId }),
-      // flashcards uses doc_id (not document_id)
-      sb().from('flashcards').delete().match({ user_id: uid, doc_id: docId }),
-      // session_state: one row per user keyed on user_id; delete only if it points to this doc
-      sb().from('session_state').delete().match({ user_id: uid, doc_id: docId }),
-    ]);
-    for (const result of results) if (result.error) throw result.error;
+    const uid = await requestedOwner; if (!uid) throw new Error('Sign in to delete a document');
+    await assertDocumentOwner(uid);
+    // Retain legacy audio cleanup until the recording operation migration is
+    // activated. With that protocol this durably requests cleanup; its triggers
+    // also cover recordings racing this final parent transaction.
+    await deleteAllVoiceNotesForDocument(docId, uid);
+    await assertDocumentOwner(uid);
     const { error } = await sb().from('documents').delete().match({ id: docId, user_id: uid });
     if (error) throw error;
-    // Remove from in-process cache so a re-add starts fresh
     forgetDocumentRegistration(docId);
   });
 }
@@ -134,7 +116,11 @@ export async function fetchLibraryDocuments(): Promise<LibraryDocument[]> {
 }
 
 export async function deleteLibraryDocument(docId: string): Promise<void> {
+  const owner = await userId();
+  if (!owner) throw new Error('Sign in to delete this document');
+  preserveDocumentBeforeRemoval(owner, docId, 'Recovered document');
   await deleteAllDataForDocument(docId);
-  await deleteLocalDocument(docId);
+  if (await userId() !== owner) throw new Error('Account changed before local cleanup');
+  await deleteLocalDocument(docId, true);
 }
 

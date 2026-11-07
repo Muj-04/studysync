@@ -19,6 +19,7 @@ function mount(values, save) {
 
 function failingService() {
   return loadSource('src/lib/supabase/documentAnnotations.ts', {
+    './documentCollections': { writeDocumentCollection: async () => { throw Error('offline'); } },
     './dbShared': { userId: async () => 'owner', ensureDoc: async () => {}, sb: () => ({
       from: () => ({ upsert: async () => ({ error: { message: 'offline' } }) }),
     }) },
@@ -45,7 +46,9 @@ test('failed image edits survive stale remote hydration and remount', async t =>
 });
 
 test('image save service rejects returned database errors', async () => {
-  await assert.rejects(failingService().savePageImages('doc', 1, []), /offline/);
+  const {documentDomainFixture}=require('./document-domain-fixture.cjs');
+  const h=documentDomainFixture();await h.prepare('doc','page_image_annotations');h.setFailure('offline');
+  await assert.rejects(h.api.savePageImages('doc', 1, []), /offline/);
 });
 
 test('failed image removal stays removed after stale hydration', async t => {
