@@ -60,7 +60,9 @@ The release operator must reconcile and record:
 - Actual document entitlement rules agree with the new quota guard (free: three;
   `pro`/`premium`/VIP: exempt). Entitlement alignment remains a separate gate.
 
-Use the checked-in [catalog export pack](staging-export/README.md), starting with
+Use the [compact reconciliation status and export pack](staging-export/README.md).
+The large export is optional; targeted queries are now being supplied one at a time.
+The full export alternative starts with
 [01-catalog.sql](staging-export/01-catalog.sql). It includes migration history,
 columns/constraints/indexes, direct and column grants, default privileges, complete
 role membership edges, RLS, function/view hashes, private definitions and aggregate
@@ -71,13 +73,14 @@ The pack documents which optional blocks to skip when a relation is missing.
 
 | Evidence | Status and required correction |
 | --- | --- |
-| Supabase discovery and SQL probes | Both return `Unknown tool`; no live catalog inspected. Supply the authorized read-only export before claiming schema/grant/RLS parity. |
-| Historic billing migration identity | Repository documents hosted `20261027141735` versus local `20261027140326`. Verify current ledger and SQL equivalence; do not replay the local timestamp blindly. |
+| Supabase discovery and SQL probes | Both return `Unknown tool`. Owner-supplied compact results establish limited catalog facts and the ledger; full schema/grant/RLS parity remains unverified. |
+| Historic billing migration identity | Hosted `20261027141735` matches local `20261027140326` by normalized stored-SQL fingerprint. Three other timestamp aliases are verified in the linked status. Do not replay them; current definition drift checks remain outstanding. |
+| Recording schema compatibility | Both recording ID columns are `text`; #41 requires UUID and will abort. A reviewed compatibility correction is required. No visible rows were returned, but full row visibility and dependencies remain to be checked. |
 | Deployment sequencing | Dev has a post-merge Vercel deployment status; CI has no migration gate, and prebuild checks do not establish schema readiness. Confirm Vercel dev settings and approve an explicit staging deployment hold/cutover before merging. |
 | Worker activation | Source exists; there is no installed scheduler or proven hosted execution. Approve an executor and server-only staging credential binding, then activate only after migrations and application checks. |
 | Storage restore | The reviewed guard rejects published/legacy re-upload. Obtain a compatible provider restore procedure; logical local database restore alone cannot close this gate. |
 
-The first, third and fourth rows are confirmed access/configuration-evidence gaps;
+Connector, deployment and worker evidence gaps remain;
 this is **not** a claim that unseen staging tables are incorrect. The historical
 version alias and every conditional schema correction in the export checklist
 still require current evidence. See the pack for the exact deployment evidence and

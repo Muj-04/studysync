@@ -3,7 +3,45 @@
 Target **only** `xokiiepdpjvqnpzwmbtb`. No migration, application deployment, worker
 activation or configuration change is authorized by these instructions.
 
-## What to run
+## Compact reconciliation status — 2026-11-07
+
+Owner-supplied SQL Editor results identify PostgreSQL 17.11, role `postgres`,
+read-only execution, and a complete 17-entry migration ledger. These are supplied
+staging results, not a successful connector inspection. The connector still fails.
+
+Four stored migration fingerprints match the repository files after whitespace
+normalization (MD5 is a comparison fingerprint, not a security attestation):
+
+| Name | Hosted version | Repository version | Normalized SQL MD5 |
+| --- | --- | --- | --- |
+| preserve_referral_billing_entitlements | 20261026214423 | 20261026100000 | 66862bfd7946a2e2476b36f474b35680 |
+| enforce_study_statistics_rls | 20261026214832 | 20261026214817 | 647c40d3bfdd70c923367a0983a92a05 |
+| harden_legacy_public_rpcs | 20261026220906 | 20261026220801 | a87a2b0b18b34efc91b10c1235dd1f5d |
+| serialize_billing_reconciliation | 20261027141735 | 20261027140326 | 1773eb7fdfa94f9df46fda62983bf833 |
+
+Each hosted entry contains one stored statement. These timestamp aliases are
+verified at the normalized stored-SQL level; **do not replay matching files**.
+This does not prove that current functions, grants or policies have not drifted.
+
+Neither new migration appears in the ledger. Document lifetimes, tombstones,
+collection receipts and recording operations are absent. The Storage operation
+helper exists. Both recording IDs are `text`, while #41 requires UUID; both page
+columns are compatible `text`. The recording count query returned no visible
+rows and zero UUID collisions, but full row visibility has not yet been confirmed.
+A reviewed compatibility correction and dependency assessment remain necessary;
+do not apply an ad hoc cast.
+
+The ledger has three `free_launch_*` entries without corresponding reviewed
+repository files, and thirteen earlier repository files have no ledger entries.
+Neither observation establishes missing schema: reconcile their effects before
+any migration-history repair or replay.
+
+The large catalog export is impractical to transfer. Continue one compact
+read-only query at a time: next verify role visibility and the voice-notes bucket
+configuration, then targeted schema/dependency, authorization and Storage checks.
+No raw export has been added to Git. No hosted changes have been performed.
+
+## Full export alternative (optional)
 
 1. Open the [staging SQL Editor](https://supabase.com/dashboard/project/xokiiepdpjvqnpzwmbtb/sql/new).
    Confirm the project reference in the dashboard URL. Use the already-authorized
@@ -55,7 +93,7 @@ list**. Some historical filenames/hosted versions differ. Do not run a blind
 
 | Check | Required evidence / correction before approval |
 | --- | --- |
-| Migration ledger | Match names, versions and SQL semantics to the manifest. Historical billing alias: local `20261027140326` vs documented hosted `20261027141735`, both `serialize_billing_reconciliation`; current status unverified. Confirm equivalence before recording a mapping; do not replay by filename. |
+| Migration ledger | Match names, versions and SQL semantics to the manifest. Historical billing alias: local `20261027140326` vs documented hosted `20261027141735`, both `serialize_billing_reconciliation`; normalized stored-SQL equivalence now verified above; do not replay by filename. Current deployed definitions still need drift checks. |
 | Partial protocol state | If either new migration/version or its objects already exist, reconcile exact definitions and hashes. They are non-idempotent files; do not apply twice or assume a missing history row means missing schema. |
 | Document-linked tables | Every discovered table must be on the reviewed list; orphan/foreign/generation mismatch counts must be zero. Four detachable references (`community_posts`, `study_sessions`, `flashcard_decks`, `session_state`) must permit NULL. Preserve content when correcting inconsistent data. |
 | Recording column contract | Both recording IDs UUID, page keys TEXT/VARCHAR, and all referenced columns present. Text IDs/integer pages need a separate reviewed compatibility correction before these migrations; no automatic destructive cast. |
@@ -109,11 +147,10 @@ Production target. Existing deployment protection remains enabled.
 
 ## Smallest next action
 
-Run **01-catalog.sql in the staging SQL Editor and save the inspected result**.
-Together with the non-secret Vercel settings above, this unlocks a concrete
-schema/deployment discrepancy review. It is not sufficient by itself to approve
-cutover: approval still requires a reconciled catalog, viable restore plan and a
-controlled migration-before-application-before-worker sequence in the runbook.
+Run the next compact read-only check for role visibility and voice-notes bucket
+configuration, and return its single result row. Continue targeted reconciliation
+before approving cutover; the recording ID mismatch, restore procedure and
+controlled migration-before-application-before-worker sequence remain gates.
 
 ## Local validation of this export pack
 
