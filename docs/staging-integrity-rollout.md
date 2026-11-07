@@ -3,7 +3,9 @@
 Status: **preparation only; no hosted changes authorized or performed**. Review date:
 2026-11-02; updated with owner-supplied staging evidence and compatibility fixes on 2026-11-07. Repository `Muj-04/studysync`; destination branch `dev`. The reviewed
 starting dev is `18930427bb9b1098a8076689cbdcb636bbf18b28`. PR [#40](https://github.com/Muj-04/studysync/pull/40)
-is a prerequisite of [#41](https://github.com/Muj-04/studysync/pull/41). Merge and
+is a prerequisite of [#41](https://github.com/Muj-04/studysync/pull/41).
+[#43](https://github.com/Muj-04/studysync/pull/43) independently restricts PDF sharing
+and document TRUNCATE. Merge and
 rollout are separate decisions. This document does not authorize either.
 
 Staging project: `xokiiepdpjvqnpzwmbtb`. Production project
@@ -11,6 +13,13 @@ Staging project: `xokiiepdpjvqnpzwmbtb`. Production project
 remains deferred; do not configure or exercise payment providers.
 
 ## Decision and evidence
+
+The complete owner-supplied policies are now reviewed. See the
+[policy review and fixes](evidence/2026-11-07-storage-policy-review.md). The remaining
+SQL dependencies are the deployed launch-upload helper and PDF bucket/path
+preflight; [one compact script](staging-export/06-upload-helper-and-pdf-preflight.sql)
+collects them. Do not disable quota checks to permit tracked uploads.
+
 
 The latest compatibility corrections are documented in [the November 7 evidence](evidence/2026-11-07-staging-compatibility.md).
 Use [the earlier dated evidence](evidence/2026-11-02/review-and-rehearsal.md) for reviewed
@@ -79,7 +88,7 @@ The pack documents which optional blocks to skip when a relation is missing.
 | --- | --- |
 | Supabase discovery and SQL probes | Both return `Unknown tool`. Owner-supplied compact results establish limited catalog facts and the ledger; full schema/grant/RLS parity remains unverified. |
 | Historic billing migration identity | Hosted `20261027141735` matches local `20261027140326` by normalized stored-SQL fingerprint. Three other timestamp aliases are verified in the linked status. Do not replay them; current definition drift checks remain outstanding. |
-| Recording schema compatibility | Owner evidence confirms empty TEXT-ID recording tables. Revised #41 converts only empty tables under lock and refuses populated TEXT tables. Revised #40 handles the observed nonnullable study-history reference. Fresh preflight and remaining policy/function review are still required. |
+| Recording schema compatibility | Owner evidence confirms empty TEXT-ID recording tables. Revised #41 converts only empty tables under lock and refuses populated TEXT tables. Revised #40 handles the observed nonnullable study-history reference. Fresh preflight and deployed launch-helper compatibility remain required; complete policy/legacy cleanup source review is recorded in the latest evidence. |
 | Deployment sequencing | Dev has a post-merge Vercel deployment status; CI has no migration gate, and prebuild checks do not establish schema readiness. Confirm Vercel dev settings and approve an explicit staging deployment hold/cutover before merging. |
 | Worker activation | Source exists; there is no installed scheduler or proven hosted execution. Approve an executor and server-only staging credential binding, then activate only after migrations and application checks. |
 | Storage restore | The reviewed guard rejects published/legacy re-upload. Obtain a compatible provider restore procedure; logical local database restore alone cannot close this gate. |
@@ -145,17 +154,18 @@ playback, pending publication, cleanup, and denial of stale/deleted writes.
    Do not disable RLS/CAPTCHA/rate limits/protection. If no maintenance mechanism
    exists, implement/approve one separately rather than assuming zero downtime.
 4. Take and verify the checkpoint from section 2. Record the migration ledger and
-   current app revision before changes. Rehearse the same two files first against
+   current app revision before changes. Rehearse the same three files first against
    a sanitized copy of the actual catalog and representative data.
 5. Apply through the authorized migration mechanism, once and in this order:
 
    ```text
    20261028202847_document_generation_guards.sql
    20261028203014_server_recording_operations.sql
+   20261107191733_constrain_pdf_storage_sharing.sql
    ```
 
-   Each file has its own transaction. The second failing does **not** roll back the
-   first. Stop on errors and inspect the actual ledger/schema; never blindly rerun
+   Each file has its own transaction. A later failure does **not** roll back
+   an earlier committed file. Stop on errors and inspect the actual ledger/schema; never blindly rerun
    non-idempotent DDL or mark a failed migration applied. Do not edit hosted tables
    to make preflight pass. Document migration preserves existing content and
    rejects inconsistent rows; recording migration adopts recognized legacy paths
@@ -165,10 +175,10 @@ playback, pending publication, cleanup, and denial of stale/deleted writes.
    keeping the activation hold until the next step. A new client against
    the old schema fails; old collection writers after migration fail closed. The
    recording flag's default false is incompatible after the recording migration.
-7. Merge #40 then #41 only under the approved activation hold, or use the approved
+7. Merge #40 then #41, and include #43, only under the approved activation hold, or use the approved
    exact combined candidate deployment procedure. Never activate the intermediate
    document-only application against the final recording schema. Verify the final
-   staged artifact contains both PRs before moving the staging alias or reopening
+   staged artifact contains all three code PRs before moving the staging alias or reopening
    access. This is not authorization to merge now or promote anything to Production.
 8. After the final app is active in staging and basic authorized access works,
    inspect the eligible queue before invoking a worker. `--limit=1` is a count

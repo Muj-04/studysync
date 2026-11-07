@@ -1,5 +1,10 @@
 # Staging catalog export and readiness decision
 
+Latest: [complete policy review and fixes](../evidence/2026-11-07-storage-policy-review.md).
+The complete 28 policies and legacy cleanup body have now been supplied and
+reviewed. Their former absence is no longer a blocker. The remaining SQL
+dependencies are collected by [06-upload-helper-and-pdf-preflight.sql](06-upload-helper-and-pdf-preflight.sql).
+
 Target **only** `xokiiepdpjvqnpzwmbtb`. No migration, application deployment, worker
 activation or configuration change is authorized by these instructions.
 
@@ -65,8 +70,10 @@ service_role among the three checked API roles; the old billing writer allows
 none. This is a source-body/access comparison, not owner/search_path or full
 role-inheritance certification. The deployed definer function
 `clear_own_recording_metadata()` is absent from the reviewed repository SQL and
-is executable by authenticated/service_role; its body and cutover compatibility
-remain unverified (source MD5 `51033a64e14d568adda722c76722e0dc`).
+was executable by authenticated/service_role. Its subsequently supplied body
+checks auth.uid and deletes owned metadata only, leaving pending operations
+unacknowledged. Revised #41 revokes API access to this obsolete routine; the
+complete review supersedes this former evidence gap.
 
 All three target tables have RLS enabled and effective TRUNCATE for anon,
 authenticated and service_role. #40 explicitly revokes TRUNCATE on documents and
@@ -76,15 +83,16 @@ This closes the demonstrated grant gap in the proposed migration: RLS and row-le
 hosted truncation or API exploit was attempted, and direct SQL privilege is not
 proof of a reachable ordinary PostgREST endpoint.
 
-The policy section is incomplete: 20 of 28 entries returned. Existing restrictive
+The initial policy section returned only 20 of 28 entries; a subsequent complete
+export supplied all 28 policies and all 13 distinct predicates. Existing restrictive
 `launch_upload_limit` / `launch_update_limit` policies must be checked for
 compatibility with tracked operation paths; hashes alone do not reveal their
 predicates. Do not drop these policies merely to make new uploads succeed.
 Script 2 returned all 14 reviewed child columns with zero invalid references.
 Only study_sessions.document_id was nonnullable despite its detach policy.
 Revised #40 makes that reference nullable without changing existing rows and
-retains history on deletion. The eight omitted policy entries and unknown cleanup
-function definition still prevent complete authorization/cutover reconciliation. No hosted changes applied.
+retains history on deletion. Those policy and cleanup-function gaps are now resolved by the complete supplied
+export. See the latest review for fixes and the remaining launch-helper dependency. No hosted changes applied.
 
 ## Full export alternative (optional)
 
@@ -130,7 +138,7 @@ so their authorization cannot be falsely marked reviewed.
 
 ## Compare against the reviewed source
 
-Current source heads: #40 `d101711`, combined #41 `3d30fab`; dev remains `18930427`.
+Current source heads: #40 `d101711`, combined #41 `b586c81`, independent #43 `893ac73`; dev remains `18930427`.
 [reviewed-migrations.tsv](reviewed-migrations.tsv) records repository filenames and
 SHA-256 hashes at the reviewed combined head. It is an inventory, **not an apply
 list**. Some historical filenames/hosted versions differ. Do not run a blind

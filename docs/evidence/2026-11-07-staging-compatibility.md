@@ -1,5 +1,9 @@
 # Staging compatibility corrections — 2026-11-07
 
+This captures the earlier compatibility round. The later
+[Storage policy review](2026-11-07-storage-policy-review.md) supersedes the policy
+gaps and final revisions below.
+
 No hosted migrations, configuration changes, merges or production changes were
 performed. Staging facts below were supplied by the owner from read-only SQL
 Editor results; the connector still returned Unknown tool. Raw catalog exports
@@ -83,8 +87,9 @@ unapplied PR migrations. The migration manifest is updated for their new hashes.
 If an older revision has been applied elsewhere, stop and prepare a forward
 migration rather than editing its ledger or replaying these files.
 
-The eight omitted policies and unknown clear_own_recording_metadata definer RPC
-remain authorization/cutover evidence gaps. Use the single supplemental script
+At this checkpoint the eight omitted policies and clear_own_recording_metadata
+body were missing. The subsequent complete export resolved those evidence gaps;
+confirmed corrections and remaining helper dependencies are in the linked review. Use the single supplemental script
 [05-cutover-policy-gaps.sql](../staging-export/05-cutover-policy-gaps.sql); it groups
 repeated predicates and returns no application rows. Inspect SQL privately before
 sharing. In particular, keep existing launch quota policies; check compatibility
