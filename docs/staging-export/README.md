@@ -1,0 +1,223 @@
+# Staging catalog export and readiness decision
+
+Latest: [complete policy review and fixes](../evidence/2026-11-07-storage-policy-review.md).
+The complete 28 policies and legacy cleanup body have now been supplied and
+reviewed. Their former absence is no longer a blocker. The remaining SQL
+dependencies are collected by [06-upload-helper-and-pdf-preflight.sql](06-upload-helper-and-pdf-preflight.sql).
+
+Target **only** `xokiiepdpjvqnpzwmbtb`. No migration, application deployment, worker
+activation or configuration change is authorized by these instructions.
+
+## Compact reconciliation status — 2026-11-07
+
+Owner-supplied SQL Editor results identify PostgreSQL 17.11, role `postgres`,
+read-only execution, and a complete 17-entry migration ledger. These are supplied
+staging results, not a successful connector inspection. The connector still fails.
+
+Four stored migration fingerprints match the repository files after whitespace
+normalization (MD5 is a comparison fingerprint, not a security attestation):
+
+| Name | Hosted version | Repository version | Normalized SQL MD5 |
+| --- | --- | --- | --- |
+| preserve_referral_billing_entitlements | 20261026214423 | 20261026100000 | 66862bfd7946a2e2476b36f474b35680 |
+| enforce_study_statistics_rls | 20261026214832 | 20261026214817 | 647c40d3bfdd70c923367a0983a92a05 |
+| harden_legacy_public_rpcs | 20261026220906 | 20261026220801 | a87a2b0b18b34efc91b10c1235dd1f5d |
+| serialize_billing_reconciliation | 20261027141735 | 20261027140326 | 1773eb7fdfa94f9df46fda62983bf833 |
+
+Each hosted entry contains one stored statement. These timestamp aliases are
+verified at the normalized stored-SQL level; **do not replay matching files**.
+This does not prove that current functions, grants or policies have not drifted.
+
+Neither new migration appears in the ledger. Document lifetimes, tombstones,
+collection receipts and recording operations are absent. The Storage operation
+helper exists. Both recording IDs are `text`, while the original #41 required UUID; both page
+columns are compatible `text`. The recording count query returned no visible
+rows and zero UUID collisions, with full row visibility confirmed by a subsequent query.
+A reviewed compatibility correction and dependency assessment remain necessary;
+do not apply an ad hoc cast.
+
+The ledger has three `free_launch_*` entries without corresponding reviewed
+repository files, and thirteen earlier repository files have no ledger entries.
+Neither observation establishes missing schema: reconcile their effects before
+any migration-history repair or replay.
+
+The large catalog export is impractical to transfer. Continue one compact
+read-only query at a time: next verify role visibility and the voice-notes bucket
+configuration, then targeted schema/dependency, authorization and Storage checks.
+No raw export has been added to Git. No hosted changes have been performed.
+
+## Subsequent compact catalog evidence
+
+Owner-supplied follow-up results establish full row visibility for `postgres`.
+The voice-notes bucket is private, versioning DISABLED, and limited to 10 MiB;
+allowed types include webm, ogg and mp4 (also mpeg/wav). In one later snapshot,
+both recording tables and Storage object/version/delete-marker/archive counts
+were zero. This establishes emptiness at capture, not at eventual cutover.
+The original operation API permitted up to 100 MiB without the bucket ceiling.
+The revised #41 checks bucket size and MIME restrictions before new admission;
+it does not change hosted settings or strand retries of existing operations.
+
+The dependency query returned all 14 constraints, including recording primary
+keys and outgoing owner/document/room foreign keys, with no incoming recording
+foreign keys. No dependent-view section was returned. This does not rule out
+untracked dynamic SQL dependencies. Recording IDs have no default and are text.
+
+Five deployed function source hashes match the repository definitions exactly:
+`apply_billing_event`, `claim_billing_reconciliation`,
+`release_billing_reconciliation`, `commit_billing_reconciliation`, and
+`delete_user_account`. The three lease functions and account deletion allow only
+service_role among the three checked API roles; the old billing writer allows
+none. This is a source-body/access comparison, not owner/search_path or full
+role-inheritance certification. The deployed definer function
+`clear_own_recording_metadata()` is absent from the reviewed repository SQL and
+was executable by authenticated/service_role. Its subsequently supplied body
+checks auth.uid and deletes owned metadata only, leaving pending operations
+unacknowledged. Revised #41 revokes API access to this obsolete routine; the
+complete review supersedes this former evidence gap.
+
+All three target tables have RLS enabled and effective TRUNCATE for anon,
+authenticated and service_role. #40 explicitly revokes TRUNCATE on documents and
+its discovered personal child tables (including voice_notes); the original #41 did not
+revoke it on room_voice_notes. Revised #41 revokes it on both recording tables.
+This closes the demonstrated grant gap in the proposed migration: RLS and row-level deletion triggers do not govern TRUNCATE. No
+hosted truncation or API exploit was attempted, and direct SQL privilege is not
+proof of a reachable ordinary PostgREST endpoint.
+
+The initial policy section returned only 20 of 28 entries; a subsequent complete
+export supplied all 28 policies and all 13 distinct predicates. Existing restrictive
+`launch_upload_limit` / `launch_update_limit` policies must be checked for
+compatibility with tracked operation paths; hashes alone do not reveal their
+predicates. Do not drop these policies merely to make new uploads succeed.
+Script 2 returned all 14 reviewed child columns with zero invalid references.
+Only study_sessions.document_id was nonnullable despite its detach policy.
+Revised #40 makes that reference nullable without changing existing rows and
+retains history on deletion. Those policy and cleanup-function gaps are now resolved by the complete supplied
+export. See the latest review for fixes and the remaining launch-helper dependency. No hosted changes applied.
+
+## Full export alternative (optional)
+
+1. Open the [staging SQL Editor](https://supabase.com/dashboard/project/xokiiepdpjvqnpzwmbtb/sql/new).
+   Confirm the project reference in the dashboard URL. Use the already-authorized
+   SQL Editor role; no passwords, connection strings or tokens need to be sent.
+2. Paste and run [01-catalog.sql](01-catalog.sql). Save its single 17-row result
+   grid as a private CSV/JSON export, with capture time and project reference.
+   This reads catalog metadata even if either reviewed migration is absent.
+3. Inspect `identity`, `roles` and `relations`. For data-count queries, the
+   execution role must have `superuser` or `bypass_rls` true, and SELECT permission
+   on the required tables. Otherwise **stop** and obtain an authorized full-visibility
+   export. Do not change roles, grant permissions or disable RLS to run this pack.
+   Filtered counts under another role cannot establish the absence of bad rows.
+4. Run each applicable transaction in [02-history.sql](02-history.sql) separately;
+   save each result. Skip a block if its relation is missing in step 2 and report
+   that absence. Storage schema migration IDs do not identify its deployed service
+   version. A null checksum is unknown, not a match.
+5. If the catalog contains the required tables/columns listed at the top of
+   [03-preflight-counts.sql](03-preflight-counts.sql), run it and save its single
+   six-row result grid. Its `capture.full_row_visibility` must be true. It returns
+   bucket settings and aggregate counts, not document text or object names/URLs.
+   Missing prerequisite tables/columns are discrepancies; do not improvise DDL.
+6. [04-private-definitions.sql](04-private-definitions.sql) supplies function/view
+   definitions for authorization review and an optional separate migration-SQL
+   block. Run only the applicable blocks. Inspect these locally before any handoff.
+   Compare the historical billing migration by stored SQL/content, not timestamp.
+
+Every block explicitly starts a read-only transaction and uses a 30-second
+statement timeout. These are session-local guards, not persistent configuration
+changes. After any error, execute `ROLLBACK;`, retain the error, and stop that
+block. Do not raise limits or retry expensive counts in a loop. Separate blocks
+have separate snapshots: this is a reconciliation pack, **not a consistent backup**.
+Repeat affected metadata capture if the schema changes before cutover approval.
+
+Keep **all** exports private. Even catalog defaults, policy expressions, index or
+trigger definitions can contain hardcoded literals. No query reads role passwords,
+Auth tokens, Vault contents or environment values, but that cannot guarantee that
+legacy schema code contains no embedded secrets. Never paste secrets in chat or
+commit raw exports to #42. Provide only inspected/sanitized metadata through the
+approved private workspace; report omitted secret-bearing definitions separately
+so their authorization cannot be falsely marked reviewed.
+
+## Compare against the reviewed source
+
+Current source heads: #40 `d101711`, combined #41 `b586c81`, independent #43 `893ac73`; dev remains `18930427`.
+[reviewed-migrations.tsv](reviewed-migrations.tsv) records repository filenames and
+SHA-256 hashes at the reviewed combined head. It is an inventory, **not an apply
+list**. Some historical filenames/hosted versions differ. Do not run a blind
+`db push`, repair history, or replay all unmatching timestamps.
+
+| Check | Required evidence / correction before approval |
+| --- | --- |
+| Migration ledger | Match names, versions and SQL semantics to the manifest. Historical billing alias: local `20261027140326` vs documented hosted `20261027141735`, both `serialize_billing_reconciliation`; normalized stored-SQL equivalence now verified above; do not replay by filename. Current deployed definitions still need drift checks. |
+| Partial protocol state | If either new migration/version or its objects already exist, reconcile exact definitions and hashes. They are non-idempotent files; do not apply twice or assume a missing history row means missing schema. |
+| Document-linked tables | Every discovered table must be on the reviewed list; orphan/foreign/generation mismatch counts must be zero. Four detachable references (`community_posts`, `study_sessions`, `flashcard_decks`, `session_state`) must permit NULL. Preserve content when correcting inconsistent data. |
+| Recording column contract | Both recording IDs UUID, page keys TEXT/VARCHAR, and all referenced columns present. Revised #41 converts empty text-ID tables under ACCESS EXCLUSIVE locks in the same transaction. Nonempty text tables or incompatible pages abort. No existing IDs are rewritten. |
+| Cross-table note IDs | Collision count zero; otherwise resolve identity mapping explicitly before adoption. |
+| Bucket / object metadata | Existing private `voice-notes` bucket; nonversioned; no archived versions/delete markers. A public bucket needs an approved privacy/playback transition, not a direct SQL edit. Missing metadata does not prove missing physical bytes. |
+| Legacy audio | Classify public/signed URLs, ambiguous paths and conventional paths lacking Storage metadata. Reconcile playback and object references; unknown paths must remain quarantined, never automatically deleted. |
+| Storage helper/version | `allow_only_operation(text)` and actual helper definition compatible; obtain deployed **service version/commit** separately. Check provider probe/final-admin-insert and rejected-upload cleanup behavior in hosted acceptance. |
+| Grants/RLS | Inspect direct and column grants, PUBLIC defaults, all custom-role flags and transitive memberships (including PG16 inherit/set options). New lifetime/receipt/private tables must not expose mutation paths; public exposed tables require appropriate RLS. An owner policy name alone is not proof of authorization. |
+| RPCs/views | Review security-definer ownership, search paths, executable roles and actual authorization bodies. Tombstone view must be security-invoker; views/definer functions can bypass underlying RLS. Compare definitions, not just existence. |
+| Transaction isolation | Bulk recording cancellation requires READ COMMITTED. Other isolation modes fail closed; verify API role/function defaults and provider configuration, not merely the export session's isolation. |
+| Provider and operations | Compatible database+object restore procedure, approved executor/worker identity, monitoring and bounded two-account acceptance remain separate gates. No local SQL export closes them. |
+
+The pack excludes application content and avoids exposing object paths by default.
+Aggregate counts can identify a problem but cannot resolve individual records:
+record-level remediation must be separately scoped with authorized access.
+
+## Deployment evidence and remaining access
+
+The connector was rediscovered and retried during this continuation: both
+`supabase.list_projects` and read-only `supabase.execute_sql` returned MCP `-32001
+Unknown tool`. No hosted query ran. This is a tool/connection failure, not evidence
+that a particular password or permission is wrong. There is no connected Vercel
+management tool or saved Vercel CLI authentication in the checked standard paths.
+
+Observed GitHub evidence:
+
+- Dev merge `18930427` occurred at `2026-10-28T18:44:25Z` and received a successful
+  [Vercel status](https://vercel.com/muj-04s-projects/pdf-study-workspace/FU7s4j7FPMCLyQGDR8XvCVYYhQ8h)
+  at `18:45:44Z`. Current PR pushes also generate Vercel Preview deployments.
+- `.github/workflows/validate.yml` runs installation, lint, tests and TypeScript;
+  it has **no migration or schema-readiness step**. The repository has no checked-in
+  Vercel branch deployment hold/ignore rule.
+- `scripts/check-preview-environment.cjs` checks staging URL and some key ownership/
+  test-mode constraints when `VERCEL_ENV=preview`. It does **not** check migration
+  readiness or require the recording protocol flag. Thus a green build can ship an
+  incompatible client against the old schema.
+
+**Operational conclusion:** treat merging to dev as immediately deployable through
+Vercel's Git integration. Automatic deployment is strongly supported by observed
+behavior and [Vercel's Git deployment model](https://vercel.com/docs/git), but current
+branch filters, production-branch setting, aliases and branch-specific environment
+values cannot be certified without management access. A GitHub CI success does not
+serialize Vercel deployment after migrations.
+
+In the Vercel dashboard, inspect (do not change) project `pdf-study-workspace`:
+production branch, Git deployment/ignore rules for dev, environment target and
+aliases for dev, build command, whether the recording flag is true in the **build**
+environment, and whether required staging server credentials are present. Record
+non-secret settings only; do not export credential values. Ensure dev is not the
+Production target. Existing deployment protection remains enabled.
+
+## Smallest next action
+
+Run the next compact read-only check for role visibility and voice-notes bucket
+configuration, and return its single result row. Continue targeted reconciliation
+before approving cutover; the recording ID mismatch, restore procedure and
+controlled migration-before-application-before-worker sequence remain gates.
+
+## Local validation of this export pack
+
+All four final SQL files executed successfully on the task-owned PostgreSQL 16.15
+fixture, with explicit read-only transactions. The catalog query also executed on
+a database without application tables. A synthetic unreviewed linked table with
+one orphan was correctly reported as `reviewed_table=false` and orphan count one;
+`capture.read_only=on` and full row visibility were confirmed. The optional history
+blocks were exercised against synthetic ledger rows, not hosted history.
+
+Independent review checked read-only safety, confidentiality, inherited-role
+coverage, result-set completeness and worker activation order. Findings were
+corrected before publication. The task database was dropped and the local server
+stopped; no hosted fixture, schema, grant, bucket or setting was modified. Local
+logs remain under `/tmp/studysync-rehearsal-nov2/` (`01-catalog.sql.log` through
+`04-private-definitions.sql.log`, `catalog-empty-local.log`,
+`catalog-detection-local.tsv`). This validation does not reconcile unseen staging.
