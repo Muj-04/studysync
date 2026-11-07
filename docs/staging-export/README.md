@@ -25,9 +25,9 @@ This does not prove that current functions, grants or policies have not drifted.
 
 Neither new migration appears in the ledger. Document lifetimes, tombstones,
 collection receipts and recording operations are absent. The Storage operation
-helper exists. Both recording IDs are `text`, while #41 requires UUID; both page
+helper exists. Both recording IDs are `text`, while the original #41 required UUID; both page
 columns are compatible `text`. The recording count query returned no visible
-rows and zero UUID collisions, but full row visibility has not yet been confirmed.
+rows and zero UUID collisions, with full row visibility confirmed by a subsequent query.
 A reviewed compatibility correction and dependency assessment remain necessary;
 do not apply an ad hoc cast.
 
@@ -48,8 +48,9 @@ The voice-notes bucket is private, versioning DISABLED, and limited to 10 MiB;
 allowed types include webm, ogg and mp4 (also mpeg/wav). In one later snapshot,
 both recording tables and Storage object/version/delete-marker/archive counts
 were zero. This establishes emptiness at capture, not at eventual cutover.
-The reviewed operation API permits up to 100 MiB: admission must respect the
-actual bucket ceiling rather than accepting work Storage cannot upload.
+The original operation API permitted up to 100 MiB without the bucket ceiling.
+The revised #41 checks bucket size and MIME restrictions before new admission;
+it does not change hosted settings or strand retries of existing operations.
 
 The dependency query returned all 14 constraints, including recording primary
 keys and outgoing owner/document/room foreign keys, with no incoming recording
@@ -69,9 +70,9 @@ remain unverified (source MD5 `51033a64e14d568adda722c76722e0dc`).
 
 All three target tables have RLS enabled and effective TRUNCATE for anon,
 authenticated and service_role. #40 explicitly revokes TRUNCATE on documents and
-its discovered personal child tables (including voice_notes); #41 does not
-currently revoke it on room_voice_notes. That is a confirmed remaining grant
-hardening gap: RLS and row-level deletion triggers do not govern TRUNCATE. No
+its discovered personal child tables (including voice_notes); the original #41 did not
+revoke it on room_voice_notes. Revised #41 revokes it on both recording tables.
+This closes the demonstrated grant gap in the proposed migration: RLS and row-level deletion triggers do not govern TRUNCATE. No
 hosted truncation or API exploit was attempted, and direct SQL privilege is not
 proof of a reachable ordinary PostgREST endpoint.
 
@@ -79,9 +80,11 @@ The policy section is incomplete: 20 of 28 entries returned. Existing restrictiv
 `launch_upload_limit` / `launch_update_limit` policies must be checked for
 compatibility with tracked operation paths; hashes alone do not reveal their
 predicates. Do not drop these policies merely to make new uploads succeed.
-Script 2 document-reference results remain outstanding, as do the eight omitted
-policy entries and the unknown cleanup function definition. These are required
-before declaring migration compatibility reconciled. No hosted changes applied.
+Script 2 returned all 14 reviewed child columns with zero invalid references.
+Only study_sessions.document_id was nonnullable despite its detach policy.
+Revised #40 makes that reference nullable without changing existing rows and
+retains history on deletion. The eight omitted policy entries and unknown cleanup
+function definition still prevent complete authorization/cutover reconciliation. No hosted changes applied.
 
 ## Full export alternative (optional)
 
@@ -127,7 +130,7 @@ so their authorization cannot be falsely marked reviewed.
 
 ## Compare against the reviewed source
 
-Source heads: #40 `30946ec`, combined #41 `4303b7e`; dev remains `18930427`.
+Current source heads: #40 `d101711`, combined #41 `3d30fab`; dev remains `18930427`.
 [reviewed-migrations.tsv](reviewed-migrations.tsv) records repository filenames and
 SHA-256 hashes at the reviewed combined head. It is an inventory, **not an apply
 list**. Some historical filenames/hosted versions differ. Do not run a blind
@@ -138,7 +141,7 @@ list**. Some historical filenames/hosted versions differ. Do not run a blind
 | Migration ledger | Match names, versions and SQL semantics to the manifest. Historical billing alias: local `20261027140326` vs documented hosted `20261027141735`, both `serialize_billing_reconciliation`; normalized stored-SQL equivalence now verified above; do not replay by filename. Current deployed definitions still need drift checks. |
 | Partial protocol state | If either new migration/version or its objects already exist, reconcile exact definitions and hashes. They are non-idempotent files; do not apply twice or assume a missing history row means missing schema. |
 | Document-linked tables | Every discovered table must be on the reviewed list; orphan/foreign/generation mismatch counts must be zero. Four detachable references (`community_posts`, `study_sessions`, `flashcard_decks`, `session_state`) must permit NULL. Preserve content when correcting inconsistent data. |
-| Recording column contract | Both recording IDs UUID, page keys TEXT/VARCHAR, and all referenced columns present. Text IDs/integer pages need a separate reviewed compatibility correction before these migrations; no automatic destructive cast. |
+| Recording column contract | Both recording IDs UUID, page keys TEXT/VARCHAR, and all referenced columns present. Revised #41 converts empty text-ID tables under ACCESS EXCLUSIVE locks in the same transaction. Nonempty text tables or incompatible pages abort. No existing IDs are rewritten. |
 | Cross-table note IDs | Collision count zero; otherwise resolve identity mapping explicitly before adoption. |
 | Bucket / object metadata | Existing private `voice-notes` bucket; nonversioned; no archived versions/delete markers. A public bucket needs an approved privacy/playback transition, not a direct SQL edit. Missing metadata does not prove missing physical bytes. |
 | Legacy audio | Classify public/signed URLs, ambiguous paths and conventional paths lacking Storage metadata. Reconcile playback and object references; unknown paths must remain quarantined, never automatically deleted. |

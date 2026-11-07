@@ -1,7 +1,7 @@
 # Staging rollout: document deletion, durable replay and recording recovery
 
 Status: **preparation only; no hosted changes authorized or performed**. Review date:
-2026-11-02; resumed final validation on 2026-11-04. Repository `Muj-04/studysync`; destination branch `dev`. The reviewed
+2026-11-02; updated with owner-supplied staging evidence and compatibility fixes on 2026-11-07. Repository `Muj-04/studysync`; destination branch `dev`. The reviewed
 starting dev is `18930427bb9b1098a8076689cbdcb636bbf18b28`. PR [#40](https://github.com/Muj-04/studysync/pull/40)
 is a prerequisite of [#41](https://github.com/Muj-04/studysync/pull/41). Merge and
 rollout are separate decisions. This document does not authorize either.
@@ -12,7 +12,8 @@ remains deferred; do not configure or exercise payment providers.
 
 ## Decision and evidence
 
-Use [the dated evidence](evidence/2026-11-02/review-and-rehearsal.md) for reviewed
+The latest compatibility corrections are documented in [the November 7 evidence](evidence/2026-11-07-staging-compatibility.md).
+Use [the earlier dated evidence](evidence/2026-11-02/review-and-rehearsal.md) for reviewed
 heads, corrections and final check results. Local SQL fixtures prove specific
 transaction, authorization and recovery behavior. They do not establish deployed
 schema equivalence, Storage physical-object behavior, restore capability, or
@@ -40,8 +41,11 @@ The release operator must reconcile and record:
 - `documents` identity/owner fields and every referencing table, orphan or foreign
   child reference, standalone decks, and columns that must detach on deletion.
   Unknown linked tables, orphan/foreign rows and incompatible nonnullable columns
-  intentionally stop the document migration. Reconcile without deleting content.
-- Both `voice_notes.id` and `room_voice_notes.id` are UUID; both `page_number`
+  intentionally stop the document migration, except the approved study-history
+  reference, which revised #40 explicitly makes nullable. Reconcile without deleting content.
+- Both recording IDs must end as UUID. Revised #41 converts TEXT IDs only in
+  tables still empty under transaction-held ACCESS EXCLUSIVE locks; a populated
+  TEXT table aborts without rewriting IDs or paths. Both `page_number`
   columns are TEXT/VARCHAR. Verify the other columns against the actual migration.
   Check note UUID collisions across both tables and legacy object path ambiguity.
 - `voice-notes` exists, is private and nonversioned (`DISABLED`, or a supported
@@ -75,7 +79,7 @@ The pack documents which optional blocks to skip when a relation is missing.
 | --- | --- |
 | Supabase discovery and SQL probes | Both return `Unknown tool`. Owner-supplied compact results establish limited catalog facts and the ledger; full schema/grant/RLS parity remains unverified. |
 | Historic billing migration identity | Hosted `20261027141735` matches local `20261027140326` by normalized stored-SQL fingerprint. Three other timestamp aliases are verified in the linked status. Do not replay them; current definition drift checks remain outstanding. |
-| Recording schema compatibility | Both recording ID columns are `text`; #41 requires UUID and will abort. A reviewed compatibility correction is required. No visible rows were returned, but full row visibility and dependencies remain to be checked. |
+| Recording schema compatibility | Owner evidence confirms empty TEXT-ID recording tables. Revised #41 converts only empty tables under lock and refuses populated TEXT tables. Revised #40 handles the observed nonnullable study-history reference. Fresh preflight and remaining policy/function review are still required. |
 | Deployment sequencing | Dev has a post-merge Vercel deployment status; CI has no migration gate, and prebuild checks do not establish schema readiness. Confirm Vercel dev settings and approve an explicit staging deployment hold/cutover before merging. |
 | Worker activation | Source exists; there is no installed scheduler or proven hosted execution. Approve an executor and server-only staging credential binding, then activate only after migrations and application checks. |
 | Storage restore | The reviewed guard rejects published/legacy re-upload. Obtain a compatible provider restore procedure; logical local database restore alone cannot close this gate. |
