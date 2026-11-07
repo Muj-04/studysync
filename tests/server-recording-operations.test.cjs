@@ -76,3 +76,59 @@ for (const isolation of ['REPEATABLE READ','SERIALIZABLE']) test(`bulk deletion 
  assert.equal((await db.query('SELECT delete_document_recordings($1,$2,$3) n',['doc',generation,owner])).rows[0].n,1);
  assert.equal((await confirm(db,op)).state,'deleting');
 });
+
+test('empty legacy text recording IDs migrate atomically and support publication', async t => {
+  const db = await fixture(t, 'ALTER TABLE voice_notes ALTER COLUMN id TYPE text USING id::text; ALTER TABLE room_voice_notes ALTER COLUMN id TYPE text USING id::text');
+  await as(db);
+  for (const scope of ['document','room']) {
+    const id = scope === 'document' ? note : '88888888-8888-4888-8888-888888888888';
+    const op = await begin(db,scope,id); await upload(db,op);
+    assert.equal((await confirm(db,op)).state,'published');
+  }
+});
+
+test('recording truncation cannot bypass publication and deletion guards', async t => {
+  const db = await fixture(t, 'GRANT TRUNCATE ON voice_notes,room_voice_notes TO PUBLIC,anon,authenticated,service_role');
+  await as(db); const op=await begin(db,'room'); await upload(db,op); await confirm(db,op);
+  for (const role of ['anon','authenticated','service_role']) {
+    await as(db,owner,role);
+    for (const table of ['voice_notes','room_voice_notes']) {
+      await assert.rejects(db.exec(`TRUNCATE ${table}`), /permission denied/i);
+    }
+  }
+  await db.exec('RESET ROLE');
+  assert.equal((await db.query('SELECT count(*)::int n FROM room_voice_notes')).rows[0].n,1);
+  assert.equal((await db.query('SELECT state FROM recording_private.operations')).rows[0].state,'published');
+});
+
+test('bucket size and MIME restrictions reject admission before creating work', async t => {
+  const db = await fixture(t, "ALTER TABLE storage.buckets ADD COLUMN file_size_limit bigint, ADD COLUMN allowed_mime_types text[]; UPDATE storage.buckets SET file_size_limit=4,allowed_mime_types=ARRAY['audio/webm']");
+  await as(db);
+  await assert.rejects(begin(db), /bucket|size|limit/i);
+  await db.exec("RESET ROLE;UPDATE storage.buckets SET file_size_limit=5,allowed_mime_types=ARRAY['audio/ogg']");
+  await as(db);
+  await assert.rejects(begin(db), /bucket|type|mime/i);
+  await db.exec('RESET ROLE');
+  assert.equal((await db.query('SELECT count(*)::int n FROM recording_private.operations')).rows[0].n,0);
+  await db.exec("UPDATE storage.buckets SET allowed_mime_types=ARRAY['audio/webm']");
+  await as(db); assert.equal((await begin(db)).state,'awaiting_upload');
+});
+
+test('a populated second text table aborts conversion of the first without rewriting IDs', async t => {
+  const db=new PGlite(); t.after(()=>db.close());
+  await db.exec(fs.readFileSync('tests/server-recording-fixture.sql','utf8'));
+  await db.exec('ALTER TABLE voice_notes ALTER COLUMN id TYPE text USING id::text; ALTER TABLE room_voice_notes ALTER COLUMN id TYPE text USING id::text');
+  await db.query("INSERT INTO room_voice_notes(id,user_id,room_id,page_number,duration,audio_url,timestamp) VALUES('legacy-not-a-uuid',$1,$2,'1',1,'preserve-audio',now())",[owner,room]);
+  await assert.rejects(db.exec(migration()), /nonempty.*TEXT/);
+  await db.exec('ROLLBACK');
+  assert.equal((await db.query("SELECT data_type FROM information_schema.columns WHERE table_name='voice_notes' AND column_name='id'")).rows[0].data_type,'text');
+  assert.deepEqual((await db.query('SELECT id,audio_url FROM room_voice_notes')).rows,[{id:'legacy-not-a-uuid',audio_url:'preserve-audio'}]);
+});
+
+test('a changed bucket limit does not strand an uploaded operation retry', async t => {
+  const db=await fixture(t, 'ALTER TABLE storage.buckets ADD COLUMN file_size_limit bigint');
+  await as(db);const op=await begin(db);await upload(db,op);
+  await db.exec('RESET ROLE;UPDATE storage.buckets SET file_size_limit=1');
+  await as(db);assert.equal((await begin(db)).id,op.id);
+  assert.equal((await confirm(db,op)).state,'published');
+});
