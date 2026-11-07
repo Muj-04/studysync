@@ -183,6 +183,11 @@ BEGIN
   END IF;
   EXECUTE format('SELECT count(*) FROM public.%I c WHERE c.%I IS NOT NULL AND NOT (%s) AND NOT EXISTS(SELECT 1 FROM public.documents d WHERE d.id::text=c.%I::text AND d.user_id=c.user_id AND d.generation=c.document_generation)',child.table_name,child.column_name,exempt,child.column_name) INTO orphan_count;
   IF orphan_count>0 THEN RAISE EXCEPTION 'Document generation migration blocked: % orphan or foreign rows in %; reconcile explicitly',orphan_count,child.table_name; END IF;
+  -- Approved policy: retained study history detaches rather than being deleted.
+  -- Existing rows are unchanged; the composite FK clears only document identity.
+  IF child.table_name='study_sessions' THEN
+   EXECUTE format('ALTER TABLE public.%I ALTER COLUMN %I DROP NOT NULL',child.table_name,child.column_name);
+  END IF;
   delete_action:='CASCADE';
   IF child.table_name IN ('community_posts','study_sessions','flashcard_decks','session_state') THEN
    IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=child.table_name AND column_name=child.column_name AND is_nullable='NO') THEN
