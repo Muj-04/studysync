@@ -195,3 +195,19 @@ test('orphan legacy data blocks migration without silent deletion', async () => 
     assert.equal((await db.query("SELECT content FROM text_notes WHERE id='orphan'")).rows[0].content,'Recover me');
   } finally { await db.close(); }
 });
+
+test('legacy nonnullable study history survives migration and document deletion', async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(fs.readFileSync('tests/fixtures/document-generation-base.sql', 'utf8'));
+    await db.exec('ALTER TABLE study_sessions ALTER COLUMN document_id SET NOT NULL');
+    await db.query("INSERT INTO study_sessions(user_id,document_id,started_at) VALUES($1,'existing','2026-10-01')", [owner]);
+    await db.exec(migration);
+    const before = (await db.query('SELECT user_id,document_id,document_generation,started_at FROM study_sessions')).rows[0];
+    assert.equal(before.document_id, 'existing');
+    assert.ok(before.document_generation);
+    await db.exec(`SET ROLE authenticated; SET test.uid='${owner}'; SET test.role='authenticated'; DELETE FROM documents WHERE id='existing'`);
+    const after = (await db.query('SELECT user_id,document_id,document_generation,started_at FROM study_sessions')).rows[0];
+    assert.deepEqual(after, {...before, document_id:null, document_generation:null});
+  } finally { await db.close(); }
+});
