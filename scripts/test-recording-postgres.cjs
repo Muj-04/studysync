@@ -12,6 +12,7 @@ const schemaPath=process.env.RECORDING_TEST_GENERATION_MIGRATION||'supabase/migr
 let base=fs.readFileSync('tests/server-recording-fixture.sql','utf8');
 base=base.replace(/CREATE ROLE (\w+);/g,(_,role)=>`DO $$BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object THEN NULL; END$$;`);
 base=base.replace(/CREATE TABLE public.document_lifetimes[\s\S]*?END\$\$;/,'');
+base+='\n'+fs.readFileSync('tests/fixtures/recording-deployed-policies.sql','utf8');
 base+='\n'+fs.readFileSync('tests/fixtures/document-generation-base.sql','utf8').split('\n').filter(line=>/^CREATE TABLE /.test(line)&&!/^CREATE TABLE (profiles|documents|voice_notes)\(/.test(line)).join('\n');
 base+='\nCREATE TABLE profiles(id uuid PRIMARY KEY,plan text,is_vip boolean);GRANT SELECT,INSERT,UPDATE,DELETE ON documents TO authenticated;';
 // Reproduce the observed legacy staging shape on disposable local data only.
@@ -60,6 +61,8 @@ function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe'],en
  await cancelling.done;
  sql(`UPDATE recording_private.operations SET next_attempt_at=now()+interval '1 day' WHERE note_id IN ('${bulkNote}','${retryNote}');`);
  const op=JSON.parse(sql(auth+`SELECT begin_recording_operation('${note}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'Lecture',now(),'${owner}');`));
+assert.throws(()=>sql(auth+'SELECT clear_own_recording_metadata();'),/permission denied/i);
+assert.equal(sql(`SELECT state FROM recording_private.operations WHERE id='${op.id}';`),'awaiting_upload');
 sql(auth+`INSERT INTO storage.objects(bucket_id,name,metadata) VALUES('voice-notes','${op.object_path}','{"size":5,"mimetype":"audio/webm"}');`);
 // A worker outage cannot expire bytes that already reached Storage.
 sql(`UPDATE recording_private.operations SET upload_deadline=now()-interval '1 day' WHERE id='${op.id}';`);
