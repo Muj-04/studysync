@@ -41,6 +41,48 @@ read-only query at a time: next verify role visibility and the voice-notes bucke
 configuration, then targeted schema/dependency, authorization and Storage checks.
 No raw export has been added to Git. No hosted changes have been performed.
 
+## Subsequent compact catalog evidence
+
+Owner-supplied follow-up results establish full row visibility for `postgres`.
+The voice-notes bucket is private, versioning DISABLED, and limited to 10 MiB;
+allowed types include webm, ogg and mp4 (also mpeg/wav). In one later snapshot,
+both recording tables and Storage object/version/delete-marker/archive counts
+were zero. This establishes emptiness at capture, not at eventual cutover.
+The reviewed operation API permits up to 100 MiB: admission must respect the
+actual bucket ceiling rather than accepting work Storage cannot upload.
+
+The dependency query returned all 14 constraints, including recording primary
+keys and outgoing owner/document/room foreign keys, with no incoming recording
+foreign keys. No dependent-view section was returned. This does not rule out
+untracked dynamic SQL dependencies. Recording IDs have no default and are text.
+
+Five deployed function source hashes match the repository definitions exactly:
+`apply_billing_event`, `claim_billing_reconciliation`,
+`release_billing_reconciliation`, `commit_billing_reconciliation`, and
+`delete_user_account`. The three lease functions and account deletion allow only
+service_role among the three checked API roles; the old billing writer allows
+none. This is a source-body/access comparison, not owner/search_path or full
+role-inheritance certification. The deployed definer function
+`clear_own_recording_metadata()` is absent from the reviewed repository SQL and
+is executable by authenticated/service_role; its body and cutover compatibility
+remain unverified (source MD5 `51033a64e14d568adda722c76722e0dc`).
+
+All three target tables have RLS enabled and effective TRUNCATE for anon,
+authenticated and service_role. #40 explicitly revokes TRUNCATE on documents and
+its discovered personal child tables (including voice_notes); #41 does not
+currently revoke it on room_voice_notes. That is a confirmed remaining grant
+hardening gap: RLS and row-level deletion triggers do not govern TRUNCATE. No
+hosted truncation or API exploit was attempted, and direct SQL privilege is not
+proof of a reachable ordinary PostgREST endpoint.
+
+The policy section is incomplete: 20 of 28 entries returned. Existing restrictive
+`launch_upload_limit` / `launch_update_limit` policies must be checked for
+compatibility with tracked operation paths; hashes alone do not reveal their
+predicates. Do not drop these policies merely to make new uploads succeed.
+Script 2 document-reference results remain outstanding, as do the eight omitted
+policy entries and the unknown cleanup function definition. These are required
+before declaring migration compatibility reconciled. No hosted changes applied.
+
 ## Full export alternative (optional)
 
 1. Open the [staging SQL Editor](https://supabase.com/dashboard/project/xokiiepdpjvqnpzwmbtb/sql/new).
