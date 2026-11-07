@@ -81,9 +81,9 @@ The pack documents which optional blocks to skip when a relation is missing.
 | Storage restore | The reviewed guard rejects published/legacy re-upload. Obtain a compatible provider restore procedure; logical local database restore alone cannot close this gate. |
 
 Connector, deployment and worker evidence gaps remain;
-this is **not** a claim that unseen staging tables are incorrect. The historical
-version alias and every conditional schema correction in the export checklist
-still require current evidence. See the pack for the exact deployment evidence and
+the recording ID mismatch is a confirmed schema discrepancy. Verified stored-SQL
+aliases do not establish current deployed-definition parity. Other conditional
+schema corrections in the export checklist still require current evidence. See the pack for the exact deployment evidence and
 non-secret Vercel settings to inspect.
 
 ## 2. Backups and restore gate — before a cutover is authorized
