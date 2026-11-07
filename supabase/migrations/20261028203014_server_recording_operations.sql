@@ -1,7 +1,21 @@
 BEGIN;
 -- A public bucket bypasses authenticated SELECT policies through its public URL.
 -- Configure privacy through the Storage API before applying this cutover.
-DO $$DECLARE target text; BEGIN
+-- The observed staging schema uses text IDs. Only empty legacy tables may be
+-- converted automatically: lock through commit so concurrent inserts cannot
+-- invalidate the emptiness check. Never rewrite existing IDs or Storage paths.
+LOCK TABLE public.voice_notes, public.room_voice_notes IN ACCESS EXCLUSIVE MODE;
+DO $$DECLARE target text; occupied boolean; BEGIN
+ FOREACH target IN ARRAY ARRAY['voice_notes','room_voice_notes'] LOOP
+  IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=target AND column_name='id' AND udt_name='text') THEN
+   EXECUTE format('SELECT EXISTS(SELECT 1 FROM public.%I)',target) INTO occupied;
+   IF occupied THEN
+    RAISE EXCEPTION 'Recording schema contract: nonempty %.id TEXT requires explicit identity and Storage reconciliation',target;
+   END IF;
+   -- Dependencies that cannot support this type change must abort the transaction.
+   EXECUTE format('ALTER TABLE public.%I ALTER COLUMN id TYPE uuid USING id::uuid',target);
+  END IF;
+ END LOOP;
  FOREACH target IN ARRAY ARRAY['voice_notes','room_voice_notes'] LOOP
   IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=target AND column_name='id' AND udt_name='uuid')
   OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=target AND column_name='page_number' AND udt_name IN ('text','varchar')) THEN
@@ -16,6 +30,8 @@ DO $$DECLARE target text; BEGIN
   RAISE EXCEPTION 'Recording recovery requires a nonversioned bucket without archived versions or delete markers';
  END IF;
 END$$;
+-- TRUNCATE bypasses RLS and row DELETE triggers that schedule audio cleanup.
+REVOKE TRUNCATE ON public.voice_notes,public.room_voice_notes FROM PUBLIC,anon,authenticated,service_role;
 -- Requires document_generation_guards. Coordinated cutover: old upload clients fail closed.
 CREATE SCHEMA IF NOT EXISTS recording_private;
 REVOKE ALL ON SCHEMA recording_private FROM PUBLIC, anon, authenticated;
@@ -89,6 +105,16 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtextextended(p_note_id::text,7802));
  IF NOT recording_private.scope_allowed(uid,p_scope,p_scope_id,p_generation) THEN RAISE EXCEPTION 'Document generation or room authorization is no longer valid' USING ERRCODE='42501'; END IF;
  IF p_note_id IS NULL OR p_size IS NULL OR p_size<1 OR p_size>104857600 OR p_duration IS NULL OR p_duration<0 OR p_duration>86400 OR p_page IS NULL OR length(p_page)>128 OR length(coalesce(p_title,''))>500 OR p_recorded_at IS NULL OR p_mime IS NULL OR p_mime NOT IN ('audio/webm','audio/ogg','audio/mp4') THEN RAISE EXCEPTION 'Invalid recording metadata'; END IF;
+ -- Respect the deployed bucket without changing hosted Storage configuration.
+ -- Existing operations retain their identity/recovery path if limits later change.
+ IF NOT EXISTS(SELECT 1 FROM recording_private.operations WHERE note_id=p_note_id) AND EXISTS(
+  SELECT 1 FROM storage.buckets b WHERE b.id='voice-notes' AND (
+   (to_jsonb(b)->>'file_size_limit' IS NOT NULL AND p_size>(to_jsonb(b)->>'file_size_limit')::bigint)
+   OR (jsonb_typeof(to_jsonb(b)->'allowed_mime_types')='array'
+       AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(to_jsonb(b)->'allowed_mime_types') AS allowed(mime)
+         WHERE allowed.mime=p_mime OR allowed.mime='*/*' OR allowed.mime=split_part(p_mime,'/',1)||'/*'))
+  )
+ ) THEN RAISE EXCEPTION 'Recording exceeds bucket size or MIME type limits'; END IF;
  ext:=CASE p_mime WHEN 'audio/ogg' THEN 'ogg' WHEN 'audio/mp4' THEN 'mp4' ELSE 'webm' END;
  PERFORM pg_advisory_xact_lock(hashtextextended(uid::text,7801));
  IF NOT EXISTS(SELECT 1 FROM recording_private.operations WHERE note_id=p_note_id) AND (SELECT count(*) FROM recording_private.operations WHERE owner_id=uid AND state='awaiting_upload')>=200 THEN RAISE EXCEPTION 'Too many pending recordings'; END IF;
