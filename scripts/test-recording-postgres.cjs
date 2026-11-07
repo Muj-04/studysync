@@ -14,6 +14,8 @@ base=base.replace(/CREATE ROLE (\w+);/g,(_,role)=>`DO $$BEGIN CREATE ROLE ${role
 base=base.replace(/CREATE TABLE public.document_lifetimes[\s\S]*?END\$\$;/,'');
 base+='\n'+fs.readFileSync('tests/fixtures/document-generation-base.sql','utf8').split('\n').filter(line=>/^CREATE TABLE /.test(line)&&!/^CREATE TABLE (profiles|documents|voice_notes)\(/.test(line)).join('\n');
 base+='\nCREATE TABLE profiles(id uuid PRIMARY KEY,plan text,is_vip boolean);GRANT SELECT,INSERT,UPDATE,DELETE ON documents TO authenticated;';
+// Reproduce the observed legacy staging shape on disposable local data only.
+base+="\nALTER TABLE voice_notes ALTER COLUMN id TYPE text USING id::text;ALTER TABLE room_voice_notes ALTER COLUMN id TYPE text USING id::text;ALTER TABLE study_sessions ALTER COLUMN document_id SET NOT NULL;INSERT INTO study_sessions(user_id,document_id) VALUES('11111111-1111-4111-8111-111111111111','doc');";
 sql('DROP SCHEMA IF EXISTS recording_private CASCADE;DROP SCHEMA public CASCADE;DROP SCHEMA IF EXISTS auth CASCADE;DROP SCHEMA IF EXISTS storage CASCADE;CREATE SCHEMA public;'+base);
 sql(fs.readFileSync(schemaPath,'utf8'));sql(fs.readFileSync('supabase/migrations/20261028203014_server_recording_operations.sql','utf8'));
 const owner='11111111-1111-4111-8111-111111111111';
@@ -100,5 +102,10 @@ sql(`UPDATE recording_private.operations SET upload_deadline=now()-interval '1 d
  sql(service+`SELECT complete_recording_cleanup('${op.id}','${cleanup.lease_token}');`);
  assert.equal(sql(`SELECT state FROM recording_private.operations WHERE id='${op.id}';`),'deleted');
  assert.equal(sql(auth+`SELECT confirm_recording_upload('${op.id}')->>'state';`),'deleted');
+ assert.equal(sql('SELECT count(*) FROM study_sessions WHERE document_id IS NULL AND document_generation IS NULL;'),'1','legacy study history must survive parent deletion');
+ for(const table of ['voice_notes','room_voice_notes']) {
+  assert.equal(sql(`SELECT data_type FROM information_schema.columns WHERE table_schema='public' AND table_name='${table}' AND column_name='id';`),'uuid');
+  for(const role of ['anon','authenticated','service_role']) assert.equal(sql(`SELECT has_table_privilege('${role}','${table}','TRUNCATE');`),'f');
+ }
  console.log('PostgreSQL: isolation guard, bulk cancellation/begin serialization, exclusive claims, crash retry, publication/deletion serialization, cascade cleanup and permanent tombstone passed.');
 })().catch(error=>{console.error(error.message);process.exitCode=1;});
