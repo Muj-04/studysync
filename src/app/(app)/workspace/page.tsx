@@ -1,8 +1,22 @@
 'use client';
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useDocumentHydrationCommit } from '@/hooks/useDocumentHydrationCommit';
+import { beginDocumentHydration } from '@/lib/documentHydration';
+import { DocumentRecoveryPanel } from '@/components/DocumentRecoveryPanel';
+import { retainRecoveryAudio } from '@/lib/recoveryAudio';
+import { preserveDocumentBeforeRemoval, retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { useResizablePanels } from './useResizablePanels';
+import { useDocumentOrder } from './useDocumentOrder';
+import HdrBtn from './HeaderButton';
+import HelpModal from './HelpModal';
+import ShareToCommunityModal from './ShareToCommunityModal';
+import { RightPaneHeader, BlankPaneEmpty, DocPickEmpty } from './SplitPaneControls';
+import { useRouter } from 'next/navigation';
+import { useTextNotes } from '@/hooks/useTextNotes';
+import { deletePendingDocumentNotes } from '@/lib/documentLocalData';
+import { useEffect, useState, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
 import {
   BookOpen, X, PanelLeft, PanelRight,
-  ChevronUp, FilePlus, Search, CheckCircle, Users, Share2,
+  ChevronUp, Search, CheckCircle, Users, Share2,
   Timer, Download, Upload, FileText,
 } from 'lucide-react';
 import { clampZoom } from '@/components/PDFViewer';
@@ -53,30 +67,37 @@ import {
   fetchVoiceNotes,
   fetchAllPageImages,
   saveBookmarks as dbSaveBookmarks,
-  saveTextNotes as dbSaveTextNotes,
   saveSessionState as dbSaveSessionState,
   uploadRoomPdf,
   createRoom,
   loadUserPreferences,
-  saveDocumentOrder,
-  loadDocumentOrder,
   getProfile,
-  createCommunityPost,
   deleteAllDataForDocument,
   fetchDocuments,
 } from '@/lib/supabase/db';
 import { getPendingReopenFile, clearPendingReopenFile } from '@/lib/pendingReopenFile';
 import { getPdfBlob } from '@/lib/pdfStore';
-import type { BlankPage, PDFDocument, TextNote, Bookmark } from '@/types';
+import type { BlankPage, TextNote, Bookmark } from '@/types';
 import { MAX_UNDO_HISTORY, type Tool, type PenType } from '@/lib/drawing';
 
-// ── Doc order helper ──────────────────────────────────────────────────────────
+// Browser preferences need a server snapshot so hydration starts consistently.
+function subscribePreferences(onChange: () => void) {
+  window.addEventListener('storage', onChange);
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  return () => {
+    window.removeEventListener('storage', onChange);
+    observer.disconnect();
+  };
+}
 
-function applyDocOrder(docs: PDFDocument[], order: string[]): PDFDocument[] {
-  const map = new Map(docs.map((d) => [d.id, d]));
-  const inOrder = order.filter((id) => map.has(id)).map((id) => map.get(id)!);
-  const extra = docs.filter((d) => !order.includes(d.id));
-  return [...inOrder, ...extra];
+function readDarkTheme() {
+  try { return (storageGet<string>(KEYS.THEME) ?? localStorage.getItem('theme')) !== 'light'; }
+  catch { return true; }
+}
+
+function readDefaultBackground(): 'white' | 'dark' {
+  return storageGet<string>(KEYS.DEFAULT_BG) === 'dark' ? 'dark' : 'white';
 }
 
 // ── Virtual page sequence ─────────────────────────────────────────────────────
@@ -101,785 +122,10 @@ function buildVirtualSequence(pdfPageCount: number, blankPages: BlankPage[]): Vi
   return pages;
 }
 
-// ── Split view icon ───────────────────────────────────────────────────────────
-
-function SplitIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="8" height="18" rx="1.5" />
-      <rect x="13" y="3" width="8" height="18" rx="1.5" />
-    </svg>
-  );
-}
-
-// ── Reusable header icon button ───────────────────────────────────────────────
-
-function HdrBtn({
-  onClick, title, active = false, tone = 'default', children,
-}: {
-  onClick?: () => void;
-  title?: string;
-  active?: boolean;
-  tone?: 'default' | 'danger';
-  children: React.ReactNode;
-}) {
-  const isDanger = tone === 'danger';
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      style={{
-        width: 42, height: 42,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 4, flexShrink: 0,
-        background: isDanger ? 'var(--red-muted)' : active ? 'var(--bg-active)' : 'transparent',
-        border: `1px solid ${isDanger ? 'var(--red-muted)' : active ? 'var(--border-strong)' : 'transparent'}`,
-        color: isDanger ? 'var(--red)' : active ? 'var(--text-1)' : 'var(--text-2)',
-        cursor: 'pointer',
-        transition: 'background 0.13s, color 0.13s, border-color 0.13s',
-      }}
-      onMouseOver={(e) => {
-        if (isDanger) {
-          Object.assign(e.currentTarget.style, {
-            background: 'var(--red)', color: '#fff', borderColor: 'var(--red)',
-          });
-          return;
-        }
-        if (!active) Object.assign(e.currentTarget.style, {
-          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
-        });
-      }}
-      onMouseOut={(e) => {
-        if (isDanger) {
-          Object.assign(e.currentTarget.style, {
-            background: 'var(--red-muted)', color: 'var(--red)', borderColor: 'var(--red-muted)',
-          });
-          return;
-        }
-        if (!active) Object.assign(e.currentTarget.style, {
-          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
-        });
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ── Mini nav / zoom button ────────────────────────────────────────────────────
-
-function MiniBtn({
-  onClick, disabled, children, title,
-}: {
-  onClick?: () => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-  title?: string;
-}) {
-  return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={title}
-      style={{
-        width: 22, height: 22,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: 4, flexShrink: 0,
-        background: 'transparent',
-        border: '1px solid transparent',
-        color: disabled ? 'var(--text-3)' : 'var(--text-2)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        fontSize: 13, fontFamily: 'inherit', fontWeight: 500,
-        opacity: disabled ? 0.45 : 1,
-        transition: 'background 0.12s, color 0.12s',
-      }}
-      onMouseOver={(e) => {
-        if (!disabled) Object.assign(e.currentTarget.style, {
-          background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)',
-        });
-      }}
-      onMouseOut={(e) => {
-        if (!disabled) Object.assign(e.currentTarget.style, {
-          background: 'transparent', color: 'var(--text-2)', borderColor: 'transparent',
-        });
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ── Right pane header ─────────────────────────────────────────────────────────
-
-function RightPaneHeader({
-  rightSideMode, setRightSideMode,
-  documents, rightDocId, setRightDocId,
-  rightDoc, rightDocPage, setRightDocPage,
-  rightZoom, onRightZoomChange,
-}: {
-  rightSideMode: 'blank' | 'document';
-  setRightSideMode: (m: 'blank' | 'document') => void;
-  documents: PDFDocument[];
-  rightDocId: string | null;
-  setRightDocId: (id: string | null) => void;
-  rightDoc: PDFDocument | null;
-  rightDocPage: number;
-  setRightDocPage: (p: number) => void;
-  rightZoom: number;
-  onRightZoomChange: (z: number) => void;
-}) {
-  const { t } = useLanguage();
-  return (
-    <div style={{
-      height: 34, flexShrink: 0,
-      display: 'flex', alignItems: 'center',
-      padding: '0 8px', gap: 5,
-      background: 'var(--bg-panel)',
-      borderBottom: '1px solid var(--border)',
-      overflow: 'hidden',
-      userSelect: 'none',
-    }}>
-      {/* Mode toggle pills */}
-      <div style={{
-        display: 'flex', gap: 1,
-        background: 'var(--bg-elevated)',
-        borderRadius: 4, padding: 2, flexShrink: 0,
-      }}>
-        {(['blank', 'document'] as const).map((m) => (
-          <button
-            key={m}
-            onClick={() => setRightSideMode(m)}
-            style={{
-              height: 20, padding: '0 7px',
-              borderRadius: 3, fontSize: 10.5, fontWeight: 500,
-              background: rightSideMode === m ? 'var(--bg-active)' : 'transparent',
-              border: `1px solid ${rightSideMode === m ? 'var(--border-strong)' : 'transparent'}`,
-              color: rightSideMode === m ? 'var(--text-1)' : 'var(--text-3)',
-              cursor: 'pointer', fontFamily: 'inherit',
-              transition: 'background 0.12s, color 0.12s',
-            }}
-          >
-            {m === 'blank' ? t('ws_blank_tab') : t('ws_doc_tab')}
-          </button>
-        ))}
-      </div>
-
-      {/* Document picker (doc mode only) */}
-      {rightSideMode === 'document' && (
-        <select
-          value={rightDocId ?? ''}
-          onChange={(e) => setRightDocId(e.target.value || null)}
-          className="app-input"
-          style={{ flex: 1, height: 22, fontSize: 10.5, padding: '0 4px', minWidth: 0 }}
-        >
-          <option value="">Pick document…</option>
-          {documents.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-      )}
-
-      {rightSideMode === 'blank' && <div style={{ flex: 1 }} />}
-
-      {/* Page nav — doc mode with a doc selected */}
-      {rightSideMode === 'document' && rightDoc && (
-        <>
-          <MiniBtn
-            onClick={() => setRightDocPage(Math.max(1, rightDocPage - 1))}
-            disabled={rightDocPage <= 1}
-            title="Previous page"
-          >
-            ‹
-          </MiniBtn>
-          <span style={{ fontSize: 10, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-            {rightDocPage}/{rightDoc.pageCount}
-          </span>
-          <MiniBtn
-            onClick={() => setRightDocPage(Math.min(rightDoc!.pageCount, rightDocPage + 1))}
-            disabled={rightDocPage >= rightDoc.pageCount}
-            title="Next page"
-          >
-            ›
-          </MiniBtn>
-          <div style={{ width: 1, height: 14, background: 'var(--border)', flexShrink: 0, margin: '0 1px' }} />
-        </>
-      )}
-
-      {/* Zoom controls (always shown) */}
-      <MiniBtn
-        onClick={() => onRightZoomChange(rightZoom - 0.1)}
-        disabled={rightZoom <= 0.5}
-        title="Zoom out"
-      >
-        −
-      </MiniBtn>
-      <input
-        type="range"
-        min={50}
-        max={200}
-        step={5}
-        value={Math.round(rightZoom * 100)}
-        onChange={(e) => onRightZoomChange(Number(e.target.value) / 100)}
-        className="zoom-slider"
-        aria-label="Zoom level"
-        style={{ width: 64 }}
-      />
-      <span style={{
-        fontSize: 10, color: 'var(--text-3)',
-        minWidth: 30, textAlign: 'center', flexShrink: 0,
-        fontVariantNumeric: 'tabular-nums', fontFamily: 'var(--font-mono), monospace',
-      }}>
-        {Math.round(rightZoom * 100)}%
-      </span>
-      <MiniBtn
-        onClick={() => onRightZoomChange(rightZoom + 0.1)}
-        disabled={rightZoom >= 2.0}
-        title="Zoom in"
-      >
-        +
-      </MiniBtn>
-    </div>
-  );
-}
-
-// ── Pane empty states ─────────────────────────────────────────────────────────
-
-function BlankPaneEmpty({ onAdd }: { onAdd: () => void }) {
-  const { t } = useLanguage();
-  return (
-    <div style={{
-      flex: 1, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 14, background: 'var(--bg-app)', padding: 32,
-    }}>
-      <div style={{
-        width: 48, height: 48, borderRadius: 4,
-        background: 'var(--bg-elevated)',
-        border: '1px solid var(--border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <FilePlus size={20} style={{ color: 'var(--text-3)' }} />
-      </div>
-      <div style={{ textAlign: 'center' }}>
-        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}>
-          {t('ws_no_blank_page')}
-        </p>
-        <p style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.5 }}>
-          {t('ws_add_blank_hint')}
-        </p>
-      </div>
-      <button
-        onClick={onAdd}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          height: 32, padding: '0 16px',
-          borderRadius: 4,
-          background: '#ffffff',
-          border: '1px solid transparent',
-          color: '#0f172a',
-          cursor: 'pointer', fontFamily: 'inherit',
-          fontSize: 12.5, fontWeight: 500,
-          transition: 'background 0.13s',
-        }}
-        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.88)'; }}
-        onMouseOut={(e) => { e.currentTarget.style.background = '#ffffff'; }}
-      >
-        <FilePlus size={13} />
-        {t('ws_add_blank')}
-      </button>
-    </div>
-  );
-}
-
-function DocPickEmpty() {
-  const { t } = useLanguage();
-  return (
-    <div style={{
-      flex: 1, display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 8, background: 'var(--bg-app)', padding: 32,
-    }}>
-      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-2)' }}>{t('ws_no_doc_selected')}</p>
-      <p style={{ fontSize: 11.5, color: 'var(--text-3)', textAlign: 'center', lineHeight: 1.5 }}>
-        {t('ws_choose_doc_hint')}
-      </p>
-    </div>
-  );
-}
-
-// ── Help modal (Shortcuts / Tips / Getting Started / What's New) ─────────────
-
-function ShareToCommunityModal({ docId, docName, pageTextNotes, onClose }: {
-  docId: string | null;
-  docName: string | null;
-  pageTextNotes: Record<string, import('@/types').TextNote[]>;
-  onClose: () => void;
-}) {
-  const { t } = useLanguage();
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [tagInput, setTagInput] = useState('');
-  const [tags, setTags] = useState<string[]>([]);
-  const [posting, setPosting] = useState(false);
-  const [done, setDone] = useState(false);
-
-  const addTag = (tagStr: string) => {
-    const trimmed = tagStr.trim().replace(/,/g, '');
-    if (!trimmed || tags.includes(trimmed) || tags.length >= 5) return;
-    setTags((prev) => [...prev, trimmed]);
-    setTagInput('');
-  };
-
-  const handlePost = async () => {
-    if (!title.trim() || posting) return;
-    setPosting(true);
-    const pages: import('@/lib/supabase/db').CommunityPage[] = [];
-    if (docId) {
-      const prefix = `${docId}:`;
-      for (const [key, notes] of Object.entries(pageTextNotes)) {
-        if (!key.startsWith(prefix)) continue;
-        if (!notes.length) continue;
-        pages.push({
-          pageKey: key.slice(prefix.length),
-          textNotes: notes.map((n) => ({ content: n.content, x: n.x, y: n.y })),
-          canvasData: null,
-        });
-      }
-    }
-    await createCommunityPost({ documentId: docId, title: title.trim(), description: description.trim(), pages, tags });
-    setPosting(false);
-    setDone(true);
-    setTimeout(onClose, 1200);
-  };
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 500,
-        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onClick={onClose}
-    >
-      <div
-        style={{
-          background: 'var(--bg-float)',
-          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid var(--bg-float-border)',
-          boxShadow: 'var(--shadow-float)',
-          borderRadius: 4, padding: '28px', width: 420,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {done ? (
-          <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <div style={{ fontSize: 32, marginBottom: 10 }}>🎉</div>
-            <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>Posted to Community!</p>
-          </div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>{t('ws_share_title')}</h3>
-              <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
-                <X size={16} />
-              </button>
-            </div>
-
-            {docName && (
-              <p style={{ margin: '0 0 16px', fontSize: 12.5, color: 'var(--text-3)' }}>
-                {t('ws_share_from')} <strong style={{ color: 'var(--text-2)' }}>{docName}</strong>
-              </p>
-            )}
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>{t('ws_share_title_label')}</label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={t('ws_share_title_placeholder')}
-                  style={{
-                    width: '100%', height: 36, padding: '0 10px', boxSizing: 'border-box',
-                    background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                    borderRadius: 4, fontSize: 13, color: 'var(--text-1)',
-                    outline: 'none', fontFamily: 'inherit',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>{t('ws_share_desc_label')}</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder={t('ws_share_desc_placeholder')}
-                  rows={3}
-                  style={{
-                    width: '100%', padding: '8px 10px', boxSizing: 'border-box',
-                    background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                    borderRadius: 4, fontSize: 13, color: 'var(--text-1)',
-                    outline: 'none', fontFamily: 'inherit', resize: 'vertical',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 5 }}>{t('ws_share_tags_label')}</label>
-                {tags.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 7 }}>
-                    {tags.map((t) => (
-                      <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 4, background: 'var(--accent)', color: '#fff', fontSize: 11.5, fontWeight: 500 }}>
-                        {t}
-                        <button onClick={() => setTags((prev) => prev.filter((x) => x !== t))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', padding: 0, fontSize: 12 }}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input value={tagInput} onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); } }}
-                    placeholder={t('ws_share_tags_placeholder')} disabled={tags.length >= 5}
-                    style={{ flex: 1, height: 32, padding: '0 10px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12.5, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit' }} />
-                  <button onClick={() => addTag(tagInput)} disabled={!tagInput.trim() || tags.length >= 5} style={{ height: 32, padding: '0 10px', borderRadius: 4, background: 'var(--accent)', color: '#fff', border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{t('common_add')}</button>
-                </div>
-              </div>
-
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)' }}>
-                {t('ws_share_notes_hint')}
-              </p>
-
-              <button
-                onClick={handlePost}
-                disabled={!title.trim() || posting}
-                style={{
-                  height: 40, borderRadius: 4,
-                  background: title.trim() ? 'var(--accent)' : 'var(--bg-elevated)',
-                  color: title.trim() ? '#fff' : 'var(--text-3)',
-                  border: 'none', fontSize: 13.5, fontWeight: 600,
-                  cursor: title.trim() ? 'pointer' : 'default',
-                  fontFamily: 'inherit', transition: 'background 0.12s, color 0.12s',
-                }}
-              >
-                {posting ? t('ws_share_posting') : t('ws_share_btn')}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const HELP_GS_KEY = 'help_getting_started_v1';
-type GsState = { upload: boolean; voice: boolean; draw: boolean; bookmark: boolean; ai: boolean; room: boolean };
-const GS_DEFAULT: GsState = { upload: false, voice: false, draw: false, bookmark: false, ai: false, room: false };
-
-function HelpModal({ onClose }: { onClose: () => void }) {
-  const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState(0);
-  const [checklist, setChecklist] = useState<GsState>(() => {
-    try {
-      const s = localStorage.getItem(HELP_GS_KEY);
-      return s ? { ...GS_DEFAULT, ...JSON.parse(s) } : GS_DEFAULT;
-    } catch { return GS_DEFAULT; }
-  });
-
-  const toggleCheck = (key: keyof GsState) => {
-    const next = { ...checklist, [key]: !checklist[key] };
-    setChecklist(next);
-    try { localStorage.setItem(HELP_GS_KEY, JSON.stringify(next)); } catch {}
-  };
-  const allDone = Object.values(checklist).every(Boolean);
-
-  const tabs = [t('help_tab_shortcuts'), t('help_tab_tips'), t('help_tab_start'), t('help_tab_new')];
-
-  const scGroups = [
-    {
-      label: 'Navigation',
-      items: [{ key: '← / →', desc: t('ws_sc_nav') }],
-    },
-    {
-      label: 'Tools',
-      items: [
-        { key: 'P', desc: t('ws_sc_pen') },
-        { key: 'M', desc: t('ws_sc_marker') },
-        { key: 'H', desc: t('ws_sc_highlighter') },
-        { key: 'E', desc: t('ws_sc_eraser') },
-        { key: 'C', desc: t('ws_sc_cursor') },
-      ],
-    },
-    {
-      label: 'Drawing',
-      items: [
-        { key: 'Shift + drag', desc: t('ws_sc_straight') },
-        { key: 'Ctrl + Z', desc: t('ws_sc_undo') },
-      ],
-    },
-    {
-      label: 'Document',
-      items: [
-        { key: 'N', desc: t('ws_sc_blank') },
-        { key: 'Ctrl + B', desc: t('ws_sc_bookmark') },
-        { key: 'Ctrl + F', desc: t('ws_sc_search') },
-        { key: 'Ctrl + S', desc: t('ws_sc_sync') },
-        { key: 'Space', desc: t('ws_sc_play') },
-      ],
-    },
-    {
-      label: 'Zoom',
-      items: [
-        { key: 'Ctrl + +', desc: t('ws_sc_zoom_in') },
-        { key: 'Ctrl + −', desc: t('ws_sc_zoom_out') },
-      ],
-    },
-    {
-      label: 'Other',
-      items: [
-        { key: 'Escape', desc: t('ws_sc_escape') },
-        { key: '?', desc: t('ws_sc_help') },
-      ],
-    },
-  ];
-
-  const tips = [
-    { title: t('help_tip1_title'), body: t('help_tip1') },
-    { title: t('help_tip2_title'), body: t('help_tip2') },
-    { title: t('help_tip3_title'), body: t('help_tip3') },
-    { title: t('help_tip4_title'), body: t('help_tip4') },
-    { title: t('help_tip5_title'), body: t('help_tip5') },
-  ];
-
-  const gsItems: { key: keyof GsState; label: string }[] = [
-    { key: 'upload',   label: t('help_gs_upload') },
-    { key: 'voice',    label: t('help_gs_voice') },
-    { key: 'draw',     label: t('help_gs_draw') },
-    { key: 'bookmark', label: t('help_gs_bookmark') },
-    { key: 'ai',       label: t('help_gs_ai') },
-    { key: 'room',     label: t('help_gs_room') },
-  ];
-
-  const wnItems = [
-    { title: t('help_wn1_title'), body: t('help_wn1_body') },
-    { title: t('help_wn2_title'), body: t('help_wn2_body') },
-    { title: t('help_wn3_title'), body: t('help_wn3_body') },
-    { title: t('help_wn4_title'), body: t('help_wn4_body') },
-    { title: t('help_wn5_title'), body: t('help_wn5_body') },
-  ];
-
-  const KBD = ({ children }: { children: React.ReactNode }) => (
-    <kbd style={{
-      fontSize: 10.5, fontFamily: 'inherit', fontWeight: 600,
-      color: 'var(--text-2)',
-      background: 'var(--bg-elevated)',
-      border: '1px solid var(--border-strong)',
-      borderRadius: 4, padding: '1px 6px',
-      whiteSpace: 'nowrap', flexShrink: 0,
-    }}>{children}</kbd>
-  );
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 500,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.52)',
-      }}
-      onClick={onClose}
-    >
-      <div
-        className="animate-scale-in"
-        style={{
-          width: 460,
-          maxHeight: '82vh',
-          display: 'flex', flexDirection: 'column',
-          background: 'var(--bg-float)',
-          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-          border: '1px solid var(--bg-float-border)',
-          boxShadow: 'var(--shadow-float)',
-          borderRadius: 4,
-          overflow: 'hidden',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 18px 0',
-          flexShrink: 0,
-        }}>
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)' }}>
-            {t('help_title')}
-          </span>
-          <button
-            onClick={onClose}
-            style={{
-              width: 26, height: 26, borderRadius: 4, border: '1px solid transparent',
-              background: 'transparent', color: 'var(--text-3)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.12s, color 0.12s',
-            }}
-            onMouseOver={(e) => Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-1)', borderColor: 'var(--border)' })}
-            onMouseOut={(e) => Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)', borderColor: 'transparent' })}
-          ><X size={13} /></button>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 2, padding: '10px 18px 0', flexShrink: 0 }}>
-          {tabs.map((tab, i) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(i)}
-              style={{
-                padding: '5px 12px', borderRadius: 4, fontSize: 12, fontWeight: 600,
-                background: activeTab === i ? 'var(--bg-active)' : 'transparent',
-                border: `1px solid ${activeTab === i ? 'var(--border-strong)' : 'transparent'}`,
-                color: activeTab === i ? 'var(--text-1)' : 'var(--text-3)',
-                cursor: 'pointer', fontFamily: 'inherit',
-                transition: 'background 0.12s, color 0.12s',
-              }}
-              onMouseOver={(e) => { if (activeTab !== i) Object.assign(e.currentTarget.style, { background: 'var(--bg-hover)', color: 'var(--text-2)' }); }}
-              onMouseOut={(e) => { if (activeTab !== i) Object.assign(e.currentTarget.style, { background: 'transparent', color: 'var(--text-3)' }); }}
-            >{tab}</button>
-          ))}
-        </div>
-
-        {/* Divider */}
-        <div style={{ height: 1, background: 'var(--border-subtle)', margin: '10px 0 0' }} />
-
-        {/* Scrollable body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px 18px' }}>
-
-          {/* ── Shortcuts tab ── */}
-          {activeTab === 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {scGroups.map(({ label, items }) => (
-                <div key={label}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>{label}</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {items.map(({ key, desc }) => (
-                      <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{desc}</span>
-                        <KBD>{key}</KBD>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Tips tab ── */}
-          {activeTab === 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {tips.map(({ title, body }, i) => (
-                <div key={i} style={{
-                  padding: '10px 12px', borderRadius: 4,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>{title}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.55 }}>{body}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Getting Started tab ── */}
-          {activeTab === 2 && (
-            <div>
-              {!allDone && (
-                <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14, lineHeight: 1.5 }}>
-                  {t('help_gs_subtitle')}
-                </p>
-              )}
-              {allDone ? (
-                <div style={{
-                  padding: '16px 14px', borderRadius: 4,
-                  background: 'rgba(89,101,217,0.1)',
-                  border: '1px solid rgba(89,101,217,0.25)',
-                  textAlign: 'center',
-                }}>
-                  <div style={{ fontSize: 22, marginBottom: 6 }}>🎉</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{t('help_gs_done')}</div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {gsItems.map(({ key, label }) => (
-                    <button
-                      key={key}
-                      onClick={() => toggleCheck(key)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 10,
-                        padding: '9px 12px', borderRadius: 4, width: '100%',
-                        background: checklist[key] ? 'rgba(89,101,217,0.07)' : 'var(--bg-elevated)',
-                        border: `1px solid ${checklist[key] ? 'rgba(89,101,217,0.22)' : 'var(--border)'}`,
-                        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                        transition: 'background 0.14s, border-color 0.14s',
-                      }}
-                    >
-                      <div style={{
-                        width: 18, height: 18, borderRadius: 4, flexShrink: 0,
-                        background: checklist[key] ? 'var(--accent)' : 'var(--bg-panel)',
-                        border: `1.5px solid ${checklist[key] ? 'var(--accent)' : 'var(--border-strong)'}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'background 0.14s, border-color 0.14s',
-                      }}>
-                        {checklist[key] && (
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M1.5 5L3.8 7.5L8.5 2.5" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-                      <span style={{
-                        fontSize: 12.5, fontWeight: 500,
-                        color: checklist[key] ? 'var(--text-3)' : 'var(--text-1)',
-                        textDecoration: checklist[key] ? 'line-through' : 'none',
-                        transition: 'color 0.14s',
-                      }}>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── What's New tab ── */}
-          {activeTab === 3 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {wnItems.map(({ title, body }, i) => (
-                <div key={i} style={{
-                  display: 'flex', gap: 12, alignItems: 'flex-start',
-                  padding: '10px 12px', borderRadius: 4,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: 4, flexShrink: 0,
-                    background: 'var(--accent)', color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 11, fontWeight: 700, marginTop: 1,
-                  }}>{i + 1}</div>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', marginBottom: 3 }}>{title}</div>
-                    <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>{body}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function WorkspacePage() {
   useAuthGuard();
-  useSessionGuard({ onKicked: () => { window.location.href = '/login?kicked=1'; } });
+  const router = useRouter();
+  useSessionGuard({ onKicked: () => { router.replace('/login?kicked=1'); } });
   const { t } = useLanguage();
 
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -911,15 +157,14 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Theme ─────────────────────────────────────────────────────────────────
-  const [isDark, setIsDark] = useState(true);
+  const storedIsDark = useSyncExternalStore(subscribePreferences, readDarkTheme, () => true);
+  const [themeOverride, setIsDark] = useState<boolean | null>(null);
+  const isDark = themeOverride ?? storedIsDark;
 
   useEffect(() => {
-    const stored = storageGet<string>(KEYS.THEME) ?? localStorage.getItem('theme');
-    if (stored === 'light') {
-      setIsDark(false);
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-  }, []);
+    if (isDark) document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', 'light');
+  }, [isDark]);
 
   const toggleTheme = useCallback(() => {
     const html = document.documentElement;
@@ -959,12 +204,9 @@ export default function WorkspacePage() {
   }, []);
 
   // ── Default blank page background ────────────────────────────────────────
-  const [defaultBgTheme, setDefaultBgTheme] = useState<'white' | 'dark'>('white');
-
-  useEffect(() => {
-    const stored = storageGet<'white' | 'dark'>(KEYS.DEFAULT_BG);
-    if (stored === 'white' || stored === 'dark') setDefaultBgTheme(stored);
-  }, []);
+  const storedDefaultBg = useSyncExternalStore<'white' | 'dark'>(subscribePreferences, readDefaultBackground, () => 'white');
+  const [defaultBgOverride, setDefaultBgTheme] = useState<'white' | 'dark' | null>(null);
+  const defaultBgTheme = defaultBgOverride ?? storedDefaultBg;
 
   const handleDefaultBgThemeChange = useCallback((theme: 'white' | 'dark') => {
     setDefaultBgTheme(theme);
@@ -1010,33 +252,36 @@ export default function WorkspacePage() {
   const {
     documents, activeDocument, activeDocumentId,
     isLoading, addDocument, removeDocument, updateDocumentId, reorderDocuments, setActiveDocument, goToPage,
-  } = usePDF();
+  } = usePDF({ ownerId: userId });
   const {
     notes: voiceNotes,
-    isRecording, recordingDuration, recordingContext,
-    startRecording, stopRecording, deleteNote, deleteNotesForDocument,
-    updateNoteTitle, getNotesForPage,
+    isRecording, recordingContext,
+    startRecording, stopRecording, deleteNote, forgetNotesForDeletedDocument, getNotesForPage,
     seedVoiceNotes,
   } = useVoiceNotes({ onStorageLimitReached: () => setLimitModal('voice') });
   const {
     insertBlankPage, removeBlankPage,
     updateCanvasData, updateImages, updateBgTheme, getBlankPagesForDocument,
     seedBlankPages, removePagesForDocument,
-  } = useBlankPages();
-  const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings();
-  const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages } = usePDFPageImages();
+  } = useBlankPages(userId);
+  const { getDrawing, saveDrawing, seedDrawings, clearAllDrawings } = usePDFDrawings(userId);
+  const { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages } = usePDFPageImages(userId);
   useStudySession(activeDocumentId, userId);
+  const [pageTextNotes, setPageTextNotes, seedTextNotes] = useTextNotes(userId);
 
   // ── Pending reopen file (from Library page "Open" button) ─────────────────
   useEffect(() => {
     getPendingReopenFile().then(async (file) => {
       if (!file) return;
       await clearPendingReopenFile();
+      const reopenId = sessionStorage.getItem('reopen_doc_id') ?? undefined;
       sessionStorage.removeItem('reopen_doc_id');
       sessionStorage.removeItem('reopen_doc_name');
-      addDocument(file).catch(console.error);
+      addDocument(file, reopenId).catch((error: unknown) => {
+        showToast(error instanceof Error ? error.message : 'Could not reopen this document.');
+      });
     }).catch(console.error);
-  }, [addDocument]);
+  }, [addDocument, showToast]);
 
   // ── Open specific doc from dashboard/library click ─────────────────────────
   const pendingOpenRef = useRef<string | null>(
@@ -1085,72 +330,54 @@ export default function WorkspacePage() {
     if (!modal) return;
     setReopenModal(null);
     pendingOpenRef.current = null;
-    // Pre-seed the DOC_MAP so addDocument uses the canonical Supabase ID
-    const map = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-    map[file.name] = modal.docId;
-    storageSet(KEYS.DOC_MAP, map);
-    addDocument(file).catch(console.error);
-  }, [reopenModal, addDocument]);
-
-  // ── Document order ────────────────────────────────────────────────────────
-  const savedOrderRef = useRef<string[]>([]);
-  const lastAppliedOrderRef = useRef<string>('');
-
-  useEffect(() => {
-    loadDocumentOrder().then((order) => {
-      if (order) savedOrderRef.current = order;
+    addDocument(file, modal.docId).catch((error: unknown) => {
+      showToast(error instanceof Error ? error.message : 'Could not reopen this document.');
     });
-  }, []);
+  }, [reopenModal, addDocument, showToast]);
 
-  useEffect(() => {
-    if (savedOrderRef.current.length === 0 || documents.length === 0) return;
-    const currentKey = documents.map((d) => d.id).join(',');
-    const ordered = applyDocOrder(documents, savedOrderRef.current);
-    const orderedKey = ordered.map((d) => d.id).join(',');
-    if (orderedKey === currentKey || orderedKey === lastAppliedOrderRef.current) return;
-    lastAppliedOrderRef.current = orderedKey;
-    reorderDocuments(ordered);
-  }, [documents, reorderDocuments]);
-
-  const handleReorderDocuments = useCallback((ids: string[]) => {
-    savedOrderRef.current = ids;
-    reorderDocuments(applyDocOrder(documents, ids));
-    saveDocumentOrder(ids);
-  }, [documents, reorderDocuments]);
+  const handleReorderDocuments = useDocumentOrder(documents, reorderDocuments);
 
   // ── Virtual pages ─────────────────────────────────────────────────────────
   const [virtualIndex, setVirtualIndex] = useState(0);
-  const docBlankPages = activeDocument
+  const docBlankPages = useMemo(() => activeDocument
     ? getBlankPagesForDocument(activeDocument.id)
-    : [];
-  const virtualSequence = activeDocument
+    : [], [activeDocument, getBlankPagesForDocument]);
+  const virtualSequence = useMemo(() => activeDocument
     ? buildVirtualSequence(activeDocument.pageCount, docBlankPages)
-    : [];
+    : [], [activeDocument, docBlankPages]);
   const currentVP: VirtualPage | null = virtualSequence[virtualIndex] ?? null;
   const currentPdfPage = currentVP?.type === 'pdf' ? currentVP.pdfPage : null;
 
-  // Restore last page when a document is activated; fall back to 0 for new docs
-  useEffect(() => {
-    if (!activeDocumentId) return;
+  // Adjust before committing a new document so persistence never saves the
+  // previous document's page under the newly active document ID.
+  const [pageDocumentId, setPageDocumentId] = useState(activeDocumentId);
+  if (pageDocumentId !== activeDocumentId) {
     const session = storageGet<{ docId: string; virtualIndex: number }>(KEYS.SESSION);
-    setVirtualIndex(
-      session?.docId === activeDocumentId ? session.virtualIndex : 0
-    );
-  }, [activeDocumentId]);
+    setPageDocumentId(activeDocumentId);
+    setVirtualIndex(session?.docId === activeDocumentId ? session.virtualIndex : 0);
+  }
 
   // Save session (active doc + page) whenever either changes
   useEffect(() => {
     if (!activeDocumentId) return;
     storageSet(KEYS.SESSION, { docId: activeDocumentId, virtualIndex });
-    if (userIdRef.current) dbSaveSessionState(activeDocumentId, virtualIndex);
+    if (userIdRef.current) {
+      void dbSaveSessionState(activeDocumentId, virtualIndex).catch((error: unknown) => {
+        console.error('[Workspace] Could not sync reading position:', error);
+      });
+    }
   }, [activeDocumentId, virtualIndex]);
 
   // Load per-document data from Supabase when the active document changes.
+  const commitHydration = useDocumentHydrationCommit();
+
   // upsertDocument returns the canonical ID (cross-device stable). If it differs
   // from the locally-generated UUID, we remap state/localStorage and let the
   // effect re-run with the canonical ID before fetching any data.
   useEffect(() => {
     if (!activeDocumentId || !activeDocument || !userId) return;
+    let cancelled = false;
+    const hydration = beginDocumentHydration(userId, activeDocumentId, ['drawings', 'blank_pages', 'text_notes', 'page_image_annotations']);
 
     const syncDoc = async () => {
       const canonicalId = await upsertDocument({
@@ -1160,6 +387,7 @@ export default function WorkspacePage() {
         pageCount: activeDocument.pageCount,
       });
 
+      if (cancelled) return;
       if (canonicalId !== activeDocumentId) {
         // Another device registered this doc first — adopt its ID everywhere.
         // updateDocumentId updates React state + localStorage docMap; the effect
@@ -1170,13 +398,14 @@ export default function WorkspacePage() {
       }
 
       const [remoteDrawings, remoteBlankPages, remoteTextNotes, remoteVoiceNotes, remotePageImages] = await Promise.all([
-        fetchDrawings(canonicalId),
-        fetchBlankPages(canonicalId),
-        fetchTextNotes(canonicalId),
+        fetchDrawings(canonicalId, hydration),
+        fetchBlankPages(canonicalId, hydration),
+        fetchTextNotes(canonicalId, hydration),
         fetchVoiceNotes(canonicalId),
-        fetchAllPageImages(canonicalId),
+        fetchAllPageImages(canonicalId, hydration),
       ]);
 
+      if (cancelled) return;
       console.log('[StudySync] fetchDrawings:', Object.keys(remoteDrawings).length, 'rows');
       console.log('[StudySync] fetchBlankPages:', remoteBlankPages.length, 'rows');
       console.log('[StudySync] fetchTextNotes:', Object.keys(remoteTextNotes).length, 'pages');
@@ -1188,28 +417,21 @@ export default function WorkspacePage() {
         prefixedDrawings[`${canonicalId}:${pageKey}`] = data;
       }
       seedDrawings(prefixedDrawings);
-      seedBlankPages(remoteBlankPages);
+      seedBlankPages(remoteBlankPages, canonicalId);
 
-      // Text notes: remote wins for pages not present locally
+      // Text notes: refresh clean pages while the hook preserves unsynced edits.
       const prefixedNotes: Record<string, TextNote[]> = {};
       for (const [subKey, notes] of Object.entries(remoteTextNotes)) {
         prefixedNotes[`${canonicalId}:${subKey}`] = notes;
       }
       if (Object.keys(prefixedNotes).length > 0) {
-        setPageTextNotes((prev) => ({ ...prefixedNotes, ...prev }));
+        seedTextNotes(prefixedNotes);
       }
 
-      // Upload local-only text note pages that Supabase doesn't have yet
-      const localPrefix = `${canonicalId}:`;
-      const remotePageKeys = new Set(Object.keys(remoteTextNotes));
-      for (const [fullKey, notes] of Object.entries(pageTextNotes)) {
-        if (!fullKey.startsWith(localPrefix)) continue;
-        const pageKey = fullKey.slice(localPrefix.length);
-        if (remotePageKeys.has(pageKey)) continue;
-        if (notes.length === 0) continue;
-        console.log('[StudySync] uploading local-only text notes for page:', pageKey, 'count:', notes.length);
-        dbSaveTextNotes(canonicalId, pageKey, notes);
-      }
+      // Remote absence is ambiguous: this can be a deletion from another device,
+      // not a new local page. Hydration must never promote a clean cache to a
+      // write. useTextNotes owns explicit edits and its account-scoped outbox;
+      // ambiguous cached content stays local until the user edits it.
 
       // Seed voice notes fetched with the canonical docId — happens after ID resolution
       // so documentId always matches and pageNumber is already normalized to number
@@ -1221,16 +443,17 @@ export default function WorkspacePage() {
       } else {
         loadLocalPageImages(canonicalId);
       }
+      commitHydration(hydration);
     };
 
-    syncDoc().catch(console.error);
+    syncDoc().catch(error => { hydration.cancel(); console.error(error); });
+    return () => { cancelled = true; hydration.cancel(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDocumentId, userId]);
 
   useEffect(() => {
     if (currentPdfPage !== null) goToPage(currentPdfPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPdfPage]);
+  }, [currentPdfPage, goToPage]);
 
   const goVirtualPrev = useCallback(
     () => setVirtualIndex((i) => Math.max(0, i - 1)),
@@ -1286,33 +509,44 @@ export default function WorkspacePage() {
 
   // ── Bookmarks ─────────────────────────────────────────────────────────────
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const bookmarkEditVersions = useRef(new Map<string, number>());
+
+  const [bookmarkDocumentId, setBookmarkDocumentId] = useState(activeDocumentId);
+  if (bookmarkDocumentId !== activeDocumentId) {
+    setBookmarkDocumentId(activeDocumentId);
+    setBookmarks(activeDocumentId
+      ? storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS)?.[activeDocumentId] ?? []
+      : []);
+  }
 
   useEffect(() => {
-    if (!activeDocumentId) { setBookmarks([]); return; }
-    // Optimistic: localStorage first
-    const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS);
-    const local = stored?.[activeDocumentId] ?? [];
-    setBookmarks(local);
-    // Authoritative: Supabase — merge remote+local; upload any local-only bookmarks
-    if (userId) {
-      fetchBookmarks(activeDocumentId).then((remote) => {
-        const remoteIds = new Set(remote.map((b) => b.id));
-        const localOnly = local.filter((b) => !remoteIds.has(b.id));
-        const merged = [...remote, ...localOnly];
-        setBookmarks(merged);
-        if (localOnly.length > 0) {
-          console.log('[StudySync] uploading', localOnly.length, 'local-only bookmarks');
-          dbSaveBookmarks(activeDocumentId, merged);
-        }
-      });
-    }
-  }, [activeDocumentId, userId]);
+    if (!activeDocumentId || !userId) return;
+    let cancelled = false;
+    const version = bookmarkEditVersions.current.get(activeDocumentId) ?? 0;
+    const hydration = beginDocumentHydration(userId, activeDocumentId, ['bookmarks']);
+    fetchBookmarks(activeDocumentId, hydration).then((remote) => {
+      if (cancelled || (bookmarkEditVersions.current.get(activeDocumentId) ?? 0) !== version) return;
+      // A response started before a local edit must not restore removed marks.
+      const local = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS)?.[activeDocumentId] ?? [];
+      const remoteIds = new Set(remote.map((b) => b.id));
+      const localOnly = local.filter((b) => !remoteIds.has(b.id));
+      const merged = [...remote, ...localOnly];
+      setBookmarks(merged);
+      // Cached-only bookmarks remain local; a fetch never creates a write.
+      commitHydration(hydration);
+    }).catch(error => { hydration.cancel(); console.error(error); });
+    return () => { cancelled = true; hydration.cancel(); };
+  }, [activeDocumentId, userId, commitHydration]);
 
   const persistBookmarks = useCallback((docId: string, marks: Bookmark[]) => {
+    bookmarkEditVersions.current.set(docId, (bookmarkEditVersions.current.get(docId) ?? 0) + 1);
     const stored = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     stored[docId] = marks;
     storageSet(KEYS.BOOKMARKS, stored);
-    if (userIdRef.current) dbSaveBookmarks(docId, marks);
+    if (userIdRef.current) {
+      retainDocumentSnapshot(userIdRef.current, docId, KEYS.BOOKMARKS, marks);
+      void dbSaveBookmarks(docId, marks, userIdRef.current).catch(console.error);
+    }
   }, []);
 
   const isCurrentPageBookmarked = bookmarks.some((b) => b.virtualIndex === virtualIndex);
@@ -1355,10 +589,6 @@ export default function WorkspacePage() {
     }
   }, [setActiveDocument, handleNavigateToPdfPage]);
 
-  // ── Text notes (persisted per doc+page) ──────────────────────────────────
-  const [pageTextNotes, setPageTextNotes] = useState<Record<string, TextNote[]>>({});
-  const prevTextNotesRef = useRef<Record<string, TextNote[]>>({});
-
   // ── Refs for keyboard handler (avoids stale closures) ────────────────────
   const showSplitRef    = useRef(false);
   const activeSideRef   = useRef<'left' | 'right'>('left');
@@ -1385,44 +615,20 @@ export default function WorkspacePage() {
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    setIsFullscreen((f) => {
-      if (f) { return false; }
-      setVoiceSheetOpen(false);
-      return true;
-    });
+    setIsFullscreen((current) => !current);
   }, []);
 
   // ── Persistence: text notes ───────────────────────────────────────────────
-  useEffect(() => {
-    storageSet(KEYS.TEXT_NOTES, pageTextNotes);
-    if (userIdRef.current) {
-      // Only sync pages whose notes array reference changed (i.e. were mutated)
-      for (const [fullKey, notes] of Object.entries(pageTextNotes)) {
-        if (prevTextNotesRef.current[fullKey] === notes) continue;
-        const colonIdx = fullKey.indexOf(':');
-        if (colonIdx === -1) continue;
-        dbSaveTextNotes(fullKey.slice(0, colonIdx), fullKey.slice(colonIdx + 1), notes);
-      }
-    }
-    prevTextNotesRef.current = pageTextNotes;
-  }, [pageTextNotes]);
-
-  // ── Restore text notes from storage on mount ──────────────────────────────
-  useEffect(() => {
-    const stored = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES);
-    if (stored && Object.keys(stored).length > 0) setPageTextNotes(stored);
-  }, []);
-
   // ── Persistence: zoom per document ────────────────────────────────────────
   const activeDocumentIdRef = useRef<string | null>(null);
-  activeDocumentIdRef.current = activeDocumentId;
+  useEffect(() => { activeDocumentIdRef.current = activeDocumentId; }, [activeDocumentId]);
 
-  // Restore zoom when the active document changes
-  useEffect(() => {
-    if (!activeDocumentId) return;
+  const [zoomDocumentId, setZoomDocumentId] = useState(activeDocumentId);
+  if (zoomDocumentId !== activeDocumentId) {
+    setZoomDocumentId(activeDocumentId);
     const stored = storageGet<Record<string, number>>(KEYS.ZOOM);
-    if (stored?.[activeDocumentId]) setLeftZoom(stored[activeDocumentId]);
-  }, [activeDocumentId]);
+    setLeftZoom(activeDocumentId ? clampZoom(stored?.[activeDocumentId] ?? 1) : 1);
+  }
 
   const handleLeftZoomChange = useCallback((z: number) => {
     const clamped = clampZoom(z);
@@ -1474,8 +680,12 @@ export default function WorkspacePage() {
     [rightDoc, rightDocPage],
   );
 
-  // Reset page when the selected right doc changes
-  useEffect(() => { setRightDocPage(1); }, [rightDocId]);
+  // Reset before rendering a different right document.
+  const [pageRightDocId, setPageRightDocId] = useState(rightDocId);
+  if (pageRightDocId !== rightDocId) {
+    setPageRightDocId(rightDocId);
+    setRightDocPage(1);
+  }
 
   const rightDocDrawing = useMemo(
     () => (rightDoc ? getDrawing(rightDoc.id, rightDocPage) : undefined),
@@ -1510,7 +720,6 @@ export default function WorkspacePage() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [rightPanelTab, setRightPanelTab]   = useState<'notes' | 'ai' | 'chat'>('ai');
   const [navBarVisible, setNavBarVisible]   = useState(true);
-  const [voiceSheetOpen, setVoiceSheetOpen] = useState(false);
   const [searchOpen, setSearchOpen]         = useState(false);
   const [viewMode, setViewMode]             = useState<'page' | 'scroll'>(() => {
     if (typeof window === 'undefined') return 'page';
@@ -1518,76 +727,8 @@ export default function WorkspacePage() {
   });
   const [selectedText, setSelectedText]     = useState('');
 
-  // ── Resizable panels ──────────────────────────────────────────────────────
-  const SIDEBAR_MIN = 150;
-  const SIDEBAR_MAX = 350;
-  const SIDEBAR_DEFAULT = 256;
-  const RPANEL_MIN = 150;
-  const RPANEL_MAX = 300;
-  const RPANEL_DEFAULT = 220;
-
-  const [sidebarWidth, setSidebarWidth]       = useState(SIDEBAR_DEFAULT);
-  const [rightPanelWidth, setRightPanelWidth] = useState(RPANEL_DEFAULT);
-  const [isDraggingLeft, setIsDraggingLeft]   = useState(false);
-  const [isDraggingRight, setIsDraggingRight] = useState(false);
-  const dragStartXRef      = useRef(0);
-  const dragStartWidthRef  = useRef(0);
-  const dragSideRef        = useRef<'left' | 'right' | null>(null);
-
-  const startLeftDrag = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragStartXRef.current     = e.clientX;
-    dragStartWidthRef.current = sidebarWidth;
-    dragSideRef.current       = 'left';
-    setIsDraggingLeft(true);
-  }, [sidebarWidth]);
-
-  const startRightDrag = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    dragStartXRef.current     = e.clientX;
-    dragStartWidthRef.current = rightPanelWidth;
-    dragSideRef.current       = 'right';
-    setIsDraggingRight(true);
-  }, [rightPanelWidth]);
-
-  useEffect(() => {
-    if (!isDraggingLeft && !isDraggingRight) return;
-    const onMove = (e: MouseEvent) => {
-      const dx = e.clientX - dragStartXRef.current;
-      if (dragSideRef.current === 'left') {
-        const next = dragStartWidthRef.current + dx;
-        if (next < SIDEBAR_MIN) {
-          setSidebarOpen(false);
-          setSidebarWidth(SIDEBAR_DEFAULT);
-        } else {
-          setSidebarOpen(true);
-          setSidebarWidth(Math.min(next, SIDEBAR_MAX));
-        }
-      } else {
-        const next = dragStartWidthRef.current - dx;
-        if (next < RPANEL_MIN) {
-          setRightPanelOpen(false);
-          setRightPanelWidth(RPANEL_DEFAULT);
-        } else {
-          setRightPanelOpen(true);
-          setRightPanelWidth(Math.min(next, RPANEL_MAX));
-        }
-      }
-    };
-    const onUp = () => {
-      setIsDraggingLeft(false);
-      setIsDraggingRight(false);
-      dragSideRef.current = null;
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-  }, [isDraggingLeft, isDraggingRight]);
-
-  useEffect(() => { if (isRecording) setVoiceSheetOpen(true); }, [isRecording]);
+  const { sidebarWidth, rightPanelWidth, isDraggingLeft, isDraggingRight, startLeftDrag, startRightDrag } =
+    useResizablePanels(setSidebarOpen, setRightPanelOpen);
 
   // Track text selected anywhere on the page for the Translate feature
   useEffect(() => {
@@ -1607,9 +748,6 @@ export default function WorkspacePage() {
     currentVP?.type === 'blank' ? currentVP.blankPage.id
     : currentVP?.type === 'pdf' ? currentVP.pdfPage
     : 1;
-  const pageNotes = activeDocument
-    ? getNotesForPage(activeDocument.id, pageIdentifier)
-    : [];
   const pageKey = activeDocument ? `${activeDocument.id}:${pageIdentifier}` : '';
 
   // leftNotesKey is the canonical text-note key for the centred/active page.
@@ -1699,10 +837,10 @@ export default function WorkspacePage() {
     const key = `${activeDocument.id}:${pdfPage}`;
     setPageTextNotes((prev) => ({ ...prev, [key]: notes }));
     lastInteractedPdfPageRef.current = { docId: activeDocument.id, pdfPage };
-  }, [activeDocument]);
+  }, [activeDocument, setPageTextNotes]);
 
   // ── Undo + Clear handlers (pure extraction — see useUndoClear) ───────────
-  const { handleUndo, handleRedo, handleClear } = useUndoClear({
+  const { handleUndo, handleRedo } = useUndoClear({
     showSplit, activeSide, rightSideMode, viewMode, currentVP,
     pdfDrawingRef, blankDrawingRef, rightDocDrawingRef,
     blankUndoStacksRef, blankRedoStacksRef, resolveScrollBlankPageId,
@@ -1821,17 +959,15 @@ export default function WorkspacePage() {
     }
     let anyRestored = false;
     for (const f of files) {
-      const { isRestored } = await addDocument(f);
+      const { isRestored, id: docId } = await addDocument(f);
       if (isRestored) anyRestored = true;
       if (userIdRef.current) {
-        const docMap = storageGet<Record<string, string>>(KEYS.DOC_MAP) ?? {};
-        const docId = docMap[f.name];
         if (docId) {
-          upsertDocument({
+          await upsertDocument({
             id: docId,
             name: f.name.replace(/\.(pdf|pptx)$/i, ''),
             type: f.name.toLowerCase().endsWith('.pptx') ? 'pptx' : 'pdf',
-          });
+          }).catch(error => showToast(error instanceof Error ? error.message : 'Document registration failed; source retained locally.'));
         }
       }
     }
@@ -1840,9 +976,10 @@ export default function WorkspacePage() {
 
   // ── Remove document (with confirmation) ──────────────────────────────────
   const [confirmRemoveDocId, setConfirmRemoveDocId] = useState<string | null>(null);
-  const [showTour, setShowTour] = useState(() =>
-    typeof window !== 'undefined' ? shouldShowTour() : false
-  );
+  const docToRemove = documents.find((d) => d.id === confirmRemoveDocId);
+  const tourAvailable = useSyncExternalStore(subscribePreferences, shouldShowTour, () => false);
+  const [tourDismissed, setTourDismissed] = useState(false);
+  const showTour = tourAvailable && !tourDismissed;
 
   const handleRemoveDocument = useCallback((docId: string) => {
     setConfirmRemoveDocId(docId);
@@ -1850,6 +987,17 @@ export default function WorkspacePage() {
 
   const executeRemoveDocument = useCallback(async (docId: string) => {
     setConfirmRemoveDocId(null);
+    const owner = userIdRef.current;
+    if (!owner) return;
+    try {
+      for (const note of voiceNotes.filter(note => note.documentId === docId)) await retainRecoveryAudio(owner, note);
+      preserveDocumentBeforeRemoval(owner, docId, documents.find(doc => doc.id === docId)?.name ?? 'Recovered document');
+      await deleteAllDataForDocument(docId);
+      if (userIdRef.current !== owner) return;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Deletion failed; your local work is retained.');
+      return;
+    }
 
     // ── localStorage cleanup ────────────────────────────────────────────────
     const drawings = storageGet<Record<string, string>>(KEYS.DRAWINGS) ?? {};
@@ -1857,6 +1005,7 @@ export default function WorkspacePage() {
 
     const textNotes = storageGet<Record<string, TextNote[]>>(KEYS.TEXT_NOTES) ?? {};
     storageSet(KEYS.TEXT_NOTES, Object.fromEntries(Object.entries(textNotes).filter(([k]) => !k.startsWith(`${docId}:`))));
+    deletePendingDocumentNotes(docId);
 
     const storedBMs = storageGet<Record<string, Bookmark[]>>(KEYS.BOOKMARKS) ?? {};
     delete storedBMs[docId];
@@ -1883,31 +1032,26 @@ export default function WorkspacePage() {
     // ── In-memory state cleanup ─────────────────────────────────────────────
     setPageTextNotes((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith(`${docId}:`))));
     setBookmarks((prev) => prev.filter((b) => b.documentId !== docId));
-    deleteNotesForDocument(docId);
+    forgetNotesForDeletedDocument(docId);
     removePagesForDocument(docId);
     clearAllDrawings(docId);
     removePageImagesForDocument(docId);
 
     // Remove from document list — usePDF auto-switches active doc to the next one (or null)
-    removeDocument(docId);
-    showToast('Document deleted successfully.');
+    removeDocument(docId, true);
+    showToast('Document deleted. Local recovery and source file retained.');
 
-    // ── Supabase cleanup (background; errors are non-fatal since local state is clean) ──
-    if (userIdRef.current) {
-      try {
-        await deleteAllDataForDocument(docId);
-      } catch (err) {
-        console.error('[Delete] Supabase cleanup failed:', err);
-      }
-    }
-  }, [deleteNotesForDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast]);
+
+  }, [forgetNotesForDeletedDocument, removePagesForDocument, clearAllDrawings, removePageImagesForDocument, removeDocument, showToast, setPageTextNotes, documents, voiceNotes]);
 
   // ── Derived booleans ──────────────────────────────────────────────────────
   const isBlankPage  = currentVP?.type === 'blank';
   const isPPTX       = activeDocument?.type === 'pptx';
   const hasDocument  = !!activeDocument;
-  hasDocumentRef.current = hasDocument;
-  isPPTXRef.current      = !!isPPTX;
+  useEffect(() => {
+    hasDocumentRef.current = hasDocument;
+    isPPTXRef.current = !!isPPTX;
+  }, [hasDocument, isPPTX]);
 
   // ── Study room modal ──────────────────────────────────────────────────────
   const [roomModal, setRoomModal] = useState<'idle' | 'creating' | 'done'>('idle');
@@ -1948,7 +1092,7 @@ export default function WorkspacePage() {
   // ── Add image to current PDF page ────────────────────────────────────────
   const handleAddImageToPage = useCallback((dataUrl: string) => {
     pdfDrawingRef.current?.insertImage?.(dataUrl);
-  }, []);
+  }, [pdfDrawingRef]);
 
   // ── Add image as a new blank page ─────────────────────────────────────────
   const handleAddImageAsNewPage = useCallback((dataUrl: string) => {
@@ -1986,12 +1130,12 @@ export default function WorkspacePage() {
     clearAllDrawings(activeDocument.id);
     pdfDrawingRef.current?.clear();
     showToast('All drawings cleared.');
-  }, [activeDocument, clearAllDrawings, showToast]);
+  }, [activeDocument, clearAllDrawings, showToast, pdfDrawingRef]);
 
   // ── Insert image (blank page canvas) ─────────────────────────────────────
   const handleInsertImage = useCallback((dataUrl: string) => {
     blankDrawingRef.current?.insertImage?.(dataUrl);
-  }, []);
+  }, [blankDrawingRef]);
 
   // ── Active-side tool props (routed to the correct side state) ─────────────
   const atTool          = showSplit && activeSide === 'right' ? rightTool          : leftTool;
@@ -2004,12 +1148,14 @@ export default function WorkspacePage() {
   const atSetStrokeSize = showSplit && activeSide === 'right' ? setRightStrokeSize : setLeftStrokeSize;
 
   // Keep keyboard-handler refs in sync
-  showSplitRef.current     = showSplit;
-  activeSideRef.current    = activeSide;
-  rightSideModeRef.current = rightSideMode;
-  currentVPRef.current     = currentVP;
-  leftZoomRef.current      = leftZoom;
-  rightZoomRef.current     = rightZoom;
+  useEffect(() => {
+    showSplitRef.current     = showSplit;
+    activeSideRef.current    = activeSide;
+    rightSideModeRef.current = rightSideMode;
+    currentVPRef.current     = currentVP;
+    leftZoomRef.current      = leftZoom;
+    rightZoomRef.current     = rightZoom;
+  }, [showSplit, activeSide, rightSideMode, currentVP, leftZoom, rightZoom]);
 
   // ── Text notes helpers ────────────────────────────────────────────────────
   // leftNotesKey, rightBlankNotesKey, rightDocNotesKey, handleLeftNotesChange,
@@ -2022,7 +1168,7 @@ export default function WorkspacePage() {
       ...prev,
       [pageKey]: (prev[pageKey] ?? []).filter((n) => n.id !== noteId),
     }));
-  }, []);
+  }, [setPageTextNotes]);
 
   // handleRightBlankNotesChange / handleRightDocNotesChange now come from
   // useSinglePageMode (step 3, declared above near useUndoClear).
@@ -2181,6 +1327,8 @@ export default function WorkspacePage() {
           <AvatarDropdown email={userEmail} displayName={userDisplayName} avatarUrl={userAvatarUrl} isVip={isVip} />
         </div>
       </header>
+
+      <DocumentRecoveryPanel key={userId ?? 'signed-out'} ownerId={userId} voiceNotes={voiceNotes} openCopy={addDocument} />
 
       {/* Shortcuts modal */}
       {shortcutsOpen && <HelpModal onClose={() => setShortcutsOpen(false)} />}
@@ -2355,7 +1503,7 @@ export default function WorkspacePage() {
                                 setExportMenuOpen(false);
                                 if (!activeDocument) return;
                                 const { exportAsPDF, exportAsDocx } = await import('@/lib/exportNotes');
-                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id };
+                                const data = { docName: activeDocument.name, pageTextNotes, bookmarks, docId: activeDocument.id, pageOrder: virtualSequence.map((page) => page.type === 'pdf' ? String(page.pdfPage) : page.blankPage.id) };
                                 if (ext === 'pdf') exportAsPDF(data);
                                 else exportAsDocx(data);
                               }}
@@ -2703,7 +1851,6 @@ export default function WorkspacePage() {
                     // old VoiceNotesSheet recorder is now hidden in workspace).
                     if (isRecording) { stopRecording(); return; }
                     startRecording(activeDocument.id, pageIdentifier);
-                    setVoiceSheetOpen(true);
                   } : undefined}
                   isRecording={isRecording}
                   onUndo={handleUndo}
@@ -2810,7 +1957,6 @@ export default function WorkspacePage() {
                     // so clicking it must actually stop.
                     if (isRecording) { stopRecording(); return; }
                     startRecording(activeDocument.id, pageIdentifier);
-                    setVoiceSheetOpen(true);
                   } : undefined}
                   isRecording={isRecording}
                 />
@@ -2931,9 +2077,7 @@ export default function WorkspacePage() {
       })()}
 
       {/* ══ Remove document confirmation ══ */}
-      {confirmRemoveDocId && (() => {
-        const docToRemove = documents.find((d) => d.id === confirmRemoveDocId);
-        return (
+      {confirmRemoveDocId && (
           <div
             onClick={() => setConfirmRemoveDocId(null)}
             style={{
@@ -2984,8 +2128,7 @@ export default function WorkspacePage() {
               </div>
             </div>
           </div>
-        );
-      })()}
+      )}
 
       {/* ══ Study Room modal ══ */}
       {roomModal !== 'idle' && (
@@ -3090,7 +2233,7 @@ export default function WorkspacePage() {
       )}
 
       {/* ══ Onboarding tour ══ */}
-      {showTour && <OnboardingTour onComplete={() => setShowTour(false)} />}
+      {showTour && <OnboardingTour onComplete={() => setTourDismissed(true)} />}
 
       {/* ══ Toast ══ */}
       {toast && (

@@ -37,7 +37,15 @@ export async function clearLocalUserData(): Promise<void> {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (!key) continue;
+      // Referral retries contain only a code and outcome, scoped by account.
+      // Keep failed intent across logout; replay checks the current identity.
+      if (key.startsWith('studysync_referral_recovery_')) continue;
       if (key.startsWith('studysync_') || NON_PREFIX_KEYS.includes(key)) {
+        // Owner-scoped pending metadata must survive sign-out so a completed
+        // upload or cleanup is not abandoned. No audio, tokens or signed playback
+        // URLs are stored here; replay verifies the owner before every phase.
+        if (key.startsWith('studysync_recording_recovery_')) continue;
+        if (['studysync_document_outbox_', 'studysync_document_recovery_', 'studysync_document_generation_'].some(prefix => key.startsWith(prefix))) continue;
         toRemove.push(key);
       }
     }

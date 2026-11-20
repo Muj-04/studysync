@@ -882,15 +882,18 @@ export default function CommunityPage() {
 
   // Feed
   useEffect(() => {
+    let cancelled = false;
     const followingArr = [...followingIds];
     const serverTab = TABS.find((t) => t.id === tab)?.serverTab ?? 'latest';
     fetchCommunityPosts({
       tab: serverTab,
       followingIds: tab === 'following' ? followingArr : undefined,
     }).then((data) => {
+      if (cancelled) return;
       setPosts(data);
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [tab, followingIds, feedVersion]);
 
   // Handlers

@@ -1,3 +1,4 @@
+import { AI_TEXT_LIMITS, AI_CHAT_MESSAGE_LIMIT } from '@/lib/aiInputLimits';
 import { createClient } from '@/lib/supabase/client';
 
 /**
@@ -15,12 +16,16 @@ export async function callAI(action: 'summary', text: string): Promise<string>;
 export async function callAI(action: 'translate', text: string, language: string): Promise<string>;
 export async function callAI(action: 'explain', text: string): Promise<string>;
 export async function callAI(action: 'flashcards', text: string): Promise<string>;
-export async function callAI(action: string, text: string, language?: string): Promise<string> {
-  return postAI({ action, text, language });
+export async function callAI(action: Exclude<keyof typeof AI_TEXT_LIMITS, 'chat'>, text: string, language?: string): Promise<string> {
+  return postAI({ action, text: text.slice(0, AI_TEXT_LIMITS[action]), language });
 }
 
 export async function callAIChat(pageText: string, message: string): Promise<string> {
-  return postAI({ action: 'chat', text: pageText, message });
+  return postAI({
+    action: 'chat',
+    text: pageText.slice(0, AI_TEXT_LIMITS.chat),
+    message: message.slice(0, AI_CHAT_MESSAGE_LIMIT),
+  });
 }
 
 // ── Shared transport ──────────────────────────────────────────────────────────

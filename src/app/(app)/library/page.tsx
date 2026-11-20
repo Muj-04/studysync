@@ -1,4 +1,5 @@
 'use client';
+import { useClientReady } from '@/hooks/useClientReady';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   FileText, Search, Trash2, Upload, X, Star, Tag, Clock,
@@ -692,17 +693,20 @@ export default function LibraryPage() {
   const sortRef = useRef<HTMLDivElement>(null);
   const tagRef  = useRef<HTMLDivElement>(null);
 
-  // Hydrate view preference from localStorage
-  useEffect(() => {
+  const clientReady = useClientReady();
+  const [viewRestored, setViewRestored] = useState(false);
+  if (clientReady && !viewRestored) {
+    setViewRestored(true);
     try {
       const stored = localStorage.getItem(VIEW_KEY);
       if (stored === 'grid' || stored === 'list') setView(stored);
-    } catch { /* private mode etc. */ }
-  }, []);
+    } catch { /* unavailable storage */ }
+  }
 
   useEffect(() => {
-    try { localStorage.setItem(VIEW_KEY, view); } catch { /* */ }
-  }, [view]);
+    if (!viewRestored) return;
+    try { localStorage.setItem(VIEW_KEY, view); } catch { /* unavailable storage */ }
+  }, [view, viewRestored]);
 
   // Fetch
   useEffect(() => {
@@ -741,7 +745,13 @@ export default function LibraryPage() {
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return;
     const id = deleteTarget.id;
-    await deleteLibraryDocument(id);
+    try {
+      await deleteLibraryDocument(id);
+    } catch (error) {
+      console.error('Document deletion failed', error);
+      alert('The document could not be fully deleted. Please try again.');
+      return;
+    }
     setDocs((prev) => prev.filter((d) => d.id !== id));
     setTagsMap((prev) => { const next = { ...prev }; delete next[id]; return next; });
     setStudyMap((prev) => { const next = { ...prev }; delete next[id]; return next; });

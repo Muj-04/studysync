@@ -38,7 +38,7 @@ const docCache = new Map<string, Promise<PDFDocumentProxy>>();
 async function getDocProxy(url: string): Promise<PDFDocumentProxy> {
   if (!docCache.has(url)) {
     const pdfjs = await getPDFJS();
-    docCache.set(url, pdfjs.getDocument(url).promise);
+    docCache.set(url, pdfjs.getDocument({ url }).promise);
   }
   return docCache.get(url)!;
 }
@@ -183,7 +183,7 @@ function VoiceNoteBadge({
         </button>
       )}
       <button
-        onClick={(e) => { e.stopPropagation(); isRecordingHere ? onRecordStop() : onRecordStart(); }}
+        onClick={(e) => { e.stopPropagation(); if (isRecordingHere) onRecordStop(); else onRecordStart(); }}
         title={isRecordingHere ? 'Stop recording' : 'Record voice note'}
         style={{
           ...pillBase,
@@ -212,7 +212,7 @@ interface PageItemProps {
   isRecordingHere: boolean;
   onRecordStart: () => void;
   onRecordStop: () => void;
-  pageRefsMap: Map<number, HTMLDivElement>;
+  pageRefsMap: React.RefObject<Map<number, HTMLDivElement>>;
   index: number;
   tool: Tool;
   penType: PenType;
@@ -319,8 +319,9 @@ const ScrollPageItem = memo(function ScrollPageItem({
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return;
-    pageRefsMap.set(index, el);
-    return () => { pageRefsMap.delete(index); };
+    const pages = pageRefsMap.current;
+    pages.set(index, el);
+    return () => { pages.delete(index); };
   }, [index, pageRefsMap]);
 
   // Initial lazy-load observer — triggers first render when within 600px
@@ -353,7 +354,6 @@ const ScrollPageItem = memo(function ScrollPageItem({
     obs.observe(el);
     return () => obs.disconnect();
   // vp.type is stable per page; re-running on type change is intentional
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vp.type]);
 
   // PDF render — nearViewport added so pages re-render when returning to window
@@ -506,19 +506,18 @@ const ScrollPageItem = memo(function ScrollPageItem({
   // to the applied set in stopDraw, so this loop is a no-op for them
   // (avoids the flash from a full clear-and-replay).
   useEffect(() => {
-    if (!strokeMode || !strokes || strokes.length === 0) return;
-    const drawCanvas = drawCanvasRef.current;
+    if (!strokeMode || !strokes?.length || isDrawing.current) return;
+    const canvas = drawCanvasRef.current;
     const dims = canvasDimsRef.current;
-    if (!drawCanvas || !dims) return;
-    const ctx = drawCanvas.getContext('2d');
-    if (!ctx) return;
-    const { w, h } = dims;
-    for (const s of strokes) {
-      if (appliedStrokeIdsRef.current.has(s.id)) continue;
-      const scaleX = w / (s.canvasW || w);
-      const scaleY = h / (s.canvasH || h);
-      applyStrokeToCtx(ctx, s, scaleX, scaleY);
-      appliedStrokeIdsRef.current.add(s.id);
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !dims || !ctx) return;
+    // Erasers make ordering significant. A confirmed stroke may move before
+    // an already-painted optimistic stroke, so replay the authoritative order.
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    appliedStrokeIdsRef.current = new Set();
+    for (const stroke of strokes) {
+      applyStrokeToCtx(ctx, stroke, dims.w / (stroke.canvasW || dims.w), dims.h / (stroke.canvasH || dims.h));
+      appliedStrokeIdsRef.current.add(stroke.id);
     }
   }, [strokes, strokeMode]);
 
@@ -1138,7 +1137,7 @@ export default function PDFScrollViewer({
             isRecordingHere={isRecordingHere}
             onRecordStart={() => onRecordStart(document.id, pageId)}
             onRecordStop={onRecordStop}
-            pageRefsMap={pageRefsMap.current}
+            pageRefsMap={pageRefsMap}
             index={idx}
             tool={tool}
             penType={penType}

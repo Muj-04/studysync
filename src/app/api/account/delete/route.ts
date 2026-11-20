@@ -1,3 +1,4 @@
+import { apiErrorResponse, bearerToken } from '@/lib/api/request';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
@@ -54,7 +55,11 @@ async function removeFiles(
 }
 
 export async function POST(req: NextRequest) {
-  const token = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  try { return await handlePost(req); } catch (error) { return apiErrorResponse(error); }
+}
+
+async function handlePost(req: NextRequest) {
+  const token = bearerToken(req);
   if (!token) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

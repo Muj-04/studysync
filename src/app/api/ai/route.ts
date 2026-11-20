@@ -1,9 +1,13 @@
+import { AI_TEXT_LIMITS, AI_CHAT_MESSAGE_LIMIT, AI_LANGUAGE_LIMIT, AI_REQUEST_MAX_BYTES } from '@/lib/aiInputLimits';
+import { apiErrorResponse, bearerToken, readJsonObject } from '@/lib/api/request';
+import { reserveAiRequest, refundAiRequest, completeAiRequest } from '@/lib/aiQuota';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { PLAN_LIMITS, PLAN_LABELS, nextUpgradePlan, effectivePlanLimits, type Plan } from '@/lib/planLimits';
 
 export const runtime = 'nodejs';
+export const maxDuration = 120;
 
 // ── In-memory rate limiter (30 req/min per IP) ────────────────────────────────
 const WINDOW_MS  = 60_000;
@@ -36,14 +40,13 @@ function getAdmin() {
   );
 }
 
-async function recordSuccessfulRequest(admin: ReturnType<typeof getAdmin>, userId: string, month: string) {
-  const { error } = await admin.rpc('increment_ai_usage', { p_user_id: userId, p_month: month });
-  if (error) console.error('[AI usage] increment failed:', error.message);
-}
-
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  try { return await handlePost(req); } catch (error) { return apiErrorResponse(error); }
+}
+
+async function handlePost(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY is not configured on this server' }, { status: 503 });
   }
@@ -57,7 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Auth — require Bearer token to enforce per-user monthly limit
-  const bearer = req.headers.get('authorization')?.replace('Bearer ', '');
+  const bearer = bearerToken(req);
   if (!bearer) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
   }
@@ -70,60 +73,45 @@ export async function POST(req: NextRequest) {
 
   // Per-plan monthly AI limit check
   const month = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-  const { data: profile } = await admin
+  const { data: profile, error: profileError } = await admin
     .from('profiles')
     .select('plan, is_vip')
     .eq('id', user.id)
     .maybeSingle();
 
+  if (profileError) throw profileError;
+
   const isVip       = profile?.is_vip ?? false;
-  const plan        = (profile?.plan ?? 'free') as Plan;
+  const plan: Plan = profile?.plan === 'pro' || profile?.plan === 'premium' ? profile.plan : 'free';
   const monthlyLimit = effectivePlanLimits(plan, isVip).aiRequestsPerMonth;
 
-  const { data: usageRow } = await admin
-    .from('ai_usage')
-    .select('count')
-    .eq('user_id', user.id)
-    .eq('month', month)
-    .maybeSingle();
-
-  const currentCount = usageRow?.count ?? 0;
-
-  if (!isVip && currentCount >= monthlyLimit) {
-    const next = nextUpgradePlan(plan);
-    const upgradeHint = next
-      ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerMonth} requests/month.`
-      : '';
-    return NextResponse.json(
-      { error: `Monthly AI limit reached (${currentCount}/${monthlyLimit} on ${PLAN_LABELS[plan]} plan).${upgradeHint}` },
-      { status: 429 },
-    );
-  }
+  let reservation: string | null = null;
 
   // Process the AI request
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 60_000, maxRetries: 0 });
   try {
-    const { action, text, language, message: chatMessage } = await req.json();
+    const { action, text, language, message: chatMessage } = await readJsonObject(req, AI_REQUEST_MAX_BYTES);
 
     if (action !== 'chat' && (!text || typeof text !== 'string')) {
       return NextResponse.json({ error: 'Missing text' }, { status: 400 });
     }
 
+    const sourceText = typeof text === 'string' ? text : '';
     let prompt: string;
 
     if (action === 'chat') {
       if (!chatMessage || typeof chatMessage !== 'string') {
         return NextResponse.json({ error: 'Missing message' }, { status: 400 });
       }
-      const pageContext = text?.trim()
-        ? `Current page content:\n${(text as string).slice(0, 6000)}\n\n`
+      const pageContext = typeof text === 'string' && text.trim()
+        ? `Current page content:\n${text.slice(0, AI_TEXT_LIMITS.chat)}\n\n`
         : 'No document is open.\n\n';
       prompt =
         'You are a helpful AI assistant. The user is currently studying with a PDF tool. ' +
         'Answer any question they ask — whether about the document, a general topic, math, coding, or anything else. ' +
         'If document content is provided below, use it as context when relevant, but never refuse a question just because it is off-topic.\n\n' +
         pageContext +
-        `User: ${chatMessage.slice(0, 1000)}\n\n` +
+        `User: ${chatMessage.slice(0, AI_CHAT_MESSAGE_LIMIT)}\n\n` +
         'Guidelines:\n' +
         '- For summary requests: use bullet points starting with •\n' +
         '- For flashcard requests: format as Q: [question] / A: [answer], one per line\n' +
@@ -134,30 +122,21 @@ export async function POST(req: NextRequest) {
         'Generate 5 to 10 flashcard question-answer pairs from the text below. ' +
         'Return ONLY a JSON array with objects containing "question" and "answer" string fields. ' +
         'No markdown fences, no extra text, just the raw JSON array.\n\n' +
-        text.slice(0, 6000);
+        sourceText.slice(0, AI_TEXT_LIMITS.flashcards);
 
-      const msg = await client.messages.create({
-        model: 'claude-haiku-4-5',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      });
-      const raw = (msg.content[0] as { type: string; text: string }).text ?? '[]';
-      // Increment counter for all non-VIP plans (fire-and-forget)
-      await recordSuccessfulRequest(admin, user.id, month);
-      return NextResponse.json({ result: raw });
     } else if (action === 'summary') {
       prompt =
         'Summarize the following text in 3–5 concise bullet points. ' +
         'Return ONLY the bullet points, one per line, each starting with "• ". No headers or extra text.\n\n' +
-        text.slice(0, 8000);
+        sourceText.slice(0, AI_TEXT_LIMITS.summary);
     } else if (action === 'translate') {
-      if (!language || typeof language !== 'string') {
+      if (typeof language !== 'string' || !language.trim() || language.length > AI_LANGUAGE_LIMIT) {
         return NextResponse.json({ error: 'Missing language' }, { status: 400 });
       }
       prompt =
         `Translate the following text to ${language}. ` +
         'Return ONLY the translation, no explanations or notes.\n\n' +
-        text.slice(0, 2000);
+        sourceText.slice(0, AI_TEXT_LIMITS.translate);
     } else if (action === 'explain') {
       prompt =
         'Explain this concept in simple terms with 2-3 practical examples. Be concise and clear.\n' +
@@ -169,9 +148,16 @@ export async function POST(req: NextRequest) {
         '[example 2]\n' +
         '[example 3]\n\n' +
         'Concept to explain:\n' +
-        text.slice(0, 2000);
+        sourceText.slice(0, AI_TEXT_LIMITS.explain);
     } else {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+
+    reservation = await reserveAiRequest(admin, user.id, month, monthlyLimit);
+    if (!reservation) {
+      const next = nextUpgradePlan(plan);
+      const upgradeHint = next ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerMonth} requests/month.` : '';
+      return NextResponse.json({ error: `Monthly AI limit reached (${monthlyLimit}/${monthlyLimit} on ${PLAN_LABELS[plan]} plan).${upgradeHint}` }, { status: 429 });
     }
 
     const message = await client.messages.create({
@@ -182,12 +168,12 @@ export async function POST(req: NextRequest) {
 
     const result = (message.content[0] as { type: string; text: string }).text ?? '';
 
-    // Increment counter for all non-VIP plans (fire-and-forget — don't block response)
-    await recordSuccessfulRequest(admin, user.id, month);
+    // Commit quota before returning a successful response.
+    await completeAiRequest(admin, reservation);
 
     return NextResponse.json({ result });
   } catch (err) {
-    const message = err instanceof Error ? err.message.slice(0, 200) : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (reservation) await refundAiRequest(admin, reservation).catch(console.error);
+    return apiErrorResponse(err);
   }
 }
