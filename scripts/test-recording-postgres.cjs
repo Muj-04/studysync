@@ -15,16 +15,32 @@ base=base.replace(/CREATE TABLE public.document_lifetimes[\s\S]*?END\$\$;/,'');
 base+='\n'+fs.readFileSync('tests/fixtures/recording-deployed-policies.sql','utf8');
 base+='\n'+fs.readFileSync('tests/fixtures/document-generation-base.sql','utf8').split('\n').filter(line=>/^CREATE TABLE /.test(line)&&!/^CREATE TABLE (profiles|documents|voice_notes)\(/.test(line)).join('\n');
 base+='\nCREATE TABLE profiles(id uuid PRIMARY KEY,plan text,is_vip boolean);GRANT SELECT,INSERT,UPDATE,DELETE ON documents TO authenticated;';
+// Deployed free-launch quota is RESTRICTIVE: tracked uploads must also satisfy it.
+base+='\n'+fs.readFileSync('tests/fixtures/launch-quota-deployed.sql','utf8');
 // Reproduce the observed legacy staging shape on disposable local data only.
 base+="\nALTER TABLE voice_notes ALTER COLUMN id TYPE text USING id::text;ALTER TABLE room_voice_notes ALTER COLUMN id TYPE text USING id::text;ALTER TABLE study_sessions ALTER COLUMN document_id SET NOT NULL;INSERT INTO study_sessions(user_id,document_id) VALUES('11111111-1111-4111-8111-111111111111','doc');";
 sql('DROP SCHEMA IF EXISTS recording_private CASCADE;DROP SCHEMA public CASCADE;DROP SCHEMA IF EXISTS auth CASCADE;DROP SCHEMA IF EXISTS storage CASCADE;CREATE SCHEMA public;'+base);
 sql(fs.readFileSync(schemaPath,'utf8'));sql(fs.readFileSync('supabase/migrations/20261028203014_server_recording_operations.sql','utf8'));
+for(const extra of (process.env.RECORDING_TEST_AFTER_MIGRATIONS??'supabase/migrations/20261120190000_launch_quota_tracked_recordings.sql').split(',').filter(Boolean))sql(fs.readFileSync(extra,'utf8'));
 const owner='11111111-1111-4111-8111-111111111111';
 const auth=`SET request.storage.operation='object.upload';SET request.jwt.claim.sub='${owner}';SET request.jwt.claim.role='authenticated';SET ROLE authenticated;`;
 const service=`SET request.jwt.claim.role='service_role';SET ROLE service_role;`;
 const note='55555555-5555-4555-8555-555555555555';
 function held(input){const child=spawn(bin,args,{stdio:['pipe','pipe','pipe'],env:childEnv});let out='',err='';let ready;const locked=new Promise(resolve=>ready=resolve);child.stdout.on('data',d=>{out+=d;if(out.includes('LOCK_READY'))ready();});child.stderr.on('data',d=>err+=d);const done=new Promise((resolve,reject)=>child.on('close',code=>code?reject(Error(err)):resolve(out)));child.stdin.end(input);return{locked,done};}
 (async()=>{
+ // Deployed free-launch quota must admit only the caller's own pending tracked path.
+ if(process.env.RECORDING_TEST_AFTER_MIGRATIONS===undefined){
+  const quotaNote='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const q=JSON.parse(sql(auth+`SELECT begin_recording_operation('${quotaNote}','document','doc','33333333-3333-4333-8333-333333333333','1',2,'audio/webm',5,'Quota',now(),'${owner}');`));
+  assert.equal(sql(`SELECT launch_upload_fits('${owner}','voice-notes','${q.object_path}','{"size":5}');`),'t');
+  assert.equal(sql(`SELECT launch_upload_fits('22222222-2222-4222-8222-222222222222','voice-notes','${q.object_path}','{"size":5}');`),'f','another account cannot use this operation path');
+  assert.equal(sql(`SELECT launch_upload_fits('${owner}','voice-notes','operations/'||gen_random_uuid()||'/audio.webm','{"size":5}');`),'f','untracked operation path');
+  assert.equal(sql(`SELECT launch_upload_fits('${owner}','voice-notes','${q.object_path}','{"size":10485761}');`),'f','per-file maximum still applies');
+  sql(auth+`SELECT request_recording_deletion('${q.id}');`);
+  assert.equal(sql(`SELECT launch_upload_fits('${owner}','voice-notes','${q.object_path}','{"size":5}');`),'f','cancelled operation path');
+  sql(`UPDATE recording_private.operations SET next_attempt_at=now()+interval '1 day' WHERE id='${q.id}';`);
+  console.log('PostgreSQL: deployed launch quota admits only own pending tracked recordings.');
+ }
  // Repeatable-read can retain a snapshot from before an independently accepted
  // operation. Bulk cancellation must reject that transaction, never acknowledge 0.
  const rr=spawn(bin,args,{stdio:['pipe','pipe','pipe'],env:childEnv});let rrOut='',rrErr='',rrReady;
