@@ -9,7 +9,7 @@ function mount(t, remove) {
   const {useVoiceNotes}=loadSource('src/hooks/useVoiceNotes.ts',{
     react:h.react,
     '@/lib/storage':{KEYS:{VOICE_NOTES:'notes'},storageGet:()=>null,storageSet:()=>true},
-    '@/lib/supabase/client':{createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'alice'}}})}})},
+    '@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client':{createClient:()=>({auth:{getUser:async()=>({data:{user:{id:'alice'}}})}})},
     '@/lib/supabase/db':{fetchVoiceNotes:async()=>[{id:'note',documentId:'doc',pageNumber:1,duration:1,audioUrl:'https://audio.invalid/note',timestamp:'2026-10-28T00:00:00Z'}],deleteVoiceNote:remove,deleteAllVoiceNotesForDocument:remove},
   });
   const render=()=>h.render(useVoiceNotes); render();
@@ -30,4 +30,13 @@ test('failed bulk personal deletion retains local playback for retry',async t=>{
   let fail=true;const s=mount(t,async()=>{if(fail)throw Error('offline');});await tick();
   await s.render().deleteNotesForDocument('doc');assert.equal(s.render().notes.length,1);
   fail=false;await s.render().deleteNotesForDocument('doc');assert.equal(s.render().notes.length,0);
+});
+
+test('acknowledged parent deletion clears local notes without another remote mutation',async t=>{
+  let remoteCalls=0;
+  const s=mount(t,async()=>{remoteCalls++;throw Error('parent is tombstoned');});await tick();
+  s.render().forgetNotesForDeletedDocument('doc');
+  assert.equal(s.render().notes.length,0);
+  assert.equal(remoteCalls,0);
+  assert.equal(s.alerts.length,0);
 });

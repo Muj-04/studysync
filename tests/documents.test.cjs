@@ -80,3 +80,18 @@ test('document deletion removes pending text writes while preserving other docum
     assert.deepEqual(values.notes_pending_owner, { 'other:1': [{ content: 'keep' }] });
   } finally { global.localStorage = original; }
 });
+
+
+test('legacy fingerprint repair remains bound to its original owner after an account switch', async () => {
+  let owner='owner-a';const writes=[];
+  const {identifyPdf}=loadSource('src/lib/documentIdentity.ts',{
+    '@/lib/supabase/client':{createClient:()=>({auth:{getUser:async()=>({data:{user:{id:owner}}})}})},
+    '@/lib/pdfStore':{
+      getAllStoredDocIds:async expected=>{assert.equal(expected,'owner-a');return['old'];},
+      getStoredPdf:async(_id,expected)=>{assert.equal(expected,'owner-a');owner='owner-b';return{blob:new Blob(['old bytes']),filename:'old.pdf'};},
+      savePdfBlob:async(_id,_blob,_metadata,expected)=>{assert.equal(expected,'owner-a');if(owner!==expected)throw Error('Account changed');writes.push(owner);},
+    },
+  });
+  await assert.rejects(identifyPdf(Object.assign(new Blob(['new bytes']),{name:'new.pdf'}),undefined,'owner-a'),/Account changed/);
+  assert.deepEqual(writes,[]);
+});

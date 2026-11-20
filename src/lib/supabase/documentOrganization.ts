@@ -1,3 +1,4 @@
+import { requireDocumentGeneration, assertDocumentOwner } from './documentProtocol';
 import { sb, userId } from './dbShared';
 
 // ── Document Tags ─────────────────────────────────────────────────────────────
@@ -16,10 +17,13 @@ export async function getAllUserTags(): Promise<string[]> {
 
 export async function addDocumentTag(docId: string, tag: string): Promise<void> {
   const uid = await userId(); if (!uid) return;
-  await sb().from('document_tags').upsert(
-    { user_id: uid, document_id: docId, tag },
+  const document_generation = await requireDocumentGeneration(uid, docId);
+  await assertDocumentOwner(uid);
+  const { error } = await sb().from('document_tags').upsert(
+    { user_id: uid, document_id: docId, document_generation, tag },
     { onConflict: 'user_id,document_id,tag', ignoreDuplicates: true },
   );
+  if (error) throw error;
 }
 
 export async function removeDocumentTag(docId: string, tag: string): Promise<void> {
@@ -54,7 +58,10 @@ export async function toggleFavorite(docId: string): Promise<boolean> {
     await sb().from('document_favorites').delete().eq('user_id', uid).eq('document_id', docId);
     return false;
   }
-  await sb().from('document_favorites').insert({ user_id: uid, document_id: docId });
+  const document_generation = await requireDocumentGeneration(uid, docId);
+  await assertDocumentOwner(uid);
+  const { error } = await sb().from('document_favorites').insert({ user_id: uid, document_id: docId, document_generation });
+  if (error) throw error;
   return true;
 }
 

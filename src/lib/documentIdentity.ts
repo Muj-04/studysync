@@ -7,14 +7,15 @@ export async function fingerprintPdf(blob: Blob): Promise<string> {
 }
 
 /** File bytes determine identity; a filename alone must never replace a document. */
-export async function identifyPdf(file: File, explicitId?: string) {
+export async function identifyPdf(file: File, explicitId?: string, expectedOwner?: string) {
   const fingerprint = await fingerprintPdf(file);
   const { data: { user }, error } = await createClient().auth.getUser();
   if (error || !user) throw new Error('Sign in to open a document');
+  if (expectedOwner && user.id !== expectedOwner) throw new Error('Account changed before opening this document');
   const identity = await fingerprintPdf(new Blob([`${user.id}:${fingerprint}`]));
   const contentId = `${identity.slice(0, 8)}-${identity.slice(8, 12)}-8${identity.slice(13, 16)}-a${identity.slice(17, 20)}-${identity.slice(20, 32)}`;
   if (explicitId) {
-    const existing = await getStoredPdf(explicitId);
+    const existing = await getStoredPdf(explicitId, user.id);
     if (existing) {
       // Compare actual bytes before replacing any blob, even if cached metadata exists.
       if (await fingerprintPdf(existing.blob) !== fingerprint) {
@@ -26,11 +27,11 @@ export async function identifyPdf(file: File, explicitId?: string) {
     }
     return { id: explicitId, fingerprint };
   }
-  for (const id of await getAllStoredDocIds()) {
-    const stored = await getStoredPdf(id);
+  for (const id of await getAllStoredDocIds(user.id)) {
+    const stored = await getStoredPdf(id, user.id);
     if (!stored) continue;
     const existingFingerprint = stored.fingerprint ?? await fingerprintPdf(stored.blob);
-    if (!stored.fingerprint) await savePdfBlob(id, stored.blob, { filename: stored.filename, fingerprint: existingFingerprint });
+    if (!stored.fingerprint) await savePdfBlob(id, stored.blob, { filename: stored.filename, fingerprint: existingFingerprint }, user.id);
     if (existingFingerprint === fingerprint) return { id, fingerprint };
   }
   // Stable per account across devices, without uploading any PDF bytes.

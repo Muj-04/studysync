@@ -18,6 +18,8 @@ function hydrationEffect(overrides = {}) {
   assert.ok(effect, 'workspace document hydration effect exists');
   const writes = [];
   const deps = {
+    beginDocumentHydration: () => ({ accept() {}, cancel() {}, complete() {} }),
+    commitHydration: () => {},
     activeDocumentId: 'doc', activeDocument: { id: 'doc', name: 'Document', type: 'pdf', pageCount: 1 }, userId: 'owner',
     upsertDocument: async () => 'doc', updateDocumentId: (...args) => writes.push(['remap', ...args]),
     fetchDrawings: async () => ({}), fetchBlankPages: async () => [], fetchTextNotes: async () => ({}),
@@ -91,13 +93,15 @@ test('real bookmark read failure cannot replace cloud bookmarks with stale cache
   let effect;
   function visit(node) {
     if (ts.isCallExpression(node) && node.expression.getText(source) === 'useEffect'
-        && node.arguments[0]?.getText(source).includes('fetchBookmarks(activeDocumentId)')) effect = node.arguments[0];
+        && node.arguments[0]?.getText(source).includes('fetchBookmarks(activeDocumentId,')) effect = node.arguments[0];
     ts.forEachChild(node, visit);
   }
   visit(source);
   assert.ok(effect);
   const writes = [];
   const deps = {
+    beginDocumentHydration: () => ({ accept() {}, cancel() {}, complete() {} }),
+    commitHydration: () => {},
     activeDocumentId: 'doc', userId: 'owner', fetchBookmarks, bookmarkEditVersions: { current: new Map() },
     KEYS: { BOOKMARKS: 'bookmarks' }, storageGet: () => ({ doc: [{ id: 'stale-bookmark' }] }),
     setBookmarks: marks => writes.push(['state', marks]), dbSaveBookmarks: async (...args) => writes.push(['save', ...args]),

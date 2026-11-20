@@ -143,12 +143,9 @@ test('deleting a document clears only its pending blank-page hydration marker', 
 });
 
 test('a failed blank-page fetch rejects instead of masquerading as an empty collection', async () => {
-  const { fetchBlankPages } = loadSource('src/lib/supabase/documentAnnotations.ts', {
-    './dbShared': { userId: async () => 'owner', sb: () => ({
-      from: () => ({ select: () => ({ match: async () => ({ data: null, error: { message: 'offline' } }) }) }),
-    }) },
-  });
-  await assert.rejects(fetchBlankPages('doc'), /offline/);
+  const { documentDomainFixture }=require('./document-domain-fixture.cjs');
+  const h=documentDomainFixture();h.setFailure('offline');
+  await assert.rejects(h.api.fetchBlankPages('doc'),/offline/);
 });
 
 test('deleting a document removes only its drawing pending keys and clear marker', async () => {
