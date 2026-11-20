@@ -136,8 +136,9 @@ export interface ActiveRoom {
  *   2) room_members for those room IDs
  *   3) profiles for all referenced user IDs (hosts + members)
  *
- * RLS: study_rooms SELECT is `using: true` and room_members SELECT is
- * `using: true`, so this works without service-role bypass. Profiles
+ * RLS: study_rooms and room_members SELECT are limited to rooms the caller
+ * hosts, belongs to, or holds a live invitation for (can_view_room_members),
+ * so only those rooms and their members are returned. Profiles
  * SELECT is also open. Three round-trips total — does NOT scale per-
  * room, which is the point.
  */
