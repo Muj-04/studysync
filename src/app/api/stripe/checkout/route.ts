@@ -1,3 +1,5 @@
+import { apiErrorResponse, bearerToken, readJsonObject } from '@/lib/api/request';
+import { prepareCheckout } from '@/lib/billing/checkout';
 import Stripe from 'stripe';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -30,7 +32,7 @@ const PLAN_CONFIG = {
 // metadata pointed at any other user's account, and the webhook would
 // faithfully promote that account on payment success.
 async function resolveAuthUser(req: NextRequest): Promise<{ id: string; email: string | null } | null> {
-  const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  const bearer = bearerToken(req);
   if (bearer) {
     const anon = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,19 +53,13 @@ async function resolveAuthUser(req: NextRequest): Promise<{ id: string; email: s
 
 export async function POST(req: NextRequest) {
   try {
-    const { plan, billing } = await req.json() as {
-      plan: 'premium' | 'pro';
-      billing: 'monthly' | 'yearly';
-    };
+    const { plan, billing } = await readJsonObject(req);
 
-    if (!plan || !billing) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
-
-    const config = PLAN_CONFIG[plan]?.[billing];
-    if (!config) {
+    if ((plan !== 'premium' && plan !== 'pro') || (billing !== 'monthly' && billing !== 'yearly')) {
       return NextResponse.json({ error: 'Invalid plan or billing cycle' }, { status: 400 });
     }
+
+    const config = PLAN_CONFIG[plan][billing];
 
     const authed = await resolveAuthUser(req);
     if (!authed?.id || !authed.email) {
@@ -72,14 +68,19 @@ export async function POST(req: NextRequest) {
     const userId = authed.id;
     const email  = authed.email;
 
-    const origin = req.headers.get('origin')
-      ?? process.env.NEXT_PUBLIC_APP_URL
-      ?? 'http://localhost:3000';
+    const origin = process.env.NEXT_PUBLIC_APP_URL ?? req.nextUrl.origin;
+    const stripe = getStripe();
+    const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+    const prepared = await prepareCheckout(admin, stripe, { id: userId, email }, plan, billing, origin);
+    if ('url' in prepared) return NextResponse.json({ url: prepared.url });
+    const { attempt, customerId } = prepared;
 
-    const session = await getStripe().checkout.sessions.create({
+    const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
-      customer_email: email,
+      ...(customerId ? { customer: customerId } : { customer_email: attempt.email }),
+      expires_at: attempt.expires_at,
+      subscription_data: { metadata: { userId, plan, billing } },
       line_items: [
         {
           price_data: {
@@ -94,18 +95,19 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         },
       ],
-      success_url: `${origin}/pricing?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${origin}/pricing?canceled=true`,
+      success_url: `${attempt.return_origin}/pricing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${attempt.return_origin}/pricing?canceled=true`,
       metadata: { userId, plan, billing },
       allow_promotion_codes: true,
-    });
+    }, { idempotencyKey: `checkout:${attempt.attempt_id}` });
+
+    const { error: saveError } = await admin.from('billing_checkout_attempts')
+      .update({ stripe_session_id: session.id }).eq('user_id', userId).eq('attempt_id', attempt.attempt_id);
+    if (saveError) throw saveError;
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
     console.error('[stripe/checkout] error:', err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Internal server error' },
-      { status: 500 },
-    );
+    return apiErrorResponse(err);
   }
 }

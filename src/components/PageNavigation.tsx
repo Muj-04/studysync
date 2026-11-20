@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
@@ -67,7 +67,11 @@ export default function PageNavigation({
   onPrev, onNext, onGoToPage,
 }: Props) {
   const [inputValue, setInputValue] = useState(String(currentPage));
-  useEffect(() => { setInputValue(String(currentPage)); }, [currentPage]);
+  const [previousPage, setPreviousPage] = useState(currentPage);
+  if (previousPage !== currentPage) {
+    setPreviousPage(currentPage);
+    setInputValue(String(currentPage));
+  }
 
   const commit = () => {
     const page = parseInt(inputValue, 10);

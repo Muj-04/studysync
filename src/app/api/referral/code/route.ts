@@ -1,3 +1,4 @@
+import { apiErrorResponse, bearerToken } from '@/lib/api/request';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
@@ -23,7 +24,7 @@ function makeReferralCode(uid: string): string {
 }
 
 async function resolveUserId(req: NextRequest): Promise<string | null> {
-  const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  const bearer = bearerToken(req);
   if (bearer) {
     // Anon-key client is sufficient to call auth.getUser(token).
     const anon = createClient(
@@ -44,6 +45,10 @@ async function resolveUserId(req: NextRequest): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest) {
+  try { return await handlePost(req); } catch (error) { return apiErrorResponse(error); }
+}
+
+async function handlePost(req: NextRequest) {
   const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -52,24 +57,36 @@ export async function POST(req: NextRequest) {
   const userId = await resolveUserId(req);
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
-  const { data: existing } = await admin
+  const { data: existing, error: readError } = await admin
     .from('profiles')
     .select('referral_code')
     .eq('id', userId)
     .maybeSingle();
-  if (existing?.referral_code) {
+  if (readError) throw readError;
+  if (!existing) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+  if (existing.referral_code) {
     return NextResponse.json({ referralCode: existing.referral_code as string });
   }
 
   const code = makeReferralCode(userId);
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from('profiles')
     .update({ referral_code: code })
-    .eq('id', userId);
+    .eq('id', userId)
+    .is('referral_code', null)
+    .select('referral_code')
+    .maybeSingle();
   if (error) {
     console.error('[api/referral/code] update error:', error.message);
     return NextResponse.json({ error: 'update failed' }, { status: 500 });
   }
 
-  return NextResponse.json({ referralCode: code });
+  if (updated?.referral_code) return NextResponse.json({ referralCode: updated.referral_code });
+
+  // Another request may have assigned the code after our read. Return the persisted value.
+  const { data: current, error: currentError } = await admin.from('profiles')
+    .select('referral_code').eq('id', userId).maybeSingle();
+  if (currentError) throw currentError;
+  if (!current?.referral_code) return NextResponse.json({ error: 'Referral code unavailable' }, { status: 409 });
+  return NextResponse.json({ referralCode: current.referral_code });
 }

@@ -1,14 +1,27 @@
-import { useState, useCallback, useRef } from 'react';
+import { retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { markDocumentCollectionEdited } from '@/lib/documentOutbox';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { savePageImages as dbSavePageImages, fetchAllPageImages } from '@/lib/supabase/db';
+import { createDocumentSaveQueue } from '@/lib/persistence/documentSaveQueue';
 import type { PDFPageImage } from '@/types';
 
 type PageImagesMap = Record<number, PDFPageImage[]>;
 
-export function usePDFPageImages() {
+export function usePDFPageImages(expectedOwner?: string | null) {
   const [allPageImages, setAllPageImages] = useState<Record<string, PageImagesMap>>({});
-  const saveTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const imagesRef = useRef<Record<string, PageImagesMap>>({});
+  const pendingPages = useRef(new Set<string>());
+  const editedPages = useRef(new Set<string>());
+  const pendingKey = `${KEYS.PAGE_IMAGES}_pending`;
+  useEffect(() => {
+    pendingPages.current = new Set(storageGet<string[]>(pendingKey) ?? []);
+  }, [pendingKey]);
+  const [saves] = useState(() => createDocumentSaveQueue((error) => {
+    console.warn('[PageImages] remote save failed; local images retained:', error);
+  }));
+  useEffect(() => () => saves.clear(), [saves]);
   const userIdRef = useRef<string | null>(null);
 
   const ensureUserId = useCallback(async () => {
@@ -18,44 +31,67 @@ export function usePDFPageImages() {
     return userIdRef.current;
   }, []);
 
+  const previousOwner = useRef(expectedOwner);
+  useEffect(() => {
+    if (previousOwner.current && previousOwner.current !== expectedOwner) {
+      imagesRef.current = {}; pendingPages.current.clear(); editedPages.current.clear(); saves.clear(); userIdRef.current = expectedOwner ?? null;
+      // An account transition clears the visible cache; owner recovery remains separate.
+      setAllPageImages({});
+    }
+    previousOwner.current = expectedOwner;
+  }, [expectedOwner, saves]);
+
+  useEffect(() => {
+    if (!expectedOwner) return;
+    for (const key of storageGet<string[]>(pendingKey) ?? []) {
+      const split = key.indexOf(':');
+      if (split >= 0) markDocumentCollectionEdited(expectedOwner, key.slice(0, split), 'page_image_annotations', key.slice(split + 1));
+    }
+  }, [expectedOwner, pendingKey]);
+
   const getPageImages = useCallback((docId: string, pageNumber: number): PDFPageImage[] => {
     return allPageImages[docId]?.[pageNumber] ?? [];
   }, [allPageImages]);
 
   const setPageImages = useCallback((docId: string, pageNumber: number, images: PDFPageImage[]) => {
-    setAllPageImages((prev) => {
-      const docMap = { ...(prev[docId] ?? {}), [pageNumber]: images };
-      const next = { ...prev, [docId]: docMap };
-      // Persist all images for this doc to localStorage
-      const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
-      storageSet(KEYS.PAGE_IMAGES, { ...stored, [docId]: docMap });
-      return next;
-    });
-    // Debounced Supabase save
-    const timerKey = `${docId}:${pageNumber}`;
-    if (saveTimerRef.current[timerKey]) clearTimeout(saveTimerRef.current[timerKey]);
-    saveTimerRef.current[timerKey] = setTimeout(async () => {
+    retainDocumentSnapshot(expectedOwner ?? userIdRef.current, docId, `page_images:${pageNumber}`, images);
+    const ownerAtEdit = expectedOwner ?? userIdRef.current;
+    const docMap = { ...(imagesRef.current[docId] ?? {}), [pageNumber]: images };
+    imagesRef.current = { ...imagesRef.current, [docId]: docMap };
+    setAllPageImages(imagesRef.current);
+    const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
+    storageSet(KEYS.PAGE_IMAGES, { ...stored, [docId]: docMap });
+    const pageKey = `${docId}:${pageNumber}`;
+    pendingPages.current.add(pageKey);
+    editedPages.current.add(pageKey);
+    storageSet(pendingKey, [...pendingPages.current]);
+    saves.schedule(docId, String(pageNumber), async (isCurrent) => {
       const uid = await ensureUserId();
-      if (uid) dbSavePageImages(docId, pageNumber, images);
-    }, 600);
-  }, [ensureUserId]);
+      if (!uid || !isCurrent()) return;
+      await dbSavePageImages(docId, pageNumber, images, ownerAtEdit ?? uid);
+      // A superseded/cancelled save must not acknowledge a later edit or mount.
+      if (!isCurrent() || storageGet(pendingKey) === null) return;
+      pendingPages.current.delete(pageKey);
+      storageSet(pendingKey, [...pendingPages.current]);
+    });
+  }, [ensureUserId, saves, pendingKey, expectedOwner]);
 
   const seedPageImages = useCallback((docId: string, remote: Record<number, PDFPageImage[]>) => {
     // Load from localStorage first
     const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
-    const local = stored[docId] ?? {};
+    // In-memory edits also win if browser storage is unavailable or full.
+    const local = { ...(stored[docId] ?? {}), ...(imagesRef.current[docId] ?? {}) };
     const merged: PageImagesMap = { ...local };
     for (const [k, v] of Object.entries(remote)) {
-      merged[Number(k)] = v;
+      const pageKey = `${docId}:${k}`;
+      if (!pendingPages.current.has(pageKey) && !editedPages.current.has(pageKey)) merged[Number(k)] = v;
     }
     const hasRemote = Object.keys(remote).length > 0;
-    setAllPageImages((prev) => {
-      const existing = prev[docId] ?? {};
-      const existingKeys = Object.keys(existing).join(',');
-      const mergedKeys = Object.keys(merged).join(',');
-      if (!hasRemote && existingKeys === mergedKeys) return prev;
-      return { ...prev, [docId]: merged };
-    });
+    const existing = imagesRef.current[docId] ?? {};
+    if (hasRemote || Object.keys(existing).join(',') !== Object.keys(merged).join(',')) {
+      imagesRef.current = { ...imagesRef.current, [docId]: merged };
+      setAllPageImages(imagesRef.current);
+    }
     if (hasRemote) {
       const stored2 = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
       storageSet(KEYS.PAGE_IMAGES, { ...stored2, [docId]: merged });
@@ -66,41 +102,30 @@ export function usePDFPageImages() {
     const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
     const local = stored[docId];
     if (!local) return;
-    setAllPageImages((prev) => {
-      if (prev[docId]) return prev; // already have data
-      return { ...prev, [docId]: local };
-    });
+    if (imagesRef.current[docId]) return;
+    imagesRef.current = { ...imagesRef.current, [docId]: local };
+    setAllPageImages(imagesRef.current);
   }, []);
 
   const deletePageImage = useCallback((docId: string, pageNumber: number, imageId: string) => {
-    setAllPageImages((prev) => {
-      const pageImages = prev[docId]?.[pageNumber] ?? [];
-      const next = pageImages.filter((img) => img.id !== imageId);
-      const docMap = { ...(prev[docId] ?? {}), [pageNumber]: next };
-      const newState = { ...prev, [docId]: docMap };
-      const stored = storageGet<Record<string, PageImagesMap>>(KEYS.PAGE_IMAGES) ?? {};
-      storageSet(KEYS.PAGE_IMAGES, { ...stored, [docId]: docMap });
-      // Debounced save
-      const timerKey = `${docId}:${pageNumber}`;
-      if (saveTimerRef.current[timerKey]) clearTimeout(saveTimerRef.current[timerKey]);
-      saveTimerRef.current[timerKey] = setTimeout(async () => {
-        const uid = await ensureUserId();
-        if (uid) dbSavePageImages(docId, pageNumber, next);
-      }, 600);
-      return newState;
-    });
-  }, [ensureUserId]);
+    const images = imagesRef.current[docId]?.[pageNumber] ?? [];
+    setPageImages(docId, pageNumber, images.filter((image) => image.id !== imageId));
+  }, [setPageImages]);
 
   const removePageImagesForDocument = useCallback((docId: string) => {
-    setAllPageImages((prev) => {
-      const next = { ...prev };
-      delete next[docId];
-      const stored = storageGet<Record<string, unknown>>(KEYS.PAGE_IMAGES) ?? {};
-      delete stored[docId];
-      storageSet(KEYS.PAGE_IMAGES, stored);
-      return next;
-    });
-  }, []);
+    saves.cancelDocument(docId);
+    for (const key of pendingPages.current) {
+      if (key.startsWith(`${docId}:`)) pendingPages.current.delete(key);
+    }
+    storageSet(pendingKey, [...pendingPages.current]);
+    const next = { ...imagesRef.current };
+    delete next[docId];
+    imagesRef.current = next;
+    setAllPageImages(next);
+    const stored = storageGet<Record<string, unknown>>(KEYS.PAGE_IMAGES) ?? {};
+    delete stored[docId];
+    storageSet(KEYS.PAGE_IMAGES, stored);
+  }, [saves, pendingKey]);
 
   return { getPageImages, setPageImages, seedPageImages, loadLocalPageImages, deletePageImage, removePageImagesForDocument, allPageImages, fetchAllPageImages };
 }
