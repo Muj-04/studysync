@@ -1,3 +1,5 @@
+import { retainDocumentSnapshot } from '@/lib/documentRecovery';
+import { markDocumentCollectionEdited } from '@/lib/documentOutbox';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
@@ -7,7 +9,7 @@ import type { PDFPageImage } from '@/types';
 
 type PageImagesMap = Record<number, PDFPageImage[]>;
 
-export function usePDFPageImages() {
+export function usePDFPageImages(expectedOwner?: string | null) {
   const [allPageImages, setAllPageImages] = useState<Record<string, PageImagesMap>>({});
   const imagesRef = useRef<Record<string, PageImagesMap>>({});
   const pendingPages = useRef(new Set<string>());
@@ -29,11 +31,31 @@ export function usePDFPageImages() {
     return userIdRef.current;
   }, []);
 
+  const previousOwner = useRef(expectedOwner);
+  useEffect(() => {
+    if (previousOwner.current && previousOwner.current !== expectedOwner) {
+      imagesRef.current = {}; pendingPages.current.clear(); editedPages.current.clear(); saves.clear(); userIdRef.current = expectedOwner ?? null;
+      // An account transition clears the visible cache; owner recovery remains separate.
+      setAllPageImages({});
+    }
+    previousOwner.current = expectedOwner;
+  }, [expectedOwner, saves]);
+
+  useEffect(() => {
+    if (!expectedOwner) return;
+    for (const key of storageGet<string[]>(pendingKey) ?? []) {
+      const split = key.indexOf(':');
+      if (split >= 0) markDocumentCollectionEdited(expectedOwner, key.slice(0, split), 'page_image_annotations', key.slice(split + 1));
+    }
+  }, [expectedOwner, pendingKey]);
+
   const getPageImages = useCallback((docId: string, pageNumber: number): PDFPageImage[] => {
     return allPageImages[docId]?.[pageNumber] ?? [];
   }, [allPageImages]);
 
   const setPageImages = useCallback((docId: string, pageNumber: number, images: PDFPageImage[]) => {
+    retainDocumentSnapshot(expectedOwner ?? userIdRef.current, docId, `page_images:${pageNumber}`, images);
+    const ownerAtEdit = expectedOwner ?? userIdRef.current;
     const docMap = { ...(imagesRef.current[docId] ?? {}), [pageNumber]: images };
     imagesRef.current = { ...imagesRef.current, [docId]: docMap };
     setAllPageImages(imagesRef.current);
@@ -46,13 +68,13 @@ export function usePDFPageImages() {
     saves.schedule(docId, String(pageNumber), async (isCurrent) => {
       const uid = await ensureUserId();
       if (!uid || !isCurrent()) return;
-      await dbSavePageImages(docId, pageNumber, images);
+      await dbSavePageImages(docId, pageNumber, images, ownerAtEdit ?? uid);
       // A superseded/cancelled save must not acknowledge a later edit or mount.
       if (!isCurrent() || storageGet(pendingKey) === null) return;
       pendingPages.current.delete(pageKey);
       storageSet(pendingKey, [...pendingPages.current]);
     });
-  }, [ensureUserId, saves, pendingKey]);
+  }, [ensureUserId, saves, pendingKey, expectedOwner]);
 
   const seedPageImages = useCallback((docId: string, remote: Record<number, PDFPageImage[]>) => {
     // Load from localStorage first

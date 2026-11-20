@@ -1,4 +1,5 @@
-import { saveRecording, deleteRecording, recoverRecordings } from './recordingRecovery';
+import { serverRecordingRecoveryEnabled } from './serverRecordingAdapter';
+import { saveRecording, deleteRecording, recoverRecordings, renameRecording } from './recordingRecovery';
 import { enqueueDocumentWrite } from '@/lib/persistence/documentQueue';
 import { sb, userId, ensureDoc } from './dbShared';
 import type { VoiceNote } from '@/types';
@@ -36,7 +37,8 @@ export async function fetchVoiceNotes(docId?: string): Promise<Array<{
   }));
 }
 
-export async function updateVoiceNoteTitle(noteId: string, title: string | undefined) {
+export async function updateVoiceNoteTitle(noteId: string, title: string | undefined, expectedOwner?: string) {
+  if (serverRecordingRecoveryEnabled()) return renameRecording(noteId, title, expectedOwner);
   const uid = await userId(); if (!uid) return;
   await sb().from('voice_notes').update({ title: title ?? null }).eq('id', noteId).eq('user_id', uid);
 }
@@ -51,5 +53,6 @@ export async function saveVoiceNote(note: VoiceNote, expectedOwner?: string): Pr
   const uid = await userId();
   if (!uid) throw new Error('Sign in to save recordings.');
   if (expectedOwner && uid !== expectedOwner) throw new Error('The account changed before recording synchronization finished.');
+  if (serverRecordingRecoveryEnabled()) return saveRecording('document', note.documentId, note, uid);
   return enqueueDocumentWrite(note.documentId, () => saveVoiceNoteNow(note, uid));
 }

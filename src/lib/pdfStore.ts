@@ -127,8 +127,9 @@ async function migrateOwnedLegacyBlobs(
   }
 }
 
-export async function savePdfBlob(docId: string, blob: Blob, metadata: Omit<StoredPdf, 'blob'> = {}): Promise<void> {
+export async function savePdfBlob(docId: string, blob: Blob, metadata: Omit<StoredPdf, 'blob'> = {}, expectedOwner?: string): Promise<void> {
   const scope = await getStorageScope();
+  if (expectedOwner && scope.userId !== expectedOwner) throw new Error('Account changed before accessing the recovery file');
   const db = await openDb(scope.dbName);
   try {
     await writeEntry(db, docId, { blob, ...metadata });
@@ -137,8 +138,9 @@ export async function savePdfBlob(docId: string, blob: Blob, metadata: Omit<Stor
   }
 }
 
-export async function getStoredPdf(docId: string): Promise<StoredPdf | null> {
+export async function getStoredPdf(docId: string, expectedOwner?: string): Promise<StoredPdf | null> {
   const scope = await getStorageScope();
+  if (expectedOwner && scope.userId !== expectedOwner) throw new Error('Account changed before accessing the recovery file');
   const db = await openDb(scope.dbName);
   try {
     const scopedBlob = await readEntry(db, docId);
@@ -151,8 +153,9 @@ export async function getStoredPdf(docId: string): Promise<StoredPdf | null> {
   }
 }
 
-export async function deletePdfBlob(docId: string): Promise<void> {
+export async function deletePdfBlob(docId: string, expectedOwner?: string): Promise<void> {
   const scope = await getStorageScope();
+  if (expectedOwner && scope.userId !== expectedOwner) throw new Error('Account changed before accessing the recovery file');
   const db = await openDb(scope.dbName);
   try {
     await removeBlob(db, docId);
@@ -161,8 +164,9 @@ export async function deletePdfBlob(docId: string): Promise<void> {
   }
 }
 
-export async function getAllStoredDocIds(): Promise<string[]> {
+export async function getAllStoredDocIds(expectedOwner?: string): Promise<string[]> {
   const scope = await getStorageScope();
+  if (expectedOwner && scope.userId !== expectedOwner) throw new Error('Account changed before accessing the recovery file');
   const db = await openDb(scope.dbName);
   try {
     await migrateOwnedLegacyBlobs(scope, db);
