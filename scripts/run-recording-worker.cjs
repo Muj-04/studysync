@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Explicit one-shot operation. Nothing schedules or deploys this worker.
+// Explicit one-shot operation for local or manual use. Production and staging run the
+// same logic every minute as the Supabase Edge Function supabase/functions/recording-worker.
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
