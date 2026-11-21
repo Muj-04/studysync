@@ -1,6 +1,7 @@
 import { sb, userId } from './dbShared';
 import { makeFallbackProfileHandle, normalizeProfileHandle, validateProfileHandle } from '@/lib/profileHandle';
 import { getFollowCounts, isFollowing } from './friends';
+import { compressImage, AVATAR_OPTIONS, extensionForImageType } from '@/lib/compressImage';
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
 
@@ -105,11 +106,16 @@ export async function ensureProfile(): Promise<void> {
 
 export async function uploadAvatar(file: File): Promise<string | null> {
   const uid = await userId(); if (!uid) return null;
-  const ext = file.name.split('.').pop() ?? 'jpg';
+  // Avatars are shown at most ~128px, so store a 512px copy instead of the
+  // original photo (typically 3–8 MB from a phone).
+  let image: Blob = file;
+  try { image = await compressImage(file, AVATAR_OPTIONS); }
+  catch (e) { console.error('[DB] avatar compression failed:', e); return null; }
+  const ext = extensionForImageType(image.type || file.type);
   const path = `${uid}/avatar.${ext}`;
   const { error } = await sb().storage
     .from('avatars')
-    .upload(path, file, { upsert: true, contentType: file.type });
+    .upload(path, image, { upsert: true, contentType: image.type || file.type });
   if (error) { console.error('[DB] uploadAvatar error:', error.message); return null; }
   // Bust the cache so the new image is served immediately (append a timestamp)
   const { data } = sb().storage.from('avatars').getPublicUrl(path);

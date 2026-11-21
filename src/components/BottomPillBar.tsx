@@ -9,6 +9,7 @@ import type { Tool, PenType } from '@/lib/drawing';
 import { PRESET_COLORS } from '@/lib/drawing';
 import DragScrubber from './DragScrubber';
 import type { PDFPageImage } from '@/types';
+import { compressImageToDataUrl } from '@/lib/compressImage';
 
 /**
  * Horizontal pill bar that sits centred at the bottom of the workspace
@@ -837,12 +838,10 @@ export default function BottomPillBar({
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (!file || !onInsertImageBlank) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === 'string') onInsertImageBlank(reader.result);
-          };
-          reader.readAsDataURL(file);
           e.target.value = '';
+          compressImageToDataUrl(file)
+            .then(onInsertImageBlank)
+            .catch((err) => window.alert(err instanceof Error ? err.message : 'Could not add this image.'));
         }}
       />
       <input
@@ -853,12 +852,10 @@ export default function BottomPillBar({
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => {
-            if (typeof reader.result === 'string') setAddImageData(reader.result);
-          };
-          reader.readAsDataURL(file);
           e.target.value = '';
+          compressImageToDataUrl(file)
+            .then(setAddImageData)
+            .catch((err) => window.alert(err instanceof Error ? err.message : 'Could not add this image.'));
         }}
       />
 
