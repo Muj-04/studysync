@@ -2,8 +2,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Upload, Pencil, Mic, Sparkles, Users, X, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { createClient } from '@/lib/supabase/client';
 
 const TOUR_KEY = 'studysync_onboarding_v1';
+export const TOUR_METADATA_KEY = 'onboarding_tour_completed_at';
 
 interface Step {
   icon: React.ReactNode;
@@ -57,7 +59,8 @@ export default function OnboardingTour({ onComplete }: Props) {
   const dismiss = useCallback(() => {
     setLeaving(true);
     setTimeout(() => {
-      try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+      markTourCompletedLocally();
+      void saveTourCompletedToAccount();
       onComplete();
     }, 220);
   }, [onComplete]);
@@ -144,7 +147,7 @@ export default function OnboardingTour({ onComplete }: Props) {
         {/* Title */}
         <h3 style={{
           margin: '0 0 8px',
-          fontSize: 17, fontWeight: 600, color: 'var(--text-1)',
+          fontSize: 17, fontWeight: 600, color: '#f8fafc',
           letterSpacing: '-0.01em',
         }}>
           {current.title}
@@ -154,7 +157,7 @@ export default function OnboardingTour({ onComplete }: Props) {
         <p style={{
           margin: '0 0 12px',
           fontSize: 13.5, lineHeight: 1.65,
-          color: 'var(--text-2)',
+          color: 'rgba(248,250,252,0.72)',
         }}>
           {current.description}
         </p>
@@ -167,7 +170,7 @@ export default function OnboardingTour({ onComplete }: Props) {
             background: 'rgba(255,255,255,0.06)',
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 20,
-            fontSize: 11.5, color: 'var(--text-3)',
+            fontSize: 11.5, color: 'rgba(248,250,252,0.6)',
             marginBottom: 20,
           }}>
             {current.hint}
@@ -203,7 +206,7 @@ export default function OnboardingTour({ onComplete }: Props) {
                 height: 36, padding: '0 14px',
                 background: 'rgba(255,255,255,0.08)',
                 border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 6, color: 'var(--text-2)',
+                borderRadius: 6, color: 'rgba(248,250,252,0.8)',
                 cursor: 'pointer', fontSize: 13, fontFamily: 'inherit',
                 display: 'flex', alignItems: 'center', gap: 4,
               }}
@@ -236,4 +239,16 @@ export default function OnboardingTour({ onComplete }: Props) {
 // Exported for use in workspace to check first-visit
 export function shouldShowTour(): boolean {
   try { return !localStorage.getItem(TOUR_KEY); } catch { return false; }
+}
+
+export function markTourCompletedLocally(): void {
+  try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+}
+
+/** Best-effort: remember completion on the account so other devices and
+ *  later sign-ins (which clear localStorage) don't show the tour again. */
+export async function saveTourCompletedToAccount(): Promise<void> {
+  try {
+    await createClient().auth.updateUser({ data: { [TOUR_METADATA_KEY]: new Date().toISOString() } });
+  } catch {}
 }

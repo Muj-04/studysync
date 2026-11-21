@@ -52,7 +52,7 @@ import AvatarDropdown from '@/components/AvatarDropdown';
 import NotificationBell from '@/components/NotificationBell';
 import PomodoroWidget from '@/components/PomodoroWidget';
 import GlobalSearch from '@/components/GlobalSearch';
-import OnboardingTour, { shouldShowTour } from '@/components/OnboardingTour';
+import OnboardingTour, { shouldShowTour, markTourCompletedLocally, saveTourCompletedToAccount, TOUR_METADATA_KEY } from '@/components/OnboardingTour';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
 import { PLAN_LIMITS, PLAN_LABELS, VOICE_STORAGE_LABELS, nextUpgradePlan, effectivePlanLimits } from '@/lib/planLimits';
@@ -140,6 +140,7 @@ export default function WorkspacePage() {
   // userId as state so effects that depend on it re-run once the async
   // getUser() resolves. userIdRef mirrors it for use inside callbacks.
   const [userId, setUserId] = useState<string | null>(null);
+  const [accountTourDone, setAccountTourDone] = useState<boolean | null>(null);
   const userIdRef = useRef<string | null>(null);
   useEffect(() => {
     createClient().auth.getUser().then(async ({ data: { user } }) => {
@@ -147,6 +148,14 @@ export default function WorkspacePage() {
       userIdRef.current = uid;
       setUserId(uid);
       setUserEmail(user?.email ?? '');
+      // The tour is remembered on the account so it survives sign-out
+      // (which wipes localStorage) and shows once per user, not per login.
+      const accountDone = Boolean(user?.user_metadata?.[TOUR_METADATA_KEY]);
+      if (user && (accountDone || !shouldShowTour())) {
+        markTourCompletedLocally();
+        if (!accountDone) void saveTourCompletedToAccount();
+      }
+      setAccountTourDone(user ? accountDone || !shouldShowTour() : true);
       const profile = await getProfile();
       setUserDisplayName(profile?.username ?? user?.email?.split('@')[0] ?? '');
       setUserAvatarUrl(profile?.avatarUrl ?? null);
@@ -979,7 +988,7 @@ export default function WorkspacePage() {
   const docToRemove = documents.find((d) => d.id === confirmRemoveDocId);
   const tourAvailable = useSyncExternalStore(subscribePreferences, shouldShowTour, () => false);
   const [tourDismissed, setTourDismissed] = useState(false);
-  const showTour = tourAvailable && !tourDismissed;
+  const showTour = tourAvailable && accountTourDone === false && !tourDismissed;
 
   const handleRemoveDocument = useCallback((docId: string) => {
     setConfirmRemoveDocId(docId);
