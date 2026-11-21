@@ -13,18 +13,32 @@ export async function getProfile(): Promise<{
   isVip: boolean;
 } | null> {
   const uid = await userId(); if (!uid) return null;
-  const { data } = await sb()
-    .from('profiles')
-    .select('username, handle, avatar_url, plan, is_vip')
-    .eq('id', uid)
-    .maybeSingle();
+  const [{ data }, privateProfile] = await Promise.all([
+    sb().from('profiles').select('username, handle, avatar_url, is_vip').eq('id', uid).maybeSingle(),
+    getMyPrivateProfile(),
+  ]);
   return data ? {
     username: data.username ?? null,
     handle: data.handle,
     avatarUrl: data.avatar_url ?? null,
-    plan: (data.plan ?? 'free') as 'free' | 'premium' | 'pro',
-    isVip: data.is_vip ?? false,
+    plan: (privateProfile?.plan ?? 'free') as 'free' | 'premium' | 'pro',
+    isVip: privateProfile?.is_vip ?? data.is_vip ?? false,
   } : null;
+}
+
+export interface PrivateProfile {
+  plan: string | null;
+  is_vip: boolean | null;
+  referral_code: string | null;
+  referral_expires_at: string | null;
+}
+
+/** Billing/referral fields are owner-only; other users cannot read them. */
+export async function getMyPrivateProfile(client: { rpc: (fn: string) => PromiseLike<{ data: unknown; error: unknown }> } = sb()): Promise<PrivateProfile | null> {
+  const { data, error } = await client.rpc('get_my_private_profile');
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row as PrivateProfile | undefined) ?? null;
 }
 
 export async function updateUserPlan(plan: 'free' | 'premium' | 'pro'): Promise<void> {
