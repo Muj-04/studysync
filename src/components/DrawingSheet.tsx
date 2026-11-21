@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { Pencil, Eraser, Trash2, X, ChevronUp, ImagePlus } from 'lucide-react';
 import type { Tool, PenType } from '@/lib/drawing';
 import { PRESET_COLORS, SIZES } from '@/lib/drawing';
+import { compressImageToDataUrl } from '@/lib/compressImage';
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -308,12 +309,10 @@ export default function DrawingSheet({
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        if (typeof reader.result === 'string') onInsertImage(reader.result);
-                      };
-                      reader.readAsDataURL(file);
                       e.target.value = '';
+                      compressImageToDataUrl(file)
+                        .then(onInsertImage)
+                        .catch((err) => window.alert(err instanceof Error ? err.message : 'Could not add this image.'));
                     }}
                   />
                 </>
