@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { effectivePlanLimits, type Plan } from '@/lib/planLimits';
+import { getMyPrivateProfile } from '@/lib/supabase/profiles';
 
 /**
  * Shared left navigation rail used by the (app) route group. Replaces
@@ -298,11 +299,11 @@ function UsageWidget({ kind, collapsed }: { kind: 'ai' | 'study'; collapsed: boo
         const month = new Date().toISOString().slice(0, 7);
         const [usageRes, profileRes] = await Promise.all([
           sb.from('ai_usage').select('count').eq('user_id', user.id).eq('month', month).maybeSingle(),
-          sb.from('profiles').select('plan, is_vip').eq('id', user.id).maybeSingle(),
+          getMyPrivateProfile(sb),
         ]);
         if (cancelled) return;
-        const plan = (profileRes.data?.plan ?? 'free') as Plan;
-        const isVip = !!profileRes.data?.is_vip;
+        const plan = (profileRes?.plan ?? 'free') as Plan;
+        const isVip = !!profileRes?.is_vip;
         const max = effectivePlanLimits(plan, isVip).aiRequestsPerMonth;
         setData({ value: (usageRes.data?.count as number | undefined) ?? 0, max });
       } else {

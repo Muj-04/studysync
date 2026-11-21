@@ -1,5 +1,6 @@
 import { assertDocumentOwner } from './documentProtocol';
 import { sb, userId } from './dbShared';
+import { getMyPrivateProfile } from './profiles';
 
 export async function getUserStorageStats(): Promise<{
   documents: number; voiceNotes: number; drawings: number;
@@ -52,14 +53,14 @@ export async function getLimitUsageStats(): Promise<{
     sb().from('documents').select('id', { count: 'exact', head: true }).eq('user_id', uid),
     sb().from('voice_notes').select('audio_size_bytes').eq('user_id', uid),
     sb().from('ai_usage').select('count').eq('user_id', uid).eq('month', month).maybeSingle(),
-    sb().from('profiles').select('plan, is_vip').eq('id', uid).maybeSingle(),
+    getMyPrivateProfile(),
   ]);
   return {
     documents: docsRes.count ?? 0,
     voiceStorageBytes: (vnRes.data ?? []).reduce((s, r) => s + (r.audio_size_bytes ?? 0), 0),
     aiRequestsThisMonth: aiRes.data?.count ?? 0,
-    plan: (profileRes.data?.plan ?? 'free') as 'free' | 'premium' | 'pro',
-    isVip: profileRes.data?.is_vip ?? false,
+    plan: (profileRes?.plan ?? 'free') as 'free' | 'premium' | 'pro',
+    isVip: profileRes?.is_vip ?? false,
   };
 }
 

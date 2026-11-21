@@ -1,4 +1,5 @@
 import { sb, userId } from './dbShared';
+import { getMyPrivateProfile } from './profiles';
 
 // ── Referrals ─────────────────────────────────────────────────────────────────
 
@@ -125,11 +126,11 @@ export async function getReferralStats(): Promise<{
 } | null> {
   const uid = await userId(); if (!uid) return null;
   const [profileRes, countRes] = await Promise.all([
-    sb().from('profiles').select('referral_code, referral_expires_at').eq('id', uid).maybeSingle(),
+    getMyPrivateProfile(),
     sb().rpc('get_my_referral_count'),
   ]);
-  const code = (profileRes.data?.referral_code as string | null) ?? null;
-  const expiresAt = (profileRes.data?.referral_expires_at as string | null) ?? null;
+  const code = profileRes?.referral_code ?? null;
+  const expiresAt = profileRes?.referral_expires_at ?? null;
   return {
     referralCode: code,
     referralLink: code ? `${BASE_URL}/register?ref=${code}` : null,
