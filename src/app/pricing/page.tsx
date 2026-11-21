@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import LeftRail from '@/components/LeftRail';
 import NotificationBell from '@/components/NotificationBell';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { getMyPrivateProfile } from '@/lib/supabase/profiles';
 
 type Plan = 'free' | 'premium' | 'pro';
 
@@ -97,7 +98,7 @@ export default function PricingPage() {
     const supabase = createClient();
     return supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setUserPlan(null); return; }
-      const { data } = await supabase.from('profiles').select('plan').eq('id', user.id).maybeSingle();
+      const data = await getMyPrivateProfile(supabase);
       setUserPlan((data?.plan as Plan) ?? 'free');
     });
   }, []);

@@ -1,4 +1,5 @@
 import { sb, userId } from './dbShared';
+import { getMyPrivateProfile } from './profiles';
 
 // ── Active Sessions (single-session enforcement for premium/pro) ──────────────
 
@@ -24,7 +25,7 @@ export function getOrCreateSessionId(): string {
 export async function checkActiveSession(sessionId: string): Promise<'ok' | 'conflict' | 'free_user'> {
   const uid = await userId(); if (!uid) return 'free_user';
 
-  const { data: profile } = await sb().from('profiles').select('plan, is_vip').eq('id', uid).maybeSingle();
+  const profile = await getMyPrivateProfile();
   if (!profile || profile.plan === 'free' || profile.is_vip) return 'free_user';
 
   const { data: existing } = await sb()
