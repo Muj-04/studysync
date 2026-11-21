@@ -84,13 +84,29 @@ export default function ResetPasswordPage() {
     const hashParams = new URLSearchParams(initialUrl.hash.slice(1));
     const redirectError = initialUrl.searchParams.get('error_description')
       ?? hashParams.get('error_description');
-    const hasRecoveryParameters = initialUrl.searchParams.has('code')
+    // token_hash links (the reset email template) verify on any device or browser.
+    // PKCE ?code= links only work in the browser that requested the reset, so they
+    // remain a fallback for emails sent before the template change.
+    const tokenHash = initialUrl.searchParams.get('token_hash');
+    const isTokenHashRecovery = Boolean(tokenHash) && initialUrl.searchParams.get('type') === 'recovery';
+    const hasRecoveryParameters = isTokenHashRecovery
+      || initialUrl.searchParams.has('code')
       || hashParams.has('access_token')
       || hashParams.get('type') === 'recovery';
 
     if (redirectError || !hasRecoveryParameters) {
       const timer = window.setTimeout(() => setStatus('invalid'), 0);
       return () => window.clearTimeout(timer);
+    }
+
+    if (isTokenHashRecovery && tokenHash) {
+      // Drop the one-time token from the address bar and history before using it.
+      window.history.replaceState(null, '', initialUrl.pathname);
+      const supabase = createClient();
+      void supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(({ data, error: verifyError }) => {
+        if (!cancelled) setStatus(!verifyError && data.session ? 'ready' : 'invalid');
+      });
+      return () => { cancelled = true; };
     }
 
     const supabase = createClient();
