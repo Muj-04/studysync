@@ -21,7 +21,7 @@ test('referral expiry removes only expired reward access and preserves paid/VIP/
         (9,'premium',false,now()-interval '1 day');
       INSERT INTO subscriptions VALUES (2,'premium','active'),(7,'premium','past_due'),
         (8,'premium','trialing'),(9,'free','canceled');`);
-    await db.exec(fs.readFileSync('supabase/migrations/20261007110000_expire_referral_rewards.sql','utf8'));
+    await db.exec(fs.readFileSync('supabase/migrations_archive/20261007110000_expire_referral_rewards.sql','utf8'));
     assert.equal((await db.query('SELECT expire_referral_rewards() n')).rows[0].n,7);
     const rows=(await db.query('SELECT * FROM profiles ORDER BY id')).rows;
     assert.deepEqual(rows.map(r=>r.plan),['free','premium','pro','premium','premium','premium','premium','premium','free']);

@@ -8,7 +8,7 @@ const childEnv={...process.env};
 for(const key of ['PGHOSTADDR','PGSERVICE','PGSERVICEFILE'])delete childEnv[key];
 const args=['-X','-q','-A','-t','-v','ON_ERROR_STOP=1','-h',socket,'-p',process.env.RECORDING_TEST_PG_PORT||'5432','-U',process.env.RECORDING_TEST_PG_USER||process.env.USER,'-d',database];
 function sql(input){const r=spawnSync(bin,args,{input,encoding:'utf8',env:childEnv});if(r.status!==0)throw Error(r.stderr);return r.stdout.trim();}
-const schemaPath=process.env.RECORDING_TEST_GENERATION_MIGRATION||'supabase/migrations/20261028202847_document_generation_guards.sql';
+const schemaPath=process.env.RECORDING_TEST_GENERATION_MIGRATION||'supabase/migrations_archive/20261028202847_document_generation_guards.sql';
 let base=fs.readFileSync('tests/server-recording-fixture.sql','utf8');
 base=base.replace(/CREATE ROLE (\w+);/g,(_,role)=>`DO $$BEGIN CREATE ROLE ${role}; EXCEPTION WHEN duplicate_object THEN NULL; END$$;`);
 base=base.replace(/CREATE TABLE public.document_lifetimes[\s\S]*?END\$\$;/,'');
@@ -20,8 +20,8 @@ base+='\n'+fs.readFileSync('tests/fixtures/launch-quota-deployed.sql','utf8');
 // Reproduce the observed legacy staging shape on disposable local data only.
 base+="\nALTER TABLE voice_notes ALTER COLUMN id TYPE text USING id::text;ALTER TABLE room_voice_notes ALTER COLUMN id TYPE text USING id::text;ALTER TABLE study_sessions ALTER COLUMN document_id SET NOT NULL;INSERT INTO study_sessions(user_id,document_id) VALUES('11111111-1111-4111-8111-111111111111','doc');";
 sql('DROP SCHEMA IF EXISTS recording_private CASCADE;DROP SCHEMA public CASCADE;DROP SCHEMA IF EXISTS auth CASCADE;DROP SCHEMA IF EXISTS storage CASCADE;CREATE SCHEMA public;'+base);
-sql(fs.readFileSync(schemaPath,'utf8'));sql(fs.readFileSync('supabase/migrations/20261028203014_server_recording_operations.sql','utf8'));
-for(const extra of (process.env.RECORDING_TEST_AFTER_MIGRATIONS??'supabase/migrations/20261120190000_launch_quota_tracked_recordings.sql').split(',').filter(Boolean))sql(fs.readFileSync(extra,'utf8'));
+sql(fs.readFileSync(schemaPath,'utf8'));sql(fs.readFileSync('supabase/migrations_archive/20261028203014_server_recording_operations.sql','utf8'));
+for(const extra of (process.env.RECORDING_TEST_AFTER_MIGRATIONS??'supabase/migrations_archive/20261120190000_launch_quota_tracked_recordings.sql').split(',').filter(Boolean))sql(fs.readFileSync(extra,'utf8'));
 const owner='11111111-1111-4111-8111-111111111111';
 const auth=`SET request.storage.operation='object.upload';SET request.jwt.claim.sub='${owner}';SET request.jwt.claim.role='authenticated';SET ROLE authenticated;`;
 const service=`SET request.jwt.claim.role='service_role';SET ROLE service_role;`;

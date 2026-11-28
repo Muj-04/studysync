@@ -26,7 +26,7 @@ test('leaving requires membership, closes only the last member, and is service-o
     CREATE TABLE study_rooms(id uuid PRIMARY KEY,status text);
     CREATE TABLE room_members(room_id uuid,user_id uuid);
     INSERT INTO study_rooms VALUES('${room}','active');`);
-  await db.exec(fs.readFileSync('supabase/migrations/20261004110000_atomic_room_leave.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations_archive/20261004110000_atomic_room_leave.sql','utf8'));
   const leave = async id => (await db.query('SELECT leave_room_atomic($1,$2) result',[room,id])).rows[0].result;
   try {
     assert.equal(await leave(outsider), false);

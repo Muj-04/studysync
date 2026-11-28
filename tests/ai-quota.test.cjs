@@ -11,7 +11,7 @@ test('only one request gets the final quota slot and failed requests refund once
     INSERT INTO auth.users VALUES('${uid}');
     CREATE TABLE ai_usage(user_id uuid,month text,count integer,PRIMARY KEY(user_id,month));
     INSERT INTO ai_usage VALUES('${uid}','2026-10',14);`);
-  await db.exec(fs.readFileSync('supabase/migrations/20261004120000_reserve_ai_quota.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations_archive/20261004120000_reserve_ai_quota.sql','utf8'));
   try {
     const reserve = () => db.query('SELECT reserve_ai_request($1,$2,$3) id',[uid,'2026-10',15]);
     const results = await Promise.all([reserve(),reserve()]);
@@ -48,9 +48,9 @@ test('expired pending reservations recover quota after a process crash, but comp
     CREATE SCHEMA auth; CREATE TABLE auth.users(id uuid PRIMARY KEY);
     INSERT INTO auth.users VALUES('${uid}');
     CREATE TABLE ai_usage(user_id uuid,month text,count integer,PRIMARY KEY(user_id,month));`);
-  await db.exec(fs.readFileSync('supabase/migrations/20261004120000_reserve_ai_quota.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations_archive/20261004120000_reserve_ai_quota.sql','utf8'));
   const legacy = (await db.query('SELECT reserve_ai_request($1,$2,$3) id',[uid,'2026-10',3])).rows[0].id;
-  await db.exec(fs.readFileSync('supabase/migrations/20261007090000_ai_quota_recovery.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations_archive/20261007090000_ai_quota_recovery.sql','utf8'));
   const reserve = async () => (await db.query('SELECT reserve_ai_request_v2($1,$2,$3) id',[uid,'2026-10',3])).rows[0].id;
   const count = async () => (await db.query('SELECT count FROM ai_usage')).rows[0].count;
   try {

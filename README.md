@@ -137,7 +137,51 @@ Notable migration-backed designs include:
 - RLS hardening for referrals, subscriptions, room drawings, room membership data, and private realtime messages.
 - A service-role-only account-deletion function that removes user-owned records while preserving shared-data integrity.
 
-Migration files live in [`supabase/migrations`](./supabase/migrations). Some historical files use date-based names rather than the Supabase CLI timestamp format; verify local and remote migration history before running `supabase db push` against an existing project.
+### Schema source of truth
+
+[`supabase/migrations`](./supabase/migrations) starts with `20261128000000_baseline_schema.sql`, a full snapshot of production (tables, constraints, indexes, functions, triggers, RLS policies, grants, storage buckets and policies, realtime publication, cron jobs). Every later change is a new migration file after it. The 41 earlier files are kept for history in [`supabase/migrations_archive`](./supabase/migrations_archive); do not run them.
+
+- **New database (Postgres 17+, e.g. a new Supabase project):** apply the migrations in order (`supabase db push`, or paste them into the SQL editor), then schedule the recording worker once with `SELECT public.schedule_recording_worker('https://<project-ref>.supabase.co');`.
+- **Existing production or staging:** the baseline describes what is already there, so it is recorded as applied, never run:
+
+  ```sql
+  INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+  VALUES ('20261128000000', 'baseline_schema', ARRAY['-- baseline: recorded as applied, not executed'])
+  ON CONFLICT (version) DO NOTHING;
+  ```
+- **Regenerating or checking drift:** run [`scripts/db/schema-snapshot.sql`](./scripts/db/schema-snapshot.sql) (read-only) in the SQL editor of any project and diff its output against the baseline plus later migrations. `node scripts/db/build-baseline.cjs <snapshot.sql> <out.sql>` turns a snapshot into a migration file.
+- `tests/baseline-schema.test.cjs` replays the baseline on a fresh Postgres and checks that it round-trips through the snapshot.
+
+### Database backups
+
+The Supabase Free plan has no automatic backups, so [`.github/workflows/db-backup.yml`](./.github/workflows/db-backup.yml) takes one every night at 01:17 UTC (and on demand from the Actions tab). It runs `pg_dump` 17 against production, checks the archive, encrypts it with AES-256 (the repository is public) and stores it as a workflow artifact for 30 days. The dump covers the database only; uploaded files (PDFs, voice notes, avatars) live in Supabase Storage and need a separate copy (`supabase storage cp -r ss:///<bucket> ./<bucket> --experimental --linked`).
+
+**One-time setup** (Settings -> Secrets and variables -> Actions -> New repository secret):
+
+| Secret | Value |
+| --- | --- |
+| `SUPABASE_DB_URL` | Supabase -> Connect -> Session pooler URI (port 5432) with the database password filled in |
+| `BACKUP_PASSPHRASE` | A long random passphrase. Store a copy in your password manager: without it the backups cannot be opened. |
+
+**Restore steps**
+
+1. Actions -> *Database backup* -> pick a run -> download the `studysync-db-<timestamp>` artifact and unzip it.
+2. Decrypt: `gpg --decrypt --output studysync.dump studysync-<timestamp>.dump.gpg` (asks for the passphrase).
+3. Inspect: `pg_restore --list studysync.dump | less`.
+4. Restore, using PostgreSQL 17 client tools:
+   - **Into a new, empty Supabase project (full disaster recovery):** apply `supabase/migrations` first, then load the data only:
+
+     ```bash
+     # replica mode skips triggers (ownership guards, notifications) while loading
+     PGOPTIONS='-c session_replication_role=replica' pg_restore --dbname "$NEW_DB_URL" \
+       --data-only --no-owner \
+       --schema=public --schema=auth --schema=recording_private --schema=worker_private studysync.dump
+     ```
+
+     Copy the Storage files back, then schedule the recording worker (see above).
+   - **One table or a few rows into production:** restore into a scratch database first, compare, then copy the rows you need. Never run `pg_restore --clean` against production.
+5. Afterwards, check sign-in, open a document, and play a voice note.
+
 
 ## Security
 
@@ -221,7 +265,7 @@ Open [http://localhost:3000](http://localhost:3000).
 1. Configure all required environment variables in Vercel.
 2. Set `NEXT_PUBLIC_APP_URL` to the production origin.
 3. Configure Supabase Auth redirect URLs, including `/auth/callback`.
-4. Apply and verify database migrations before deploying application code that depends on them.
+4. Apply and verify database migrations before deploying application code that depends on them; new migrations go after `20261128000000_baseline_schema.sql`.
 5. Point Stripe webhooks to `/api/stripe/webhook` and configure the signing secret.
 6. Configure LiveKit credentials if study-room voice chat is enabled.
 7. Run `npm run build` before deployment.

@@ -1,5 +1,5 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const {PGlite}=require('@electric-sql/pglite');
-const migration=()=>fs.readFileSync('supabase/migrations/20261028203014_server_recording_operations.sql','utf8');
+const migration=()=>fs.readFileSync('supabase/migrations_archive/20261028203014_server_recording_operations.sql','utf8');
 const owner='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222',generation='33333333-3333-4333-8333-333333333333',room='44444444-4444-4444-8444-444444444444',note='55555555-5555-4555-8555-555555555555';
 async function fixture(t,beforeMigration=''){const db=new PGlite();t.after(()=>db.close());await db.exec(fs.readFileSync('tests/server-recording-fixture.sql','utf8'));if(beforeMigration)await db.exec(beforeMigration);await db.exec(migration());return db;}
 async function as(db,id=owner,role='authenticated'){await db.exec(`RESET ROLE;SET request.storage.operation='object.upload';SET request.jwt.claim.sub='${id}';SET request.jwt.claim.role='${role}';SET ROLE ${role}`);}

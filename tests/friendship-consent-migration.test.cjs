@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 
-const sql = fs.readFileSync('supabase/migrations/20261122000000_friendship_consent.sql', 'utf8')
+const sql = fs.readFileSync('supabase/migrations_archive/20261122000000_friendship_consent.sql', 'utf8')
   .replace(/--.*$/gm, '').replace(/\s+/g, ' ');
 
 test('new friendships must be pending, own and not self', () => {

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { PGlite } = require('@electric-sql/pglite');
-const migration = fs.readFileSync('supabase/migrations/20261028202847_document_generation_guards.sql', 'utf8');
+const migration = fs.readFileSync('supabase/migrations_archive/20261028202847_document_generation_guards.sql', 'utf8');
 const owner = '11111111-1111-4111-8111-111111111111';
 async function setup() {
   const db = new PGlite();

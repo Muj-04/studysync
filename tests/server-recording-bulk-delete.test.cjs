@@ -9,7 +9,7 @@ test('bulk deletion fences uploaded unpublished local audio before removing play
   const db = new PGlite();
   t.after(() => db.close());
   await db.exec(fs.readFileSync('tests/server-recording-fixture.sql', 'utf8'));
-  await db.exec(fs.readFileSync('supabase/migrations/20261028203014_server_recording_operations.sql', 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations_archive/20261028203014_server_recording_operations.sql', 'utf8'));
   const owner = '11111111-1111-4111-8111-111111111111';
   const generation = '33333333-3333-4333-8333-333333333333';
   const note = '55555555-5555-4555-8555-555555555555';
