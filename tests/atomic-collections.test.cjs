@@ -23,7 +23,7 @@ test('Postgres rolls back failed replacements and enforces ownership and scope',
     ALTER TABLE text_notes ENABLE ROW LEVEL SECURITY;
     CREATE POLICY own_notes ON text_notes TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
   `);
-  await db.exec(fs.readFileSync('supabase/migrations/20261004090000_atomic_study_collections.sql', 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations_archive/20261004090000_atomic_study_collections.sql', 'utf8'));
   await db.exec(`SET ROLE authenticated; SET test.uid = '${uid}';`);
   const save = (kind, page, rows) => db.query('SELECT replace_study_collection($1,$2,$3,$4::jsonb)', [kind, 'doc', page, JSON.stringify(rows)]);
   try {

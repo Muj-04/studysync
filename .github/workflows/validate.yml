@@ -18,3 +18,12 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npx tsc --noEmit --incremental false
+      # Catches compile and bundling errors that lint, tests and tsc miss.
+      # Public placeholders only: the build inlines NEXT_PUBLIC_* values and
+      # must never see real secrets in CI.
+      - name: Production build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          NEXT_TELEMETRY_DISABLED: '1'

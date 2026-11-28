@@ -1,0 +1,72 @@
+name: Database backup
+# REL-02: nightly logical backup that works on the Supabase Free plan.
+# The repository is public, so the dump is encrypted (AES-256, GPG symmetric)
+# before it leaves the runner. Restore steps: README.md, "Database backups".
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_DB_URL     production session-pooler URI, port 5432, with password
+#   BACKUP_PASSPHRASE   long random passphrase; keep a copy outside GitHub
+on:
+  schedule:
+    - cron: '17 1 * * *' # 01:17 UTC = 04:17 Amman
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check secrets are configured
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::error::Set the SUPABASE_DB_URL and BACKUP_PASSPHRASE repository secrets first."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL 17 client (matches the server major version)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Dump, verify and encrypt
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          STAMP=$(date -u +%Y%m%dT%H%MZ)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          mkdir -p backup
+          # Whole database in custom format: app schemas, auth users, storage
+          # metadata, cron jobs. Restore picks the parts it needs.
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" \
+            --format=custom --compress=9 --no-owner \
+            --file "backup/studysync-$STAMP.dump"
+          # Fail the run if the archive is unreadable.
+          /usr/lib/postgresql/17/bin/pg_restore --list "backup/studysync-$STAMP.dump" > backup/toc.txt
+          grep -q "TABLE DATA public documents" backup/toc.txt
+          ls -l "backup/studysync-$STAMP.dump"
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 \
+            --output "backup/studysync-$STAMP.dump.gpg" "backup/studysync-$STAMP.dump"
+          shred -u "backup/studysync-$STAMP.dump" backup/toc.txt
+
+      - name: Store encrypted backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: studysync-db-${{ env.STAMP }}
+          path: backup/studysync-*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error

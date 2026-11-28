@@ -41,10 +41,10 @@ INSERT INTO storage.objects(bucket_id,name,metadata) VALUES
  ('voice-notes','${U}/doc/untracked-orphan.webm','{"size":5}');`;
 
 function reset(){sql('DROP SCHEMA IF EXISTS recording_private CASCADE;DROP SCHEMA public CASCADE;DROP SCHEMA IF EXISTS auth CASCADE;DROP SCHEMA IF EXISTS storage CASCADE;CREATE SCHEMA public;'+base);sql(seed);}
-const m40=file('supabase/migrations/20261028202847_document_generation_guards.sql');
-const pre=file('supabase/migrations/20261028203000_convert_populated_recording_ids.sql');
-const m41=file('supabase/migrations/20261028203014_server_recording_operations.sql');
-const post=file('supabase/migrations/20261120191000_adopt_case_mismatched_legacy_recordings.sql');
+const m40=file('supabase/migrations_archive/20261028202847_document_generation_guards.sql');
+const pre=file('supabase/migrations_archive/20261028203000_convert_populated_recording_ids.sql');
+const m41=file('supabase/migrations_archive/20261028203014_server_recording_operations.sql');
+const post=file('supabase/migrations_archive/20261120191000_adopt_case_mismatched_legacy_recordings.sql');
 const counts=()=>sql("SELECT (SELECT count(*) FROM voice_notes)||'/'||(SELECT count(*) FROM room_voice_notes)||'/'||(SELECT count(*) FROM storage.objects);");
 
 // 1. Without the pre-step, #41 refuses the populated TEXT tables and changes nothing.

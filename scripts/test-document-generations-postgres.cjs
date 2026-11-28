@@ -61,7 +61,7 @@ const writeSQL = (doc,gen,write,content,revision=0) => `SELECT replace_study_col
   await run(binary,['-X','-q','-v','ON_ERROR_STOP=1','-d','postgres','-c',`CREATE DATABASE ${database}`]);
   try {
     await run(binary,['-X','-q','-v','ON_ERROR_STOP=1','-d',database,'-f','tests/fixtures/document-generation-base.sql']);
-    await run(binary,['-X','-q','-v','ON_ERROR_STOP=1','-d',database,'-f','supabase/migrations/20261028202847_document_generation_guards.sql']);
+    await run(binary,['-X','-q','-v','ON_ERROR_STOP=1','-d',database,'-f','supabase/migrations_archive/20261028202847_document_generation_guards.sql']);
     const a=new Session('integrity-a'),b=new Session('integrity-b'),c=new Session('integrity-observer'); sessions.push(a,b,c);
     await Promise.all(sessions.map(session=>session.initialize()));
     const create=async id=>a.query(`INSERT INTO documents(id,user_id) VALUES(${quote(id)},${quote(owner)}) RETURNING generation;`);

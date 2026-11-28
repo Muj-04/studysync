@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { PGlite } = require('@electric-sql/pglite');
-const migration = fs.readFileSync('supabase/migrations/20261107191733_constrain_pdf_storage_sharing.sql','utf8');
+const migration = fs.readFileSync('supabase/migrations_archive/20261107191733_constrain_pdf_storage_sharing.sql','utf8');
 const host='11111111-1111-4111-8111-111111111111', member='22222222-2222-4222-8222-222222222222', outsider='33333333-3333-4333-8333-333333333333';
 const room='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const shared=`${host}/rooms/${room}/shared.pdf`, privatePath=`${host}/personal.pdf`;

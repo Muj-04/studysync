@@ -11,7 +11,7 @@ test('referral redemption rewards once, preserves Pro, and rolls back failed rew
     CREATE TABLE profiles(id uuid PRIMARY KEY,created_at timestamptz,referral_code text UNIQUE,referral_expires_at timestamptz,is_vip boolean,plan text);
     INSERT INTO profiles VALUES('${host}',now()-interval '2 days','CODE',null,false,'pro'),('${guest}',now(),'GUEST',null,false,'free'),('${failed}',now(),'FAILED',null,false,'free');
     CREATE TABLE referrals(id uuid DEFAULT gen_random_uuid(),referrer_id uuid,referred_id uuid,reward_granted boolean,ip_address text,created_at timestamptz DEFAULT now());`);
-  await db.exec(fs.readFileSync('supabase/migrations/20261004130000_atomic_referral_rewards.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations_archive/20261004130000_atomic_referral_rewards.sql','utf8'));
   const redeem=async id=>(await db.query('SELECT redeem_referral($1,$2) result',[id,'code'])).rows[0].result;
   try {
     assert.equal(await redeem(guest),'ok');

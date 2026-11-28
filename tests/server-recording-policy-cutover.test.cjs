@@ -16,7 +16,7 @@ async function fixture(t){const db=new PGlite();t.after(()=>db.close());await db
  INSERT INTO storage.objects(bucket_id,name) VALUES('voice-notes','${roomPath}'),('voice-notes','${personalPath}'),('voice-notes','rooms/${room}/orphan.webm'),('voice-notes','rooms/${otherRoom}/${note}.webm');
  GRANT USAGE ON SCHEMA storage TO anon;GRANT SELECT ON storage.objects TO anon;
  CREATE POLICY inherited_public_read ON storage.objects FOR SELECT TO PUBLIC USING(true);
- `);await db.exec(fs.readFileSync('supabase/migrations/20261028203014_server_recording_operations.sql','utf8'));return db;}
+ `);await db.exec(fs.readFileSync('supabase/migrations_archive/20261028203014_server_recording_operations.sql','utf8'));return db;}
 async function paths(db){return (await db.query('SELECT name FROM storage.objects ORDER BY name')).rows.map(row=>row.name);}
 async function begin(db){return (await db.query(`SELECT begin_recording_operation('77777777-7777-4777-8777-777777777777','room',$1,null,'1',2,'audio/webm',5,'Pending',now(),$2) op`,[room,owner])).rows[0].op;}
 test('legacy room objects require matching metadata and active membership despite inherited broad reads',async t=>{
