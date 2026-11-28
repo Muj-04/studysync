@@ -94,29 +94,52 @@ test('AI route finalizes successful results and attempts refunds for provider fa
   const oldKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = 'test-only';
   const operations = [];
+  const sent = [];
   let providerFails = false;
+  let quotaReply = { reservation: 'reservation', limit: null, daily_limit: 5, monthly_limit: 15 };
   const admin = {
     auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { plan: 'free' } }) }) }) }),
-    rpc: async (name) => {
+    rpc: async (name, args) => {
       operations.push(name);
-      return { data: name === 'reserve_ai_request_v2' ? 'reservation' : true, error: null };
+      if (name === 'reserve_ai_request_v3') {
+        assert.deepEqual(Object.keys(args).sort(), ['p_month', 'p_user_id'], 'limits come from the database, not the client');
+        return { data: quotaReply, error: null };
+      }
+      return { data: true, error: null };
     },
   };
   const { POST } = loadSource('src/app/api/ai/route.ts', {
     '@supabase/supabase-js': { createClient: () => admin },
     'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
+    '@sentry/nextjs': { captureException: () => {} },
     '@anthropic-ai/sdk': { default: class {
-      messages = { create: async () => { if (providerFails) throw Error('provider unavailable'); return { content: [{ type: 'text', text: 'answer' }] }; } };
+      messages = { create: async (params) => { sent.push(params); if (providerFails) throw Error('provider unavailable'); return { content: [{ type: 'text', text: 'answer' }] }; } };
     } },
   });
   const request = () => new Request('http://localhost/api/ai', { method: 'POST', headers: { authorization: 'Bearer test' }, body: JSON.stringify({ action: 'summary', text: 'text' }) });
   try {
     assert.equal((await POST(request())).status,200);
-    assert.deepEqual(operations,['reserve_ai_request_v2','complete_ai_request']);
+    assert.deepEqual(operations,['reserve_ai_request_v3','complete_ai_request']);
+    assert.match(sent[0].system, /study assistant/, 'every request carries the study-focused system prompt');
+    assert.match(sent[0].system, /decline/);
     operations.length = 0; providerFails = true;
     assert.equal((await POST(request())).status,500);
-    assert.deepEqual(operations,['reserve_ai_request_v2','refund_ai_request']);
+    assert.deepEqual(operations,['reserve_ai_request_v3','refund_ai_request']);
+
+    // Limits: no provider call, 429 with a message naming the limit that was hit.
+    operations.length = 0; sent.length = 0; providerFails = false;
+    quotaReply = { reservation: null, limit: 'daily', daily_limit: 5, monthly_limit: 15 };
+    let res = await POST(request());
+    assert.equal(res.status, 429);
+    assert.match(res.body.error, /Daily AI limit reached \(5\/5 today on the Free plan\)/);
+    assert.match(res.body.error, /40 requests\/day/);
+    quotaReply = { reservation: null, limit: 'monthly', daily_limit: 5, monthly_limit: 15 };
+    res = await POST(request());
+    assert.equal(res.status, 429);
+    assert.match(res.body.error, /Monthly AI limit reached \(15\/15/);
+    assert.equal(sent.length, 0, 'the provider is never called once a limit is hit');
+    assert.deepEqual(operations, ['reserve_ai_request_v3', 'reserve_ai_request_v3']);
   } finally {
     if (oldKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = oldKey;

@@ -1,11 +1,25 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export async function reserveAiRequest(admin: SupabaseClient, userId: string, month: string, limit: number): Promise<string | null> {
-  const { data, error } = await admin.rpc('reserve_ai_request_v2', {
-    p_user_id: userId, p_month: month, p_limit: Number.isFinite(limit) ? limit : null,
-  });
+export interface AiReservation {
+  /** Reservation id, or null when a limit was reached. */
+  reservation: string | null;
+  /** Which limit refused the request. */
+  limit: 'daily' | 'monthly' | null;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+}
+
+/** Atomically reserves one AI request against the plan's daily and monthly limits (database-enforced). */
+export async function reserveAiRequest(admin: SupabaseClient, userId: string, month: string): Promise<AiReservation> {
+  const { data, error } = await admin.rpc('reserve_ai_request_v3', { p_user_id: userId, p_month: month });
   if (error) throw new Error(`Could not reserve AI quota: ${error.message}`);
-  return data as string | null;
+  const reply = (data ?? {}) as { reservation?: string | null; limit?: 'daily' | 'monthly' | null; daily_limit?: number | null; monthly_limit?: number | null };
+  return {
+    reservation: reply.reservation ?? null,
+    limit: reply.limit ?? null,
+    dailyLimit: reply.daily_limit ?? null,
+    monthlyLimit: reply.monthly_limit ?? null,
+  };
 }
 
 // These operations are idempotent, so retry even if a response was lost after commit.

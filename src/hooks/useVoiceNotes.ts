@@ -5,7 +5,7 @@ import { useState, useCallback, useRef, useEffect, useSyncExternalStore } from '
 import type { VoiceNote } from '@/types';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
-import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle, getTotalVoiceStorageBytes, getProfile, deleteAllVoiceNotesForDocument } from '@/lib/supabase/db';
+import { fetchVoiceNotes, saveVoiceNote, deleteVoiceNote, updateVoiceNoteTitle, getStorageBytesUsed, getProfile, deleteAllVoiceNotesForDocument } from '@/lib/supabase/db';
 import { effectivePlanLimits, type Plan } from '@/lib/planLimits';
 
 interface PersistedNote {
@@ -275,10 +275,10 @@ export function useVoiceNotes(opts?: { onStorageLimitReached?: () => void }) {
           const pending = pendingSaves.current.get(note.id);
           if (pending) return pending;
           const saving = (async () => {
-            const [profile, usedBytes] = await Promise.all([getProfile(), getTotalVoiceStorageBytes()]);
+            const [profile, usedBytes] = await Promise.all([getProfile(), getStorageBytesUsed()]);
             const isVip = profile?.isVip ?? false;
             const plan  = (profile?.plan ?? 'free') as Plan;
-            const storageLimit = effectivePlanLimits(plan, isVip).voiceStorageBytes;
+            const storageLimit = effectivePlanLimits(plan, isVip).storageBytes;
             if (usedBytes + blob.size > storageLimit) {
               onLimitRef.current?.();
               return;
