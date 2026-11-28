@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { NextResponse } from 'next/server';
 
 export class ApiRequestError extends Error {
@@ -40,6 +41,10 @@ export async function readJsonObject(req: Request, limit = 4096): Promise<Record
 
 export function apiErrorResponse(error: unknown) {
   if (error instanceof ApiRequestError) return NextResponse.json({ error: error.message }, { status: error.status });
+  // Unexpected: log for Vercel and report to Sentry (a no-op without a DSN).
+  // The client still gets a generic message, never internals.
+  console.error('[api] unexpected error:', error);
+  Sentry.captureException(error);
   return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
 }
 

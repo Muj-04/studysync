@@ -4,6 +4,7 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { scrubSentryEvent } from './sentry.scrub';
+import { sentryEnabled, sentryEnvironment } from './src/lib/sentryEnvironment';
 
 Sentry.init({
   // DSN comes from env — same key the client config reads, already set
@@ -11,7 +12,9 @@ Sentry.init({
   // routing token into source control.
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
-  environment: process.env.NODE_ENV,
+  // Without a DSN the SDK stays disabled and every capture call is a no-op.
+  enabled: sentryEnabled(),
+  environment: sentryEnvironment(),
 
   // 10% trace sampling in production; off in dev. Previously 1.0 which
   // shipped every request + body to Sentry.

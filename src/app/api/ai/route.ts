@@ -4,7 +4,9 @@ import { reserveAiRequest, refundAiRequest, completeAiRequest } from '@/lib/aiQu
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-import { PLAN_LIMITS, PLAN_LABELS, nextUpgradePlan, effectivePlanLimits, type Plan } from '@/lib/planLimits';
+import { PLAN_LIMITS, PLAN_LABELS, nextUpgradePlan, type Plan } from '@/lib/planLimits';
+import { STUDY_SYSTEM_PROMPT } from '@/lib/aiPrompts';
+import type { AiReservation } from '@/lib/aiQuota';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -71,19 +73,17 @@ async function handlePost(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Per-plan monthly AI limit check
+  // Per-plan daily and monthly AI limits are enforced by the database (reserve_ai_request_v3).
   const month = new Date().toISOString().slice(0, 7); // "YYYY-MM"
   const { data: profile, error: profileError } = await admin
     .from('profiles')
-    .select('plan, is_vip')
+    .select('plan')
     .eq('id', user.id)
     .maybeSingle();
 
   if (profileError) throw profileError;
 
-  const isVip       = profile?.is_vip ?? false;
   const plan: Plan = profile?.plan === 'pro' || profile?.plan === 'premium' ? profile.plan : 'free';
-  const monthlyLimit = effectivePlanLimits(plan, isVip).aiRequestsPerMonth;
 
   let reservation: string | null = null;
 
@@ -107,9 +107,8 @@ async function handlePost(req: NextRequest) {
         ? `Current page content:\n${text.slice(0, AI_TEXT_LIMITS.chat)}\n\n`
         : 'No document is open.\n\n';
       prompt =
-        'You are a helpful AI assistant. The user is currently studying with a PDF tool. ' +
-        'Answer any question they ask — whether about the document, a general topic, math, coding, or anything else. ' +
-        'If document content is provided below, use it as context when relevant, but never refuse a question just because it is off-topic.\n\n' +
+        'The user is studying with a PDF tool. Help them learn: answer questions about the document ' +
+        'or any subject they are studying, and use the document content below as context when relevant.\n\n' +
         pageContext +
         `User: ${chatMessage.slice(0, AI_CHAT_MESSAGE_LIMIT)}\n\n` +
         'Guidelines:\n' +
@@ -153,16 +152,16 @@ async function handlePost(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
 
-    reservation = await reserveAiRequest(admin, user.id, month, monthlyLimit);
+    const quota = await reserveAiRequest(admin, user.id, month);
+    reservation = quota.reservation;
     if (!reservation) {
-      const next = nextUpgradePlan(plan);
-      const upgradeHint = next ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerMonth} requests/month.` : '';
-      return NextResponse.json({ error: `Monthly AI limit reached (${monthlyLimit}/${monthlyLimit} on ${PLAN_LABELS[plan]} plan).${upgradeHint}` }, { status: 429 });
+      return NextResponse.json({ error: aiLimitMessage(plan, quota) }, { status: 429 });
     }
 
     const message = await client.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 1024,
+      system: STUDY_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -176,4 +175,14 @@ async function handlePost(req: NextRequest) {
     if (reservation) await refundAiRequest(admin, reservation).catch(console.error);
     return apiErrorResponse(err);
   }
+}
+
+function aiLimitMessage(plan: Plan, quota: AiReservation): string {
+  const next = nextUpgradePlan(plan);
+  if (quota.limit === 'daily') {
+    const hint = next ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerDay} requests/day.` : '';
+    return `Daily AI limit reached (${quota.dailyLimit}/${quota.dailyLimit} today on the ${PLAN_LABELS[plan]} plan). It resets at midnight UTC.${hint}`;
+  }
+  const hint = next ? ` Upgrade to ${PLAN_LABELS[next]} for ${PLAN_LIMITS[next].aiRequestsPerMonth} requests/month.` : '';
+  return `Monthly AI limit reached (${quota.monthlyLimit}/${quota.monthlyLimit} on the ${PLAN_LABELS[plan]} plan).${hint}`;
 }

@@ -37,7 +37,7 @@ export function DataSection() {
   const [statsLoading, setStatsLoading] = useState(true);
   const [limitStats, setLimitStats] = useState<{
     documents: number;
-    voiceStorageBytes: number;
+    storageBytes: number;
     aiRequestsThisMonth: number;
     plan: 'free' | 'premium' | 'pro';
     isVip: boolean;
@@ -152,8 +152,8 @@ export function DataSection() {
               />
             )}
             <UsageBar
-              used={Math.round(limitStats.voiceStorageBytes / (1024 * 1024))}
-              max={Math.round(PLAN_LIMITS[limitStats.plan].voiceStorageBytes / (1024 * 1024))}
+              used={Math.round(limitStats.storageBytes / (1024 * 1024))}
+              max={Math.round(PLAN_LIMITS[limitStats.plan].storageBytes / (1024 * 1024))}
               label={t('set_data_voice_storage')}
             />
             <UsageBar

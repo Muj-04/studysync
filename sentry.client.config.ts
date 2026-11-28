@@ -1,9 +1,12 @@
 import * as Sentry from '@sentry/nextjs';
 import { scrubSentryEvent } from './sentry.scrub';
+import { sentryEnabled, sentryEnvironment } from './src/lib/sentryEnvironment';
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  environment: process.env.NODE_ENV,
+  // Without a DSN the SDK stays disabled and every capture call is a no-op.
+  enabled: sentryEnabled(),
+  environment: sentryEnvironment(),
   tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0,
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: process.env.NODE_ENV === 'production' ? 0.5 : 0,

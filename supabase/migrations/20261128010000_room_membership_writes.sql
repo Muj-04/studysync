@@ -1,0 +1,15 @@
+-- AUTHZ-05: room membership is granted only by join_room_atomic.
+--
+-- Production still carried a dashboard-era policy plus table grants that let
+-- any signed-in user insert their own row into room_members:
+--   CREATE POLICY members_insert ... FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id)
+--   GRANT INSERT, UPDATE ON public.room_members TO anon, authenticated
+-- With a room id, a user could join any room without an invite, a paid plan or
+-- a free seat, then read the room's PDF, drawings and voice notes and obtain a
+-- LiveKit token (the token route trusts room_members).
+--
+-- The app never writes room_members directly: joins go through
+-- join_room_atomic (SECURITY DEFINER, checks invite, plan, capacity), leaves
+-- through leave_room_atomic / the existing DELETE policies. Both keep working.
+DROP POLICY IF EXISTS members_insert ON public.room_members;
+REVOKE INSERT, UPDATE ON public.room_members FROM anon, authenticated;
