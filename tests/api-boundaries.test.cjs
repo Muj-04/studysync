@@ -111,7 +111,7 @@ test('AI rejects invalid input without charging quota and hides provider failure
   const admin = {
     auth: { getUser: async () => ({ data: { user: { id: 'user' } } }) },
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { plan: 'free' }, error: profileError }) }) }) }),
-    rpc: async name => { if (name === 'reserve_ai_request_v2') reserveCount++; if (name === 'refund_ai_request') refunds++; return { data: 'reservation', error: null }; },
+    rpc: async name => { if (name === 'reserve_ai_request_v3') { reserveCount++; return { data: { reservation: 'reservation', limit: null }, error: null }; } if (name === 'refund_ai_request') refunds++; return { data: true, error: null }; },
   };
   const { POST } = loadSource('src/app/api/ai/route.ts', { ...mocks, '@supabase/supabase-js': { createClient: () => admin }, '@anthropic-ai/sdk': { default: class { messages = { create: async () => { throw Error('PRIVATE PROVIDER DETAIL'); } }; } } });
   try {

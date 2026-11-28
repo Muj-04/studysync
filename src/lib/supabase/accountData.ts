@@ -18,13 +18,12 @@ export async function getUserStorageStats(): Promise<{
   };
 }
 
-export async function getTotalVoiceStorageBytes(): Promise<number> {
+/** Bytes counted against the plan's storage quota (voice notes + room PDFs), as the database counts them. */
+export async function getStorageBytesUsed(): Promise<number> {
   const uid = await userId(); if (!uid) return 0;
-  const { data } = await sb()
-    .from('voice_notes')
-    .select('audio_size_bytes')
-    .eq('user_id', uid);
-  return (data ?? []).reduce((sum, r) => sum + (r.audio_size_bytes ?? 0), 0);
+  const { data, error } = await sb().rpc('get_my_storage_bytes');
+  if (error) throw error;
+  return Number(data ?? 0);
 }
 
 export async function getMonthlyAiUsage(): Promise<number> {
@@ -41,23 +40,23 @@ export async function getMonthlyAiUsage(): Promise<number> {
 
 export async function getLimitUsageStats(): Promise<{
   documents: number;
-  voiceStorageBytes: number;
+  storageBytes: number;
   aiRequestsThisMonth: number;
   plan: 'free' | 'premium' | 'pro';
   isVip: boolean;
 }> {
   const uid = await userId();
-  if (!uid) return { documents: 0, voiceStorageBytes: 0, aiRequestsThisMonth: 0, plan: 'free', isVip: false };
+  if (!uid) return { documents: 0, storageBytes: 0, aiRequestsThisMonth: 0, plan: 'free', isVip: false };
   const month = new Date().toISOString().slice(0, 7);
-  const [docsRes, vnRes, aiRes, profileRes] = await Promise.all([
+  const [docsRes, storageBytes, aiRes, profileRes] = await Promise.all([
     sb().from('documents').select('id', { count: 'exact', head: true }).eq('user_id', uid),
-    sb().from('voice_notes').select('audio_size_bytes').eq('user_id', uid),
+    getStorageBytesUsed().catch(() => 0),
     sb().from('ai_usage').select('count').eq('user_id', uid).eq('month', month).maybeSingle(),
     getMyPrivateProfile(),
   ]);
   return {
     documents: docsRes.count ?? 0,
-    voiceStorageBytes: (vnRes.data ?? []).reduce((s, r) => s + (r.audio_size_bytes ?? 0), 0),
+    storageBytes,
     aiRequestsThisMonth: aiRes.data?.count ?? 0,
     plan: (profileRes?.plan ?? 'free') as 'free' | 'premium' | 'pro',
     isVip: profileRes?.is_vip ?? false,

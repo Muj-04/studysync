@@ -55,7 +55,7 @@ import GlobalSearch from '@/components/GlobalSearch';
 import OnboardingTour, { shouldShowTour, markTourCompletedLocally, saveTourCompletedToAccount, TOUR_METADATA_KEY } from '@/components/OnboardingTour';
 import { storageGet, storageSet, KEYS } from '@/lib/storage';
 import { applyPreferences } from '@/lib/preferences';
-import { PLAN_LIMITS, PLAN_LABELS, VOICE_STORAGE_LABELS, nextUpgradePlan, effectivePlanLimits } from '@/lib/planLimits';
+import { PLAN_LIMITS, PLAN_LABELS, STORAGE_LABELS, nextUpgradePlan, effectivePlanLimits } from '@/lib/planLimits';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -2017,13 +2017,13 @@ export default function WorkspacePage() {
         const titles: Record<typeof limitModal, string> = {
           documents: `${PLAN_LABELS[userPlan]} plan: document limit reached`,
           room:      'Study Rooms require Premium or Pro',
-          voice:     `${PLAN_LABELS[userPlan]} plan: voice storage full (${VOICE_STORAGE_LABELS[userPlan]})`,
+          voice:     `${PLAN_LABELS[userPlan]} plan: storage full (${STORAGE_LABELS[userPlan]})`,
         };
         // Body copy
         const bodies: Record<typeof limitModal, string> = {
           documents: `You've reached the ${PLAN_LIMITS[userPlan].documents} document limit on the ${PLAN_LABELS[userPlan]} plan.${next ? ` Upgrade to ${nextLabel} for unlimited documents.` : ''}`,
           room:      `Study Rooms are available on Premium and Pro plans. Free users cannot create or join rooms.`,
-          voice:     `You've used all ${VOICE_STORAGE_LABELS[userPlan]} of voice note storage on the ${PLAN_LABELS[userPlan]} plan.${next ? ` Upgrade to ${nextLabel} for ${VOICE_STORAGE_LABELS[next!]} of voice storage.` : ''}`,
+          voice:     `You've used all ${STORAGE_LABELS[userPlan]} of storage (voice notes and room PDFs) on the ${PLAN_LABELS[userPlan]} plan.${next ? ` Upgrade to ${nextLabel} for ${STORAGE_LABELS[next!]} of storage.` : ''}`,
         };
         return (
           <div

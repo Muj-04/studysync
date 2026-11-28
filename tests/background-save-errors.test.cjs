@@ -38,7 +38,7 @@ test('voice upload rejection is reported while the recorded note is retained', a
     './useRecordingLifetime': { useRecordingLifetime: () => async () => ({ getTracks: () => [] }) },
     '@/lib/storage': storage, '@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client': client,
     '@/lib/supabase/db': { fetchVoiceNotes: async () => [], getProfile: async () => null,
-      getTotalVoiceStorageBytes: async () => 0, saveVoiceNote: async () => { throw failure; } },
+      getStorageBytesUsed: async () => 0, saveVoiceNote: async () => { throw failure; } },
   });
   const hook = harness.render(useVoiceNotes); await tick();
   await hook.startRecording('doc', 1);
@@ -60,7 +60,7 @@ test('failed personal upload retries its retained blob on reconnect and keeps th
   const {useVoiceNotes}=loadSource('src/hooks/useVoiceNotes.ts',{
     react:harness.react,'./useRecordingLifetime':{useRecordingLifetime:()=>async()=>({getTracks:()=>[]})},
     '@/lib/storage':storage,'@/lib/recoveryAudio': { retainRecoveryAudio: async () => {} }, '@/lib/supabase/client':client,
-    '@/lib/supabase/db':{fetchVoiceNotes:async()=>[],getProfile:async()=>null,getTotalVoiceStorageBytes:async()=>0,
+    '@/lib/supabase/db':{fetchVoiceNotes:async()=>[],getProfile:async()=>null,getStorageBytesUsed:async()=>0,
       saveVoiceNote:async(note,owner)=>{saves.push({note,owner});if(fail)throw Error('offline');return 'url';}},
   });
   const hook=harness.render(useVoiceNotes);await tick();await hook.startRecording('doc',1);
