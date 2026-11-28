@@ -8,6 +8,14 @@
 -- a free seat, then read the room's PDF, drawings and voice notes and obtain a
 -- LiveKit token (the token route trusts room_members).
 --
+-- Idempotent: production already received the first two effects as a hotfix
+-- on 2026-11-28 (DROP POLICY members_insert; REVOKE INSERT). DROP POLICY IF
+-- EXISTS is a no-op once dropped and REVOKE of a privilege that is not held
+-- only raises a warning, so this applies cleanly on top of it. Nothing in src
+-- or the database UPDATEs room_members (only SELECTs, plus join_room_atomic's
+-- INSERT as definer), and no UPDATE policy exists, so revoking UPDATE removes
+-- an unused grant.
+--
 -- The app never writes room_members directly: joins go through
 -- join_room_atomic (SECURITY DEFINER, checks invite, plan, capacity), leaves
 -- through leave_room_atomic / the existing DELETE policies. Both keep working.

@@ -84,6 +84,20 @@ test('AUTHZ-05: nobody can add themselves to a room except through join_room_ato
   assert.deepEqual(rows.map((r) => r.user_id), [host]);
 });
 
+test('AUTHZ-05 migration re-applies cleanly on top of the production hotfix', async () => {
+  const fs = require('node:fs');
+  // Production state after the 2026-11-28 hotfix: policy dropped, INSERT revoked, UPDATE still granted.
+  await db.exec('GRANT UPDATE ON public.room_members TO anon, authenticated;');
+  await db.exec(fs.readFileSync('supabase/migrations/20261128010000_room_membership_writes.sql', 'utf8'));
+  await db.exec(fs.readFileSync('supabase/migrations/20261128010000_room_membership_writes.sql', 'utf8'));
+  const { rows: [p] } = await db.query(`SELECT
+    has_table_privilege('authenticated', 'public.room_members', 'INSERT') ai,
+    has_table_privilege('authenticated', 'public.room_members', 'UPDATE') au,
+    has_table_privilege('anon', 'public.room_members', 'UPDATE') nu,
+    (SELECT count(*)::int FROM pg_policies WHERE tablename = 'room_members' AND policyname = 'members_insert') pol`);
+  assert.deepEqual(p, { ai: false, au: false, nu: false, pol: 0 });
+});
+
 test('free accounts hold at most 3 documents (existing guard_document_lifetime rule)', async () => {
   assert.equal(PLAN_LIMITS.free.documents, 3, 'guard_document_lifetime hard-codes 3');
   const free = await makeUser(db, { plan: 'free' });
